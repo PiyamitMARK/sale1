@@ -11,6 +11,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, update, remove, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ==================== Firebase Config ====================
 // ⚠️ เปลี่ยนค่าเหล่านี้เป็น Firebase project ของคุณเอง
@@ -25,7 +26,10 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getDatabase(firebaseApp);
+const db   = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
+
+signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
 
 // ==================== Config ====================
 const ADMIN_USER = 'Admin';
