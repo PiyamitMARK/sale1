@@ -8,6 +8,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, push, update, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ==================== Firebase Config ====================
 // ⚠️ เปลี่ยนค่าเหล่านี้เป็น Firebase project ของคุณเอง
@@ -22,7 +23,11 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getDatabase(firebaseApp);
+const db   = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
+
+// Sign in anonymously so Firebase Security Rules (auth != null) pass
+signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
 
 // ==================== รูปสินค้า ====================
 const IMG = (n) => 'images/img' + n + '.png';
