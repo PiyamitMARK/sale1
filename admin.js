@@ -16,13 +16,13 @@ import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/1
 // ==================== Firebase Config ====================
 // ⚠️ เปลี่ยนค่าเหล่านี้เป็น Firebase project ของคุณเอง
 const firebaseConfig = {
-  apiKey:            "AIzaSyBB5jaE7UPqF2Yw-3pKs7rx5pduvS1NJ6c",
-  authDomain:        "sale1-91a2e.firebaseapp.com",
-  databaseURL:       "https://sale1-91a2e-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "sale1-91a2e",
-  storageBucket:     "sale1-91a2e.firebasestorage.app",
-  messagingSenderId: "549769985543",
-  appId:             "1:549769985543:web:72759e2d08454343ec74a2",
+  apiKey:            "AIzaSyDa7d8jAUXYGC0XSJ449tM974JFq7JvAm8",
+  authDomain:        "sale1-e0cdc.firebaseapp.com",
+  databaseURL:       "https://sale1-e0cdc-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "sale1-e0cdc",
+  storageBucket:     "sale1-e0cdc.firebasestorage.app",
+  messagingSenderId: "731609021582",
+  appId:             "1:731609021582:web:42184726ee92575ea8dddf",
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
