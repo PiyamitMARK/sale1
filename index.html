@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ครัวคุณแม่ — ระบบ POS</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="logo">🍛 ครัวคุณแม่</h1>
+      </div>
+      <div class="header-right">
+        <div class="header-info">
+          <span id="currentDate" class="date-text"></span>
+          <span class="order-chip">ออเดอร์ #<span id="orderNumber">1001</span><span id="tableChip"></span></span>
+        </div>
+        <a href="admin.html" class="admin-btn" title="หน้าแอดมิน">⚙️</a>
+      </div>
+    </header>
+
+    <main class="main">
+
+      <!-- Left: Products -->
+      <section class="products-section">
+
+        <!-- Table selector -->
+        <div class="table-bar">
+          <span class="table-bar-label">🪑 เลือกโต๊ะ</span>
+          <div class="table-grid">
+            <button class="table-btn" data-table="1">1</button>
+            <button class="table-btn" data-table="2">2</button>
+            <button class="table-btn" data-table="3">3</button>
+            <button class="table-btn" data-table="4">4</button>
+            <button class="table-btn" data-table="5">5</button>
+            <button class="table-btn" data-table="6">6</button>
+            <button class="table-btn" data-table="7">7</button>
+            <button class="table-btn" data-table="8">8</button>
+            <button class="table-btn" data-table="9">9</button>
+          </div>
+        </div>
+
+        <!-- Overlay เมื่อยังไม่เลือกโต๊ะ -->
+        <div class="products-overlay" id="productsOverlay">
+          <div class="overlay-msg">
+            <span class="overlay-icon">🪑</span>
+            <span>กรุณาเลือกโต๊ะก่อน</span>
+          </div>
+        </div>
+
+        <!-- Category tabs -->
+        <nav class="categories">
+          <button class="category-btn active" data-category="pad">ผัด /炒</button>
+          <button class="category-btn" data-category="khao">ข้าว</button>
+          <button class="category-btn" data-category="tom">ต้ม / แกง</button>
+          <button class="category-btn" data-category="nam">เครื่องดื่ม</button>
+        </nav>
+
+        <!-- Products grid -->
+        <div class="products-grid" id="productsGrid"></div>
+      </section>
+
+      <!-- Right: Cart -->
+      <aside class="cart-section">
+        <div class="cart-header">
+          <div class="cart-title-row">
+            <h2 class="cart-title">รายการสั่ง <span class="cart-badge" id="cartBadge" style="display:none">0</span></h2>
+          </div>
+        </div>
+
+        <ul class="cart-items" id="cartItems">
+          <li class="cart-empty" id="cartEmpty">
+            <span class="cart-empty-icon">🛒</span>
+            <span>ยังไม่มีรายการ</span>
+          </li>
+        </ul>
+
+        <div class="cart-footer">
+          <div class="totals">
+            <div class="total-row">
+              <span>รวมทั้งหมด</span>
+              <span class="total-amount" id="total">฿0.00</span>
+            </div>
+          </div>
+          <div class="cart-actions">
+            <button type="button" class="btn btn-ghost" id="clearCart">🗑 ล้าง</button>
+            <button type="button" class="btn btn-primary" id="completeOrder">✓ สั่งซื้อ</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmOrderModal" aria-hidden="true">
+      <div class="modal-content confirm-content">
+        <h3 class="modal-title">ยืนยันสั่งซื้อ</h3>
+        <p id="confirmTableLabel" class="confirm-table-label"></p>
+        <div class="confirm-order-list" id="confirmOrderList"></div>
+        <div class="confirm-total" id="confirmTotal"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="confirmOrderCancel">ยกเลิก</button>
+          <button type="button" class="btn btn-primary" id="confirmOrderOk">✓ ยืนยัน</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Option / Topping Modal -->
+    <div class="modal" id="optionModal" aria-hidden="true">
+      <div class="modal-content option-modal-content">
+        <h3 class="modal-title" id="optionModalTitle">ตั้งค่าเมนู</h3>
+        <p class="option-product-name" id="optionProductName"></p>
+
+        <!-- ระดับความเผ็ด -->
+        <div class="option-group">
+          <p class="option-group-label">🌶 ระดับความเผ็ด</p>
+          <div class="option-pill-row" id="spiceGroup">
+            <button type="button" class="option-pill active" data-group="spice" data-value="">ปกติ</button>
+            <button type="button" class="option-pill" data-group="spice" data-value="ไม่เผ็ด">ไม่เผ็ด</button>
+            <button type="button" class="option-pill" data-group="spice" data-value="เผ็ดน้อย">เผ็ดน้อย</button>
+            <button type="button" class="option-pill" data-group="spice" data-value="เผ็ดมาก">เผ็ดมาก</button>
+            <button type="button" class="option-pill" data-group="spice" data-value="เผ็ดพิเศษ">เผ็ดพิเศษ</button>
+          </div>
+        </div>
+
+        <!-- Toppings -->
+        <div class="option-group">
+          <p class="option-group-label">🍳 เพิ่มท็อปปิ้ง</p>
+          <div class="option-pill-row" id="toppingGroup">
+            <button type="button" class="option-pill toggle" data-group="topping" data-value="เพิ่มไข่ดาว +฿5">เพิ่มไข่ดาว +฿5</button>
+            <button type="button" class="option-pill toggle" data-group="topping" data-value="เพิ่มไข่ต้ม +฿8">เพิ่มไข่ต้ม +฿8</button>
+            <button type="button" class="option-pill toggle" data-group="topping" data-value="เพิ่มหมู">เพิ่มหมู</button>
+            <button type="button" class="option-pill toggle" data-group="topping" data-value="เพิ่มกุ้ง">เพิ่มกุ้ง</button>
+            <button type="button" class="option-pill toggle" data-group="topping" data-value="ไม่ใส่ผัก">ไม่ใส่ผัก</button>
+            <button type="button" class="option-pill toggle" data-group="topping" data-value="พิเศษ">พิเศษ</button>
+          </div>
+        </div>
+
+        <!-- หมายเหตุ -->
+        <div class="option-group">
+          <p class="option-group-label">📝 หมายเหตุ</p>
+          <textarea class="option-note" id="optionNote" placeholder="เช่น ไม่ใส่ผักชี, หวานน้อย..." rows="2"></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="optionCancel">ยกเลิก</button>
+          <button type="button" class="btn btn-primary" id="optionConfirm">🛒 เพิ่มในตะกร้า</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div class="modal" id="receiptModal" aria-hidden="true">
+      <div class="modal-content receipt-modal-content">
+        <div class="receipt" id="receiptContent">
+          <div class="receipt-header">
+            <p class="receipt-shop">ครัวคุณแม่</p>
+            <p class="receipt-order">ออเดอร์ #<span id="receiptOrderNum"></span></p>
+            <p class="receipt-table" id="receiptTable"></p>
+            <p class="receipt-date" id="receiptDate"></p>
+          </div>
+          <div class="receipt-divider">--------------------------------</div>
+          <div class="receipt-items" id="receiptItems"></div>
+          <div class="receipt-divider">--------------------------------</div>
+          <div class="receipt-total-row">
+            <span>รวมทั้งหมด</span>
+            <span id="receiptTotal"></span>
+          </div>
+          <p class="receipt-footer">ขอบคุณที่ใช้บริการ 🙏</p>
+        </div>
+        <div class="modal-actions no-print">
+          <button type="button" class="btn btn-ghost" id="printReceipt">🖨 พิมพ์</button>
+          <button type="button" class="btn btn-primary" id="newOrder">ออเดอร์ใหม่</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

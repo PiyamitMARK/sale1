@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>แอดมิน — ครัวคุณแม่</title>
+  <link rel="stylesheet" href="admin.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="admin-app">
+
+  <!-- =============== LOGIN =============== -->
+  <div id="loginScreen" class="screen">
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-icon">🍛</div>
+        <h1 class="login-title">ครัวคุณแม่</h1>
+        <p class="login-sub">เข้าสู่ระบบแอดมิน</p>
+        <div id="loginForm" class="login-form">
+          <div class="field">
+            <label class="field-label" for="username">ชื่อผู้ใช้</label>
+            <input class="field-input" type="text" id="username" autocomplete="username" placeholder="username">
+          </div>
+          <div class="field">
+            <label class="field-label" for="password">รหัสผ่าน</label>
+            <input class="field-input" type="password" id="password" autocomplete="current-password" placeholder="••••••">
+          </div>
+          <p id="loginError" class="login-error" aria-live="polite"></p>
+          <button type="button" class="btn btn-primary btn-block" id="loginBtn">เข้าสู่ระบบ</button>
+        </div>
+        <a href="index.html" class="back-link">← กลับไปหน้า POS</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== DASHBOARD =============== -->
+  <div id="dashboardScreen" class="screen hidden">
+
+    <!-- Header -->
+    <header class="admin-header">
+      <div class="admin-header-left">
+        <h1 class="admin-logo">🍛 แอดมิน</h1>
+        <span class="admin-user-chip" id="adminUserChip">Admin</span>
+      </div>
+      <div class="admin-header-right">
+        <button type="button" class="btn btn-green" id="exportSheetBtn">Export Sheet</button>
+        <button type="button" class="btn btn-sound" id="soundToggleBtn" title="เสียงแจ้งเตือน">🔔 เสียงเปิด</button>
+        <button type="button" class="btn btn-outline-danger" id="clearDataBtn">🗑 ล้างข้อมูล</button>
+        <a href="index.html" class="btn btn-outline">POS</a>
+        <button type="button" class="btn btn-outline" id="logoutBtn">ออกจากระบบ</button>
+      </div>
+    </header>
+
+    <main class="admin-main">
+
+      <!-- Summary cards -->
+      <section class="summary-section">
+        <div class="summary-card">
+          <span class="summary-icon">🧾</span>
+          <div>
+            <div class="summary-label">ออเดอร์วันนี้ (จ่ายแล้ว)</div>
+            <div class="summary-value" id="todayOrderCount">0</div>
+          </div>
+        </div>
+        <div class="summary-card accent">
+          <span class="summary-icon">💰</span>
+          <div>
+            <div class="summary-label">ยอดรวมวันนี้</div>
+            <div class="summary-value" id="todayTotal">฿0.00</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tabs -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="recent">รายการล่าสุด</button>
+        <button class="tab-btn" data-tab="history">ย้อนหลัง 1 เดือน</button>
+      </nav>
+
+      <!-- Tab: Recent -->
+      <div id="tabRecent" class="tab-panel">
+        <div id="ordersList" class="orders-list"></div>
+        <div id="ordersEmpty" class="empty-state hidden">
+          <p class="empty-icon">📋</p>
+          <p>ยังไม่มีรายการสั่งซื้อ</p>
+          <a href="index.html" class="link">ไปที่ POS →</a>
+        </div>
+      </div>
+
+      <!-- Tab: History -->
+      <div id="tabHistory" class="tab-panel hidden">
+        <div id="historyContent" class="history-list"></div>
+        <div id="historyEmpty" class="empty-state hidden">
+          <p class="empty-icon">📅</p>
+          <p>ไม่มีข้อมูลย้อนหลัง</p>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- =============== MODAL: Export =============== -->
+  <div class="modal" id="exportModal" aria-hidden="true">
+    <div class="modal-box">
+      <h3 class="modal-title">📊 Export ไปยัง Google Sheet</h3>
+      <p class="modal-desc">เลือกช่วงวันที่ที่ต้องการ</p>
+      <div class="export-options">
+        <label class="export-option">
+          <input type="radio" name="exportRange" value="today" checked>
+          <span>วันนี้เท่านั้น</span>
+        </label>
+        <label class="export-option">
+          <input type="radio" name="exportRange" value="month">
+          <span>ย้อนหลัง 30 วัน</span>
+        </label>
+        <label class="export-option">
+          <input type="radio" name="exportRange" value="custom">
+          <span>เลือกช่วงวันเอง</span>
+        </label>
+      </div>
+      <div id="customDateRange" class="date-range hidden">
+        <div class="date-row">
+          <div class="date-field">
+            <label class="field-label" for="dateFrom">จาก</label>
+            <input type="date" id="dateFrom" class="field-input">
+          </div>
+          <div class="date-field">
+            <label class="field-label" for="dateTo">ถึง</label>
+            <input type="date" id="dateTo" class="field-input">
+          </div>
+        </div>
+      </div>
+      <p id="exportStatus" class="export-status" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="exportCancel">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" id="exportConfirm">📤 ส่งข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== MODAL: Clear Data =============== -->
+  <div class="modal" id="clearDataModal" aria-hidden="true">
+    <div class="modal-box">
+      <h3 class="modal-title">🗑 ล้างรายการสั่งซื้อทั้งหมด</h3>
+      <p class="modal-desc">กรอกรหัสผ่านแอดมินเพื่อยืนยันการล้างข้อมูลและรีเซ็ตหมายเลขออเดอร์</p>
+      <div class="field">
+        <label class="field-label" for="clearDataCode">รหัสยืนยัน</label>
+        <input type="password" id="clearDataCode" class="field-input" placeholder="••••••" autocomplete="off">
+      </div>
+      <p id="clearDataError" class="login-error" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="clearDataCancel">ยกเลิก</button>
+        <button type="button" class="btn btn-danger" id="clearDataConfirm">ล้างข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== MODAL: Add Item to Order =============== -->
+  <div class="modal" id="addItemModal" aria-hidden="true">
+    <div class="modal-box">
+      <h3 class="modal-title">🍽 เพิ่มเมนูในออเดอร์</h3>
+      <p class="modal-desc">เลือกเมนูที่ต้องการเพิ่ม</p>
+      <div id="addItemProductList" class="add-item-product-list"></div>
+      <p id="addItemToastMsg" class="add-item-toast"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="addItemCancel">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script type="module" src="admin.js"></script>
+</body>
+</html>
