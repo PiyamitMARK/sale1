@@ -15,13 +15,13 @@ import { getDatabase, ref, update, remove, onValue, get } from "https://www.gsta
 // ==================== Firebase Config ====================
 // ⚠️ เปลี่ยนค่าเหล่านี้เป็น Firebase project ของคุณเอง
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "YOUR_PROJECT",
-  storageBucket:     "YOUR_PROJECT.firebasestorage.app",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID",
+  apiKey:            "AIzaSyBB5jaE7UPqF2Yw-3pKs7rx5pduvS1NJ6c",
+  authDomain:        "sale1-91a2e.firebaseapp.com",
+  databaseURL:       "https://sale1-91a2e-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "sale1-91a2e",
+  storageBucket:     "sale1-91a2e.firebasestorage.app",
+  messagingSenderId: "549769985543",
+  appId:             "1:549769985543:web:72759e2d08454343ec74a2",
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
