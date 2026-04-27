@@ -289,9 +289,6 @@ async function init() {
   // ตรวจ order active ของโต๊ะ
   await checkActiveOrder();
 
-  // ─── ถ้า order ถูก paid แล้ว ให้ล้าง cart ที่ค้างด้วย ───
-  if (!activeOrderKey) clearSavedCart();
-
   // เริ่ม watch สถานะครัว
   if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
 
@@ -309,10 +306,13 @@ async function checkActiveOrder() {
       activeOrderNumber = data.orderNumber;
       showOrderBanner();
     } else {
+      // Firebase ตอบว่าไม่มี order active จริงๆ → ล้าง cart ที่ค้าง
       activeOrderKey    = null;
       activeOrderNumber = null;
+      clearSavedCart();
     }
   } catch (err) {
+    // เน็ตหลุด / Firebase error → ไม่ล้าง cart เพราะยังไม่รู้สถานะจริง
     console.error('checkActiveOrder error:', err);
     activeOrderKey = null;
   }
