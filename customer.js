@@ -8,7 +8,7 @@
  */
 
 import { initializeApp }      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, update, get, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
@@ -229,35 +229,6 @@ let optionQty     = 1;
 let activeOrderKey    = null; // Firebase key ของ order ที่ยังไม่ได้จ่าย
 let activeOrderNumber = null; // order number ที่ active
 
-// ==================== Cart Persistence (sessionStorage) ====================
-// เก็บตะกร้าไว้ใน sessionStorage แยกตามโต๊ะ
-// → กดรีหน้า / เน็ตหลุดแล้วกลับมา → ตะกร้าคืนมาได้
-function cartStorageKey(t) { return 'cart_t' + t; }
-
-function saveCart() {
-  if (!tableNum) return;
-  try {
-    if (cart.length > 0) {
-      sessionStorage.setItem(cartStorageKey(tableNum), JSON.stringify(cart));
-    } else {
-      sessionStorage.removeItem(cartStorageKey(tableNum));
-    }
-  } catch (_) {}
-}
-
-function loadCart() {
-  if (!tableNum) return;
-  try {
-    const raw = sessionStorage.getItem(cartStorageKey(tableNum));
-    if (raw) cart = JSON.parse(raw);
-  } catch (_) { cart = []; }
-}
-
-function clearSavedCart() {
-  if (!tableNum) return;
-  try { sessionStorage.removeItem(cartStorageKey(tableNum)); } catch (_) {}
-}
-
 // ==================== Helpers ====================
 function fmt(n) {
   return '฿' + Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -283,9 +254,6 @@ async function init() {
   document.getElementById('tableLabel').textContent     = `โต๊ะ ${tableNum}`;
   document.getElementById('cartTableLabel').textContent = `โต๊ะ ${tableNum}`;
 
-  // ─── โหลดตะกร้าที่ค้างไว้ (กรณีรีหน้า / เน็ตหลุด) ───
-  loadCart();
-
   // ตรวจ order active ของโต๊ะ
   await checkActiveOrder();
 
@@ -294,7 +262,6 @@ async function init() {
 
   renderProducts();
   bindCats();
-  updateCartBar(); // แสดง cart bar ถ้ามีรายการค้างอยู่
 }
 
 async function checkActiveOrder() {
@@ -306,13 +273,10 @@ async function checkActiveOrder() {
       activeOrderNumber = data.orderNumber;
       showOrderBanner();
     } else {
-      // Firebase ตอบว่าไม่มี order active จริงๆ → ล้าง cart ที่ค้าง
       activeOrderKey    = null;
       activeOrderNumber = null;
-      clearSavedCart();
     }
   } catch (err) {
-    // เน็ตหลุด / Firebase error → ไม่ล้าง cart เพราะยังไม่รู้สถานะจริง
     console.error('checkActiveOrder error:', err);
     activeOrderKey = null;
   }
@@ -585,7 +549,6 @@ function renderOptionModalBody(product, config) {
       cart.push({ cartKey, id: pendingProduct.id, name: pendingProduct.name, price: finalPrice, qty: optionQty, optionLabel });
     }
 
-    saveCart(); // บันทึกตะกร้าทันที
     closeModal('optionModal');
     updateCartBar();
   });
@@ -651,14 +614,12 @@ function renderCartModal() {
         if (d > 0 && cart[i].qty >= 99) return; // max qty 99
         cart[i].qty += d;
         if (cart[i].qty <= 0) cart.splice(i, 1);
-        saveCart();
         renderCartModal(); updateCartBar();
       });
     });
     list.querySelectorAll('.cust-cart-item-del').forEach(btn => {
       btn.addEventListener('click', () => {
         cart.splice(parseInt(btn.dataset.idx), 1);
-        saveCart();
         renderCartModal(); updateCartBar();
       });
     });
@@ -717,19 +678,16 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
     }
 
     if (!activeOrderKey) {
-      // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
+      // ─── สร้าง order ใหม่ ───
+      const metaSnap = await get(ref(db, 'meta'));
+      const meta     = metaSnap.exists() ? metaSnap.val() : {};
+
       let newOrderNum;
-      await runTransaction(ref(db, 'meta'), (meta) => {
-        if (!meta) meta = {};
-        if (meta.lastOrderDate !== today) {
-          meta.orderNumber   = 1001;
-          meta.lastOrderDate = today;
-        } else {
-          meta.orderNumber = (meta.orderNumber || 1000) + 1;
-        }
-        newOrderNum = meta.orderNumber;
-        return meta;
-      });
+      if (meta.lastOrderDate !== today) {
+        newOrderNum = 1001;
+      } else {
+        newOrderNum = (meta.orderNumber || 1000) + 1;
+      }
       usedOrderNum = newOrderNum;
 
       const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
@@ -747,15 +705,17 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
       activeOrderKey    = newRef.key;
       activeOrderNumber = newOrderNum;
 
-      await update(ref(db, `tableOrders/${tableNum}`), {
-        orderKey:    newRef.key,
-        orderNumber: newOrderNum,
-      });
+      await Promise.all([
+        update(ref(db, 'meta'), { orderNumber: newOrderNum, lastOrderDate: today }),
+        update(ref(db, `tableOrders/${tableNum}`), {
+          orderKey:    newRef.key,
+          orderNumber: newOrderNum,
+        }),
+      ]);
     }
 
     // ─── success ───
     cart = [];
-    clearSavedCart(); // ล้าง cart ที่ค้างใน sessionStorage
     updateCartBar();
     closeModal('cartModal');
 
