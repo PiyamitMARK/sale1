@@ -285,7 +285,29 @@ function updateQty(index, delta) {
   else renderCart();
 }
 
+// ==================== Cart Persistence ====================
+function saveCartToLocal() {
+  try {
+    localStorage.setItem('krua-cart', JSON.stringify({ cart, selectedTable }));
+  } catch (e) {}
+}
+
+function loadCartFromLocal() {
+  try {
+    const saved = localStorage.getItem('krua-cart');
+    if (!saved) return;
+    const { cart: savedCart, selectedTable: savedTable } = JSON.parse(saved);
+    if (savedCart && savedCart.length > 0) {
+      cart = savedCart;
+      if (savedTable) selectTable(savedTable);
+    }
+  } catch (e) {
+    localStorage.removeItem('krua-cart');
+  }
+}
+
 function renderCart() {
+  saveCartToLocal();
   cartEmptyEl.style.display = cart.length ? 'none' : 'flex';
   cartItemsEl.querySelectorAll('.cart-item').forEach((el) => el.remove());
 
@@ -329,6 +351,7 @@ function renderCart() {
 }
 
 function clearCart() {
+  localStorage.removeItem('krua-cart');
   cart = [];
   renderCart();
 }
@@ -424,6 +447,7 @@ function closeConfirmOrderModal() {
 
 // ==================== New Order ====================
 async function startNewOrder() {
+  localStorage.removeItem('krua-cart');
   orderNumber += 1;
   orderNumberEl.textContent = orderNumber;
   try {
@@ -598,6 +622,7 @@ window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0
 
 // ==================== Init ====================
 setDate();
+loadCartFromLocal();
 renderProducts();
 renderCart();
 loadOrderNumber();
