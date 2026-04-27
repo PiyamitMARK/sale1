@@ -7,7 +7,7 @@
  */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, update, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, update, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ==================== Firebase Config ====================
@@ -354,6 +354,24 @@ async function loadOrderNumber() {
 
 // ==================== Firebase: Save Order ====================
 async function saveOrder() {
+  const today = new Date().toISOString().slice(0, 10);
+  let newOrderNumber;
+
+  await runTransaction(ref(db, 'meta'), (meta) => {
+    if (!meta) meta = {};
+    if (meta.lastOrderDate !== today) {
+      meta.orderNumber = 1001;
+      meta.lastOrderDate = today;
+    } else {
+      meta.orderNumber = (meta.orderNumber || 1000) + 1;
+    }
+    newOrderNumber = meta.orderNumber;
+    return meta;
+  });
+
+  orderNumber = newOrderNumber;
+  orderNumberEl.textContent = orderNumber;
+
   const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
   const order = {
     orderNumber,
@@ -364,10 +382,6 @@ async function saveOrder() {
     status: 'pending',
   };
   await push(ref(db, 'orders'), order);
-  await update(ref(db, 'meta'), {
-    orderNumber,
-    lastOrderDate: new Date().toISOString().slice(0, 10),
-  });
 }
 
 // ==================== Receipt ====================
@@ -570,6 +584,7 @@ document.addEventListener('touchend',    (e) => { onPointerEnd(e.changedTouches[
 cartHeader.addEventListener('mousedown', (e) => { onPointerStart(e.clientY); e.preventDefault(); });
 document.addEventListener('mousemove',   (e) => { if (isDragging) onPointerMove(e.clientY); });
 document.addEventListener('mouseup',     (e) => { if (isDragging) onPointerEnd(e.clientY); });
+window.addEventListener('mouseleave',    (e) => { if (isDragging) onPointerEnd(e.clientY); });
 
 cartHeader.addEventListener('click', () => {
   if (!isMobile() || isDragging) return;
