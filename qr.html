@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code โต๊ะ — ข้าวซอย 90</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --cream: #faf6f0; --cream-mid: #f0e9de; --cream-dark: #e2d8cb;
+      --brown: #3d2b1f; --brown-mid: #5c3d2e; --brown-light: #8b6655;
+      --accent: #c8853a; --white: #ffffff;
+      --shadow-md: 0 4px 16px rgba(61,43,31,0.14);
+      --radius: 14px; --radius-pill: 999px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Sarabun', sans-serif;
+      background: var(--cream); color: var(--brown);
+      min-height: 100vh; -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== HEADER ===== */
+    .page-header {
+      background: var(--brown); padding: 0.9rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; flex-wrap: wrap;
+    }
+    .page-logo {
+      font-family: 'Mitr', sans-serif; font-size: 1.15rem;
+      color: var(--cream); font-weight: 600;
+    }
+    .header-actions { display: flex; gap: 0.65rem; flex-wrap: wrap; align-items: center; }
+
+    .btn {
+      border: none; border-radius: var(--radius-pill);
+      font-family: 'Mitr', sans-serif; font-size: 0.88rem; font-weight: 600;
+      padding: 0.5rem 1.2rem; cursor: pointer; transition: opacity 0.2s;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-accent { background: var(--accent); color: var(--white); }
+    .btn-outline { background: transparent; color: var(--cream); border: 1.5px solid var(--cream-dark); }
+
+    /* ===== SETTINGS ===== */
+    .settings-bar {
+      background: var(--cream-mid); border-bottom: 1px solid var(--cream-dark);
+      padding: 0.85rem 1.5rem; display: flex; flex-wrap: wrap;
+      gap: 1rem; align-items: flex-end;
+    }
+    .field-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .field-label {
+      font-size: 0.75rem; font-weight: 700; color: var(--brown-light);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .field-input {
+      border: 2px solid var(--cream-dark); border-radius: 8px;
+      padding: 0.45rem 0.75rem; font-family: 'Sarabun', sans-serif;
+      font-size: 0.9rem; color: var(--brown); background: var(--white); outline: none;
+      transition: border-color 0.2s; width: 100%;
+    }
+    .field-input:focus { border-color: var(--accent); }
+
+    .url-display {
+      font-size: 0.8rem; color: var(--brown-light); word-break: break-all;
+      background: var(--cream); padding: 0.5rem 0.75rem;
+      border-radius: 8px; border: 1.5px solid var(--cream-dark);
+      max-width: 420px; flex: 1;
+    }
+    .url-display strong { color: var(--accent); }
+
+    /* ===== GRID ===== */
+    .qr-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.25rem;
+      padding: 1.5rem;
+    }
+
+    /* ===== QR CARD ===== */
+    .qr-card {
+      background: var(--white); border-radius: var(--radius);
+      box-shadow: var(--shadow-md); overflow: hidden;
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
+    }
+    .qr-card-header {
+      background: var(--brown); width: 100%;
+      padding: 0.65rem 0.5rem;
+    }
+    .qr-card-header-shop {
+      font-family: 'Mitr', sans-serif; font-size: 0.85rem;
+      color: var(--cream); font-weight: 600;
+    }
+    .qr-card-body { padding: 1rem 1rem 0.5rem; width: 100%; display: flex; flex-direction: column; align-items: center; }
+    .qr-code-box { border: 3px solid var(--accent); border-radius: 10px; padding: 6px; margin-bottom: 0.6rem; }
+    .qr-table-label {
+      font-family: 'Mitr', sans-serif; font-size: 1.4rem;
+      font-weight: 700; color: var(--brown); margin-bottom: 0.25rem;
+    }
+    .qr-scan-hint { font-size: 0.78rem; color: var(--brown-light); margin-bottom: 0.85rem; }
+    .qr-url {
+      font-size: 0.68rem; color: var(--brown-light); word-break: break-all;
+      background: var(--cream-mid); border-radius: 6px; padding: 0.35rem 0.5rem;
+      width: 100%; margin-bottom: 0.75rem; text-align: left;
+    }
+
+    .qr-card-footer {
+      padding: 0 1rem 1rem; width: 100%;
+      display: flex; justify-content: center;
+    }
+    .btn-print-one {
+      background: var(--accent); color: var(--white);
+      border: none; border-radius: var(--radius-pill);
+      font-family: 'Mitr', sans-serif; font-size: 0.82rem; font-weight: 600;
+      padding: 0.42rem 1.2rem; cursor: pointer; transition: opacity 0.2s;
+    }
+    .btn-print-one:hover { opacity: 0.85; }
+
+    /* ===== PRINT ===== */
+    @media print {
+      .page-header, .settings-bar, .btn-print-one, .qr-card-footer { display: none !important; }
+      body { background: white; }
+      .qr-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem; padding: 0.5rem;
+      }
+      .qr-card {
+        box-shadow: none; border: 1.5px solid #ccc;
+        break-inside: avoid; page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="page-logo">🍛 ข้าวซอย 90 — QR Code โต๊ะ</div>
+  <div class="header-actions">
+    <a href="admin.html" class="btn btn-outline">⬅ กลับแอดมิน</a>
+    <button class="btn btn-accent" onclick="window.print()">🖨 พิมพ์ทั้งหมด</button>
+  </div>
+</header>
+
+<div class="settings-bar">
+  <div class="field-group">
+    <label class="field-label" for="baseUrl">URL ของเว็บไซต์</label>
+    <input class="field-input" type="text" id="baseUrl" placeholder="https://yoursite.com" style="min-width:260px">
+  </div>
+  <div class="field-group">
+    <label class="field-label" for="tableCount">จำนวนโต๊ะ</label>
+    <input class="field-input" type="number" id="tableCount" value="9" min="1" max="99" style="width:80px">
+  </div>
+  <button class="btn btn-accent" id="generateBtn">🔄 สร้าง QR</button>
+  <div class="url-display" id="urlPreview">
+    ตัวอย่าง URL: <strong>—</strong>
+  </div>
+</div>
+
+<div class="qr-grid" id="qrGrid"></div>
+
+<script>
+(function () {
+  const baseUrlInput  = document.getElementById('baseUrl');
+  const tableCountInput = document.getElementById('tableCount');
+  const generateBtn   = document.getElementById('generateBtn');
+  const qrGrid        = document.getElementById('qrGrid');
+  const urlPreview    = document.getElementById('urlPreview');
+
+  // Auto-detect current URL base
+  const autoBase = location.origin + location.pathname.replace('qr.html', '');
+  baseUrlInput.value = autoBase;
+
+  function getCustomerUrl(tableNum) {
+    let base = baseUrlInput.value.trim();
+    if (!base.endsWith('/')) base += '/';
+    return base + 'customer.html?table=' + tableNum;
+  }
+
+  function updatePreview() {
+    urlPreview.innerHTML = 'ตัวอย่าง URL: <strong>' + getCustomerUrl('1') + '</strong>';
+  }
+  updatePreview();
+  baseUrlInput.addEventListener('input', updatePreview);
+
+  function generateQRs() {
+    const count = Math.max(1, Math.min(99, parseInt(tableCountInput.value) || 9));
+    qrGrid.innerHTML = '';
+
+    for (let t = 1; t <= count; t++) {
+      const url = getCustomerUrl(t);
+
+      const card = document.createElement('div');
+      card.className = 'qr-card';
+      card.innerHTML = `
+        <div class="qr-card-header">
+          <div class="qr-card-header-shop">🍛 ข้าวซอย 90</div>
+        </div>
+        <div class="qr-card-body">
+          <div class="qr-code-box" id="qr-box-${t}"></div>
+          <div class="qr-table-label">โต๊ะ ${t}</div>
+          <div class="qr-scan-hint">สแกน QR เพื่อสั่งอาหาร</div>
+          <div class="qr-url">${url}</div>
+        </div>
+        <div class="qr-card-footer">
+          <button class="btn-print-one" onclick="printTable(${t})">🖨 พิมพ์โต๊ะนี้</button>
+        </div>
+      `;
+      qrGrid.appendChild(card);
+
+      // Generate QR
+      try {
+        new QRCode(document.getElementById('qr-box-' + t), {
+          text:          url,
+          width:         160,
+          height:        160,
+          colorDark:     '#3d2b1f',
+          colorLight:    '#ffffff',
+          correctLevel:  QRCode.CorrectLevel.M,
+        });
+      } catch(e) {
+        document.getElementById('qr-box-' + t).innerHTML =
+          '<p style="font-size:0.7rem;color:#888;padding:0.5rem">QR Error</p>';
+      }
+    }
+  }
+
+  window.printTable = function(tableNum) {
+    const url = getCustomerUrl(tableNum);
+    const win = window.open('', '_blank', 'width=400,height=600');
+    win.document.write(`
+      <!DOCTYPE html><html><head>
+      <meta charset="UTF-8">
+      <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
+      <style>
+        body { margin:0; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; }
+        .wrap { text-align:center; padding:2rem; border:2px solid #3d2b1f; border-radius:14px; max-width:280px; }
+        .shop { font-family:'Mitr',sans-serif; font-size:1.2rem; color:#3d2b1f; font-weight:700; margin-bottom:0.5rem; }
+        .table { font-family:'Mitr',sans-serif; font-size:2rem; font-weight:700; color:#c8853a; margin:0.5rem 0; }
+        .hint { font-size:0.85rem; color:#8b6655; margin-top:0.5rem; }
+        #qr { border:3px solid #c8853a; border-radius:8px; padding:6px; display:inline-block; margin:0.75rem 0; }
+      </style>
+      </head><body>
+      <div class="wrap">
+        <div class="shop">🍛 ข้าวซอย 90</div>
+        <div id="qr"></div>
+        <div class="table">โต๊ะ ${tableNum}</div>
+        <div class="hint">สแกน QR เพื่อสั่งอาหาร</div>
+      </div>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+      <script>
+        new QRCode(document.getElementById('qr'), {
+          text: '${url}', width:180, height:180,
+          colorDark:'#3d2b1f', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M
+        });
+        setTimeout(() => window.print(), 800);
+      <\/script>
+      </body></html>
+    `);
+    win.document.close();
+  };
+
+  generateBtn.addEventListener('click', generateQRs);
+
+  // auto-generate on load
+  generateQRs();
+})();
+</script>
+</body>
+</html>
