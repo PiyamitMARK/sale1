@@ -8,7 +8,7 @@
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getDatabase, ref, push, update, get, remove
+  getDatabase, ref, push, update, get, remove, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
@@ -581,7 +581,7 @@ async function loadOrderNumber() {
   }
 }
 
-// ==================== Firebase: Save Order (batch-aware) ====================
+// ==================== Firebase: Save Order (batch-aware, race-condition-safe) ====================
 async function saveOrder() {
   const today = new Date().toISOString().slice(0, 10);
   const batchItems = cart.map((i) => ({
@@ -591,33 +591,40 @@ async function saveOrder() {
     ...(i.optionLabel ? { option: i.optionLabel } : {}),
   }));
 
+  // ─── ถ้ามี order active แต่ถูกลบไปแล้ว → reset ───
   if (currentTableOrderKey) {
-    // ─── มี order active อยู่ → เพิ่ม batch ใหม่ต่อท้าย ───
     const orderSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
     if (!orderSnap.exists()) {
-      // order ถูกลบไปแล้ว → สร้างใหม่
       currentTableOrderKey = null;
+      currentTableOrderNumber = null;
     }
   }
 
   if (!currentTableOrderKey) {
-    // ─── สร้าง order ใหม่ ───
-    const metaSnap = await get(ref(db, 'meta'));
-    const meta = metaSnap.exists() ? metaSnap.val() : {};
-
+    // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
+    // วิธีนี้ป้องกัน race condition: ถ้า 2 tab กด confirm พร้อมกัน
+    // Firebase จะให้แต่ละ transaction วิ่งทีละตัว → ได้เลขต่างกันเสมอ
     let newOrderNum;
-    if (meta.lastOrderDate !== today) {
-      newOrderNum = 1001;
-    } else {
-      newOrderNum = (meta.orderNumber || 1000) + 1;
-    }
+    await runTransaction(ref(db, 'meta'), (meta) => {
+      if (!meta) meta = {};
+      if (meta.lastOrderDate !== today) {
+        // วันใหม่ → reset เป็น 1001
+        meta.orderNumber   = 1001;
+        meta.lastOrderDate = today;
+      } else {
+        // วันเดียวกัน → เพิ่มทีละ 1 แบบ atomic
+        meta.orderNumber = (meta.orderNumber || 1000) + 1;
+      }
+      newOrderNum = meta.orderNumber; // จับเลขที่ได้จาก transaction
+      return meta;
+    });
 
     const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
     const order = {
       orderNumber: newOrderNum,
       table: selectedTable,
       date: new Date().toISOString(),
-      batches: [batchItems],       // <<< batches แทน items
+      batches: [batchItems],
       total,
       status: 'pending',
     };
@@ -627,14 +634,11 @@ async function saveOrder() {
     currentTableOrderNumber = newOrderNum;
     orderNumber             = newOrderNum;
 
-    // บันทึก meta และ tableOrders
-    await Promise.all([
-      update(ref(db, 'meta'), { orderNumber: newOrderNum, lastOrderDate: today }),
-      update(ref(db, `tableOrders/${selectedTable}`), {
-        orderKey:    newRef.key,
-        orderNumber: newOrderNum,
-      }),
-    ]);
+    // บันทึก tableOrders (meta อัปเดตไปแล้วใน transaction)
+    await update(ref(db, `tableOrders/${selectedTable}`), {
+      orderKey:    newRef.key,
+      orderNumber: newOrderNum,
+    });
 
     orderNumberEl.textContent = orderNumber;
 
@@ -650,7 +654,7 @@ async function saveOrder() {
     await update(ref(db, `orders/${currentTableOrderKey}`), {
       batches,
       total: newTotal,
-      status: 'pending', // reset เป็น pending เพื่อให้ admin เห็น batch ใหม่
+      status: 'pending',
       lastBatchDate: new Date().toISOString(),
     });
   }

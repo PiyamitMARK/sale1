@@ -238,7 +238,7 @@ body {
   padding: 0.18rem 0.65rem; border-radius: var(--radius-pill);
   margin-bottom: 0.9rem; letter-spacing: 0.02em;
 }
-.cust-option-type-mapraopun   { background: #8e44ad, color: #ffffff; }
+.cust-option-type-mapraopun   { background: #8e44ad; color: #ffffff; }
 .cust-option-type-kaosoi      { background: #ff7a2f; color: #ffffff; }
 .cust-option-type-namngiao    { background: #e53935; color: #ffffff; }
 .cust-option-type-kaomutod    { background: #2196f3; color: #ffffff; }
