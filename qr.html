@@ -170,7 +170,8 @@
   const urlPreview    = document.getElementById('urlPreview');
 
   // Auto-detect current URL base
-  const autoBase = location.origin + location.pathname.replace('qr.html', '');
+  // ตัด path ทั้งหมดออก เหลือแค่ origin เพื่อให้ได้ root URL เสมอ
+  const autoBase = location.origin + '/';
   baseUrlInput.value = autoBase;
 
   function getCustomerUrl(tableNum) {
