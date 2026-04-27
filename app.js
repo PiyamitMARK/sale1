@@ -197,23 +197,96 @@ const optionConfirm     = document.getElementById('optionConfirm');
 
 let pendingProduct = null; // product dataset waiting for options
 
-// Toppings that add price
-const TOPPING_PRICES = {
-  'เพิ่มไข่ดาว +฿5': 5,
-  'เพิ่มไข่ต้ม +฿8': 8,
+// ==================== Category Options Config ====================
+const CATEGORY_OPTIONS = {
+  pad: {
+    spice: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
+    toppings: [
+      { label: 'เพิ่มไข่ดาว +฿5',  price: 5 },
+      { label: 'เพิ่มไข่ต้ม +฿8',  price: 8 },
+      { label: 'เพิ่มหมู',          price: 0 },
+      { label: 'เพิ่มกุ้ง',         price: 0 },
+      { label: 'ไม่ใส่ผัก',         price: 0 },
+      { label: 'ราดข้าว',           price: 0 },
+      { label: 'พิเศษ',             price: 0 },
+    ],
+  },
+  khao: {
+    spice: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
+    toppings: [
+      { label: 'เพิ่มไข่ดาว +฿5',  price: 5 },
+      { label: 'เพิ่มไข่ต้ม +฿8',  price: 8 },
+      { label: 'เพิ่มหมูกรอบ',      price: 0 },
+      { label: 'ไม่ใส่ผัก',         price: 0 },
+      { label: 'ไม่ใส่น้ำจิ้ม',     price: 0 },
+      { label: 'พิเศษ',             price: 0 },
+    ],
+  },
+  tom: {
+    spice: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
+    toppings: [
+      { label: 'เพิ่มเต้าหู้',      price: 0 },
+      { label: 'เพิ่มเห็ด',         price: 0 },
+      { label: 'เพิ่มกุ้ง',         price: 0 },
+      { label: 'ไม่ใส่ผักชี',       price: 0 },
+      { label: 'พิเศษ',             price: 0 },
+    ],
+  },
+  nam: {
+    spice: [],
+    toppings: [
+      { label: 'ไม่เอาน้ำแข็ง',    price: 0 },
+      { label: 'น้ำแข็งน้อย',       price: 0 },
+      { label: 'หวานน้อย',          price: 0 },
+    ],
+  },
 };
+
+function getCategoryFromId(productId) {
+  if (productId.startsWith('pad'))   return 'pad';
+  if (productId.startsWith('khao'))  return 'khao';
+  if (productId.startsWith('tom'))   return 'tom';
+  return 'nam';
+}
+
+function renderOptionModal(category) {
+  const config = CATEGORY_OPTIONS[category] || CATEGORY_OPTIONS.pad;
+  const spiceGroup   = document.getElementById('spiceGroup');
+  const toppingGroup = document.getElementById('toppingGroup');
+  const spiceSection = document.getElementById('spiceSection');
+
+  // Spice pills
+  if (config.spice.length === 0) {
+    spiceSection.style.display = 'none';
+  } else {
+    spiceSection.style.display = '';
+    spiceGroup.innerHTML = config.spice.map((s, i) =>
+      `<button type="button" class="option-pill${i === 0 ? ' active' : ''}" data-group="spice" data-value="${i === 0 ? '' : s}">${s}</button>`
+    ).join('');
+    spiceGroup.querySelectorAll('.option-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        spiceGroup.querySelectorAll('.option-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
+
+  // Topping pills
+  toppingGroup.innerHTML = config.toppings.map(t =>
+    `<button type="button" class="option-pill toggle" data-group="topping" data-value="${escapeAttr(t.label)}" data-price="${t.price}">${escapeHtml(t.label)}</button>`
+  ).join('');
+  toppingGroup.querySelectorAll('.option-pill.toggle').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+  });
+}
 
 function openOptionModal(dataset) {
   pendingProduct = dataset;
   optionProductName.textContent = dataset.name;
   optionNote.value = '';
 
-  // Reset spice selection
-  document.querySelectorAll('.option-pill[data-group="spice"]').forEach(p => {
-    p.classList.toggle('active', p.dataset.value === '');
-  });
-  // Reset toppings
-  document.querySelectorAll('.option-pill.toggle').forEach(p => p.classList.remove('active'));
+  const category = getCategoryFromId(dataset.id);
+  renderOptionModal(category);
 
   optionModal.setAttribute('aria-hidden', 'false');
 }
@@ -223,38 +296,25 @@ function closeOptionModal() {
   pendingProduct = null;
 }
 
-// Spice: single-select
-document.querySelectorAll('.option-pill[data-group="spice"]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.option-pill[data-group="spice"]').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-  });
-});
-
-// Toppings: multi-select toggle
-document.querySelectorAll('.option-pill.toggle').forEach(btn => {
-  btn.addEventListener('click', () => btn.classList.toggle('active'));
-});
-
 optionCancel.addEventListener('click', closeOptionModal);
 optionModal.addEventListener('click', (e) => { if (e.target === optionModal) closeOptionModal(); });
 
 optionConfirm.addEventListener('click', () => {
   if (!pendingProduct) return;
 
-  const spice = document.querySelector('.option-pill[data-group="spice"].active')?.dataset.value || '';
-  const toppings = [...document.querySelectorAll('.option-pill.toggle.active')].map(p => p.dataset.value);
-  const note = optionNote.value.trim();
+  const spice    = document.querySelector('#spiceGroup .option-pill.active')?.dataset.value || '';
+  const toppings = [...document.querySelectorAll('#toppingGroup .option-pill.toggle.active')];
+  const note     = optionNote.value.trim();
 
   // Build option label
   const optionParts = [];
   if (spice) optionParts.push(spice);
-  toppings.forEach(t => optionParts.push(t));
+  toppings.forEach(t => optionParts.push(t.dataset.value));
   if (note) optionParts.push(note);
   const optionLabel = optionParts.join(' · ');
 
   // Extra price from toppings
-  const extraPrice = toppings.reduce((sum, t) => sum + (TOPPING_PRICES[t] || 0), 0);
+  const extraPrice = toppings.reduce((sum, t) => sum + (parseFloat(t.dataset.price) || 0), 0);
 
   addToCart(pendingProduct, optionLabel, extraPrice);
   closeOptionModal();
