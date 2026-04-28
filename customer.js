@@ -181,7 +181,7 @@ const OPTION_CONFIGS = {
         id: 'temp', label: '🌡 ร้อน / เย็น', type: 'single',
         defaultValue: 'เย็น',
         choices: [
-          { value: 'ร้อน',   label: '☕ ร้อน' },
+          { value: 'ร้อน',   label: '☕ ร้อน', price: -10 },
           { value: 'เย็น',   label: '🧊 เย็น' },
           { value: 'ปั่น +฿10',   label: '🥤 ปั่น +฿10',  price: 10 },
         ],
