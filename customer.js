@@ -197,7 +197,7 @@ const OPTION_CONFIGS = {
         ],
       },
       {
-        id: 'extra', label: '✨ เพิ่มเติม', type: 'multi',
+        id: 'extra', label: '✨ เพิ่มเติม', type: 'single',
         choices: [
           { value: 'ไม่ใส่นม',    label: 'ไม่ใส่นม' },
           { value: 'นมข้นเพิ่ม', label: 'นมข้นเพิ่ม' },
