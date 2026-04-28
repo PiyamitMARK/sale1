@@ -80,7 +80,7 @@ const PRODUCTS = {
   ],
 };
 
-const TOPPING_PRICES = { 'เพิ่มไข่ดาว +฿5': 5, 'เพิ่มไข่ต้ม +฿8': 8 };
+const TOPPING_PRICES = { 'เพิ่มเนื้อสัตว์ +฿20': 20, 'เพิ่มเส้น +฿10': 10, 'พิเศษ +฿10': 10, 'ปั่น +฿10': 10, 'เพิ่มไข่ดาว +฿5': 5, 'เพิ่มไข่ต้ม +฿8': 8 };
 
 // ==================== Option Configs แยกตาม productType ====================
 // productType: 'food' | 'drink-brew' | 'drink-ready' | 'simple'
@@ -181,7 +181,7 @@ const OPTION_CONFIGS = {
         id: 'temp', label: '🌡 ร้อน / เย็น', type: 'single',
         defaultValue: 'เย็น',
         choices: [
-          { value: 'ร้อน',   label: '☕ ร้อน', price: 10 },
+          { value: 'ร้อน',   label: '☕ ร้อน', },
           { value: 'เย็น',   label: '🧊 เย็น' },
           { value: 'ปั่น +฿10',   label: '🥤 ปั่น +฿10',  price: 10 },
         ],
