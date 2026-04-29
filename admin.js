@@ -329,6 +329,7 @@ function startRealtimeListener() {
     renderDailySummary();
     renderOrders();
     renderHistory();
+    renderTakeawayOrders();
   });
 }
 
@@ -592,8 +593,11 @@ function renderDailySummary() {
 }
 
 // ==================== Render Orders (with batch display) ====================
+const TAKEAWAY_IDS_ADMIN = ['takeaway1','takeaway2','takeaway3'];
+
 function renderOrders() {
-  if (allOrders.length === 0) {
+  const nonTaOrders = allOrders.filter(o => !TAKEAWAY_IDS_ADMIN.includes(String(o.table)) && !o.takeaway);
+  if (nonTaOrders.length === 0) {
     ordersList.innerHTML = '';
     ordersList.classList.add('hidden');
     ordersEmpty.classList.remove('hidden');
@@ -610,7 +614,7 @@ function renderOrders() {
     paid:    { label: '✅ จ่ายแล้ว',     cls: 'paid'    },
   };
 
-  ordersList.innerHTML = allOrders.map((order) => {
+  ordersList.innerHTML = nonTaOrders.map((order) => {
     const s = order.status || 'pending';
     const { label: statusLabel, cls: statusCls } = statusMap[s] || statusMap.pending;
     const fromQR = order.source === 'qr';
@@ -744,12 +748,258 @@ function renderHistory() {
 }
 
 // ==================== Tabs ====================
+const tabTakeaway = document.getElementById('tabTakeaway');
+
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach((t) =>
     t.classList.toggle('active', t.dataset.tab === tabId)
   );
-  tabRecent.classList.toggle('hidden',  tabId !== 'recent');
-  tabHistory.classList.toggle('hidden', tabId !== 'history');
+  tabRecent.classList.toggle('hidden',    tabId !== 'recent');
+  tabHistory.classList.toggle('hidden',   tabId !== 'history');
+  tabTakeaway.classList.toggle('hidden',  tabId !== 'takeaway');
+  if (tabId === 'takeaway') renderTakeawayQrPanel();
+}
+
+// ==================== Takeaway QR Panel ====================
+const TAKEAWAY_SLOTS = ['takeaway1', 'takeaway2', 'takeaway3'];
+const TAKEAWAY_LABELS = { takeaway1: 'ลิงก์ที่ 1', takeaway2: 'ลิงก์ที่ 2', takeaway3: 'ลิงก์ที่ 3' };
+const TA_STORAGE_KEY = 'ta-base-url';
+
+function getTakeawayUrl(slotId) {
+  let base = localStorage.getItem(TA_STORAGE_KEY) || (location.origin + '/');
+  if (!base.endsWith('/')) base += '/';
+  return base + 'customer.html?table=' + slotId;
+}
+
+let qrInstances = {};
+
+function renderTakeawayQrPanel() {
+  const container = document.getElementById('takeawayQrSlots');
+  if (!container) return;
+
+  // ถ้า render แล้ว ไม่ต้อง render ซ้ำ
+  if (container.dataset.rendered === '1') return;
+  container.dataset.rendered = '1';
+
+  const savedBase = localStorage.getItem(TA_STORAGE_KEY) || (location.origin + '/');
+
+  container.innerHTML = `
+    <div class="ta-url-row">
+      <label class="ta-url-label">🌐 URL ฐาน (แก้ครั้งเดียวใช้ทุกลิงก์)</label>
+      <div class="ta-url-input-row">
+        <input type="text" id="taBaseUrl" class="field-input ta-url-input" value="${escapeHtml(savedBase)}" placeholder="https://yoursite.com/">
+        <button type="button" class="btn btn-primary ta-url-apply-btn" id="taApplyBtn">🔄 อัปเดต QR</button>
+      </div>
+    </div>
+    <div class="ta-slots-grid" id="taSlotsGrid"></div>
+  `;
+
+  renderTaSlots();
+
+  document.getElementById('taApplyBtn').addEventListener('click', () => {
+    const val = document.getElementById('taBaseUrl').value.trim();
+    if (val) {
+      localStorage.setItem(TA_STORAGE_KEY, val);
+      // force re-render
+      container.dataset.rendered = '0';
+      container.innerHTML = '';
+      renderTakeawayQrPanel();
+    }
+  });
+}
+
+function renderTaSlots() {
+  const grid = document.getElementById('taSlotsGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  qrInstances = {};
+
+  TAKEAWAY_SLOTS.forEach((slotId, idx) => {
+    const url    = getTakeawayUrl(slotId);
+    const label  = TAKEAWAY_LABELS[slotId];
+    const boxId  = `taQrBox_${slotId}`;
+
+    const card = document.createElement('div');
+    card.className = 'ta-qr-card';
+    card.innerHTML = `
+      <div class="ta-qr-card-header">📦 กลับบ้าน — ${escapeHtml(label)}</div>
+      <div class="ta-qr-card-body">
+        <div class="ta-qr-box" id="${boxId}"></div>
+        <div class="ta-qr-url">${escapeHtml(url)}</div>
+      </div>
+      <div class="ta-qr-card-footer">
+        <button type="button" class="btn btn-green ta-copy-btn" data-url="${escapeHtml(url)}">📋 คัดลอกลิงก์</button>
+        <button type="button" class="btn btn-outline ta-print-btn" data-slot="${slotId}" data-idx="${idx+1}">🖨 พิมพ์</button>
+      </div>
+    `;
+    grid.appendChild(card);
+
+    // Generate QR
+    try {
+      const qr = new QRCode(document.getElementById(boxId), {
+        text:         url,
+        width:        150,
+        height:       150,
+        colorDark:    '#3d2b1f',
+        colorLight:   '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+      qrInstances[slotId] = qr;
+    } catch(e) {
+      const el = document.getElementById(boxId);
+      if (el) el.innerHTML = '<p style="font-size:0.7rem;color:#888">QR Error</p>';
+    }
+  });
+
+  // bind copy buttons
+  grid.querySelectorAll('.ta-copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.url).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✅ คัดลอกแล้ว!';
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      }).catch(() => {
+        prompt('คัดลอกลิงก์:', btn.dataset.url);
+      });
+    });
+  });
+
+  // bind print buttons
+  grid.querySelectorAll('.ta-print-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = getTakeawayUrl(btn.dataset.slot);
+      const idx = btn.dataset.idx;
+      const win = window.open('', '_blank', 'width=400,height=580');
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
+        <style>
+          body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff;}
+          .w{text-align:center;padding:1.5rem;border:2px solid #3d2b1f;border-radius:14px;max-width:260px;}
+          .shop{font-family:'Mitr',sans-serif;font-size:1.1rem;color:#3d2b1f;font-weight:700;margin-bottom:.3rem;}
+          .lbl{font-family:'Mitr',sans-serif;font-size:1.5rem;font-weight:700;color:#1a7a4a;margin:.4rem 0;}
+          .hint{font-size:.82rem;color:#8b6655;margin-top:.4rem;}
+          #qr{border:3px solid #1a7a4a;border-radius:8px;padding:5px;display:inline-block;margin:.6rem 0;}
+        </style></head><body>
+        <div class="w">
+          <div class="shop">🍛 ข้าวซอย 90</div>
+          <div id="qr"></div>
+          <div class="lbl">📦 กลับบ้าน (ลิงก์ ${idx})</div>
+          <div class="hint">สแกน QR เพื่อสั่งกลับบ้าน</div>
+        </div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+        <script>new QRCode(document.getElementById('qr'),{text:'${url}',width:170,height:170,colorDark:'#3d2b1f',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>window.print(),800);<\/script>
+        </body></html>`);
+      win.document.close();
+    });
+  });
+}
+
+// ==================== Render Takeaway Orders ====================
+function renderTakeawayOrders() {
+  const taList  = document.getElementById('takeawayOrdersList');
+  const taEmpty = document.getElementById('takeawayOrdersEmpty');
+  if (!taList || !taEmpty) return;
+
+  const TAKEAWAY_IDS = ['takeaway1','takeaway2','takeaway3'];
+  const taOrders = allOrders.filter(o => TAKEAWAY_IDS.includes(String(o.table)) || o.takeaway === true);
+
+  if (taOrders.length === 0) {
+    taList.innerHTML = '';
+    taList.classList.add('hidden');
+    taEmpty.classList.remove('hidden');
+    return;
+  }
+
+  taEmpty.classList.add('hidden');
+  taList.classList.remove('hidden');
+
+  const statusMap = {
+    pending: { label: '🔔 ออเดอร์ใหม่', cls: 'pending' },
+    cooking: { label: '👨‍🍳 กำลังทำ',    cls: 'cooking' },
+    served:  { label: '🍽 พร้อมส่ง',     cls: 'served'  },
+    paid:    { label: '✅ จ่ายแล้ว',     cls: 'paid'    },
+  };
+
+  taList.innerHTML = taOrders.map((order) => {
+    const s = order.status || 'pending';
+    const { label: statusLabel, cls: statusCls } = statusMap[s] || statusMap.pending;
+    let actionBtns = '';
+    if (s === 'pending') {
+      actionBtns = `<button type="button" class="btn-cooking" data-key="${order.firebaseKey}">👨‍🍳 รับออเดอร์</button>`;
+    } else if (s === 'cooking') {
+      actionBtns = `<button type="button" class="btn-served" data-key="${order.firebaseKey}">📦 พร้อมส่ง</button>`;
+    } else if (s === 'served') {
+      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button>`;
+    }
+
+    const batches = order.batches || [order.items || []];
+    const batchesHtml = batches.map((batchItems, bIdx) => {
+      const batchTotal = batchItems.reduce((s, i) => s + i.price * i.qty, 0);
+      const batchLabel = batches.length > 1 ? `รอบที่ ${bIdx + 1}` : 'รายการ';
+      return `
+        <div class="batch-group">
+          ${batches.length > 1 ? `<div class="batch-label">🍽 ${escapeHtml(batchLabel)}</div>` : ''}
+          <ul class="order-items">
+            ${batchItems.map((i) => `
+              <li class="order-item">
+                <span>${escapeHtml(i.name)}${i.option ? `<span class="order-item-option"> · ${escapeHtml(i.option)}</span>` : ''} × ${i.qty}</span>
+                <span>${formatMoney(i.price * i.qty)}</span>
+              </li>`).join('')}
+          </ul>
+          ${batches.length > 1 ? `<div class="batch-subtotal">รอบนี้: ${formatMoney(batchTotal)}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    const slotNum = String(order.table).replace('takeaway','');
+
+    return `
+      <article class="order-card order-card--${statusCls} order-card--takeaway" data-key="${order.firebaseKey}">
+        <div class="order-card-header">
+          <div class="order-card-header-row">
+            <h3 class="order-card-title">
+              ออเดอร์ #${escapeHtml(String(order.orderNumber))}
+              <span class="order-table-chip order-table-chip--takeaway">📦 กลับบ้าน (ลิงก์ ${escapeHtml(slotNum)})</span>
+              ${batches.length > 1 ? `<span class="order-batch-chip">${batches.length} รอบ</span>` : ''}
+            </h3>
+            <span class="status-badge ${statusCls}">${statusLabel}</span>
+          </div>
+          <div class="order-card-header-row">
+            <span class="order-card-date">${formatDate(order.date)}</span>
+            <div class="order-actions">
+              ${actionBtns}
+              <button type="button" class="btn-add-item" data-key="${order.firebaseKey}">+ เพิ่มเมนู</button>
+              <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
+            </div>
+          </div>
+        </div>
+        <div class="order-card-body">
+          ${batchesHtml}
+          <div class="order-total-row">
+            <span>รวมทั้งหมด</span>
+            <span>${formatMoney(order.total)}</span>
+          </div>
+        </div>
+      </article>`;
+  }).join('');
+
+  taList.querySelectorAll('.btn-cooking').forEach((btn) => {
+    btn.addEventListener('click', () => markOrderAsCooking(btn.dataset.key));
+  });
+  taList.querySelectorAll('.btn-served').forEach((btn) => {
+    btn.addEventListener('click', () => markOrderAsServed(btn.dataset.key));
+  });
+  taList.querySelectorAll('.btn-paid').forEach((btn) => {
+    btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
+  });
+  taList.querySelectorAll('.btn-add-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      if (order) openAddItemModal(btn.dataset.key, order);
+    });
+  });
+  taList.querySelectorAll('.btn-delete').forEach((btn) => {
+    btn.addEventListener('click', () => deleteOrder(btn.dataset.key, btn.dataset.num));
+  });
 }
 
 // ==================== Auth Events ====================

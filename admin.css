@@ -964,3 +964,109 @@ body {
   font-size: 0.78rem;
   font-style: italic;
 }
+
+/* ================================================ TAKEAWAY QR PANEL */
+.takeaway-qr-panel {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.takeaway-qr-header { margin-bottom: 1rem; }
+.takeaway-qr-title {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.05rem; font-weight: 600;
+  color: var(--brown); margin-bottom: 0.25rem;
+}
+.takeaway-qr-desc {
+  font-size: 0.82rem; color: var(--brown-light);
+}
+
+/* URL row */
+.ta-url-row { margin-bottom: 1rem; }
+.ta-url-label {
+  display: block; font-size: 0.78rem; font-weight: 700;
+  color: var(--brown-light); text-transform: uppercase;
+  letter-spacing: 0.04em; margin-bottom: 0.4rem;
+}
+.ta-url-input-row {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+}
+.ta-url-input { flex: 1; min-width: 220px; }
+.ta-url-apply-btn { white-space: nowrap; flex-shrink: 0; }
+
+/* QR card grid */
+.ta-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.ta-qr-card {
+  background: var(--cream);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+.ta-qr-card-header {
+  background: var(--green);
+  color: var(--white);
+  font-family: 'Mitr', sans-serif;
+  font-size: 0.82rem; font-weight: 600;
+  padding: 0.5rem 0.75rem;
+}
+
+.ta-qr-card-body {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; padding: 0.85rem;
+  gap: 0.5rem;
+}
+
+.ta-qr-box {
+  border: 3px solid var(--green);
+  border-radius: 8px; padding: 4px;
+  display: inline-block;
+  background: var(--white);
+}
+/* force QR canvas/img size */
+.ta-qr-box canvas, .ta-qr-box img {
+  display: block;
+  width: 140px !important;
+  height: 140px !important;
+}
+
+.ta-qr-url {
+  font-size: 0.65rem; color: var(--brown-light);
+  word-break: break-all;
+  background: var(--white);
+  border-radius: 5px; padding: 0.3rem 0.5rem;
+  border: 1px solid var(--cream-dark);
+  width: 100%; text-align: left;
+}
+
+.ta-qr-card-footer {
+  display: flex; gap: 0.4rem;
+  padding: 0 0.75rem 0.75rem; flex-wrap: wrap;
+}
+.ta-copy-btn, .ta-print-btn {
+  flex: 1; font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+  white-space: nowrap;
+}
+
+/* ================================================ TAKEAWAY ORDER CARD */
+.order-card--takeaway {
+  border-left: 4px solid var(--green);
+}
+
+.order-table-chip--takeaway {
+  background: #d4edda !important;
+  color: var(--green) !important;
+  font-weight: 700;
+}

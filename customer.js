@@ -289,19 +289,38 @@ function esc(str) {
 }
 
 // ==================== Init: Read URL param ====================
+// รองรับ ?table=1-99 (โต๊ะ) หรือ ?table=takeaway1/2/3 (กลับบ้าน)
+const TAKEAWAY_IDS = ['takeaway1', 'takeaway2', 'takeaway3'];
+
+function isTakeaway(t) { return TAKEAWAY_IDS.includes(String(t)); }
+function tableLabel(t) { return isTakeaway(t) ? `กลับบ้าน (${String(t).replace('takeaway','')})` : `โต๊ะ ${t}`; }
+
 async function init() {
   const params = new URLSearchParams(location.search);
-  const t      = parseInt(params.get('table'), 10);
+  const raw    = params.get('table') || '';
+  const tNum   = parseInt(raw, 10);
+  const isTA   = TAKEAWAY_IDS.includes(raw);
 
-  if (!t || t < 1 || t > 99) {
+  // ตรวจสอบ: โต๊ะ 1-99 หรือ takeaway1/2/3
+  if (!isTA && (!tNum || tNum < 1 || tNum > 99)) {
     show('invalidScreen');
     return;
   }
 
-  tableNum = t;
+  tableNum = isTA ? raw : tNum;
   show('mainScreen');
-  document.getElementById('tableLabel').textContent     = `โต๊ะ ${tableNum}`;
-  document.getElementById('cartTableLabel').textContent = `โต๊ะ ${tableNum}`;
+  const lbl = tableLabel(tableNum);
+  document.getElementById('tableLabel').textContent     = lbl;
+  document.getElementById('cartTableLabel').textContent = lbl;
+
+  // ปรับสไตล์ header ถ้าเป็นกลับบ้าน
+  if (isTA) {
+    document.getElementById('tableLabel').style.background = '#1a7a4a';
+    document.getElementById('cartTableLabel').style.background = '#1a7a4a';
+    // ซ่อนปุ่มเรียกพนักงาน (ไม่ใช่โต๊ะในร้าน)
+    const callBtn = document.getElementById('callStaffBtn');
+    if (callBtn) callBtn.style.display = 'none';
+  }
 
   // ─── โหลดตะกร้าที่ค้างไว้ (กรณีรีหน้า / เน็ตหลุด) ───
   loadCart();
@@ -768,6 +787,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
         total,
         status: 'pending',
         source: 'qr',
+        ...(isTakeaway(tableNum) ? { takeaway: true } : {}),
       };
 
       const newRef = await push(ref(db, 'orders'), order);
@@ -787,7 +807,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
     closeModal('cartModal');
 
     document.getElementById('successMsg').textContent =
-      `ออเดอร์ #${usedOrderNum} โต๊ะ ${tableNum} ถูกส่งแล้ว 🙏`;
+      `ออเดอร์ #${usedOrderNum} ${tableLabel(tableNum)} ถูกส่งแล้ว 🙏`;
     openModal('successModal');
 
     // อัปเดต banner
@@ -819,7 +839,7 @@ document.getElementById('viewHistoryFromSuccessBtn').addEventListener('click', (
 let historyUnsubscribe = null;
 
 function openHistoryModal() {
-  document.getElementById('historyTableLabel').textContent = `โต๊ะ ${tableNum}`;
+  document.getElementById('historyTableLabel').textContent = tableLabel(tableNum);
   document.getElementById('historyLoading').classList.remove('hidden');
   document.getElementById('historyEmpty').classList.add('hidden');
   document.getElementById('historyContent').classList.add('hidden');
