@@ -59,8 +59,11 @@ const products = {
     { id: 'kao2', name: 'ข้าวซอยหมูทอด',       price: 70, image: IMG(1007),   productType: 'kaosoi'  },
     { id: 'kao3', name: 'น้ำเงี้ยว',            price: 60, image: IMG(555),    productType: 'namngiao'  },
     { id: 'kao4', name: 'ข้าวหมูทอด',           price: 50, image: IMG(7667),   productType: 'kaomutod'  },
-    { id: 'kao5', name: 'แคบหมู',               price: 15, image: IMG(98789),  },
-    { id: 'kao6', name: 'ไข่ต้ม',               price: 10, image: IMG(1090),  },
+    { id: 'kao5', name: 'แคบหมู',               price: 15, image: IMG(98789),  productType: 'simple' },
+    { id: 'kao7', name: 'ลาบเหนือ',           price: 60, image: IMG(10001),  productType: 'kaomutod' },
+    { id: 'kao8', name: 'ข้าวเหนียว',           price: 10, image: IMG(10002),  productType: 'simple' },
+    { id: 'kao9', name: 'ข้าวสวย',           price: 10, image: IMG(10003),  productType: 'simple' },
+    { id: 'kao6', name: 'ไข่ต้ม',               price: 10, image: IMG(1090),  productType: 'simple' },
   ],
   kao: [
     { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, image: IMG(111),   productType: 'kaosoi'   },
@@ -197,7 +200,7 @@ const OPTION_CONFIGS = {
         id: 'temp', label: '🌡 ร้อน / เย็น', type: 'single',
         defaultValue: 'เย็น',
         choices: [
-          { value: 'ร้อน',   label: '☕ ร้อน' },
+          { value: 'ร้อน -฿10',   label: '☕ ร้อน -฿10',  price: -10 },
           { value: 'เย็น',   label: '🧊 เย็น' },
           { value: 'ปั่น +฿10',   label: '🥤 ปั่น +฿10',  price: 10 },
         ],
