@@ -215,25 +215,30 @@ function playBeep(freqs = [880], dur = 0.18) {
   });
 }
 
-// ---- iOS Speech unlock ----
-/**
- * iOS ต้องการให้ทั้ง AudioContext และ speechSynthesis ถูก "unlock"
- * ด้วย user gesture โดยตรง (volume > 0 และ resume AudioContext)
- */
+// ---- iOS Audio unlock ----
 let iosUnlocked = false;
 function unlockIOSSpeech() {
-  // AudioContext: resume ใน gesture context
   const ctx = getAudioCtx();
-  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+  // iOS: ต้องเล่น silent buffer จริงๆ ใน gesture context ถึงจะ unlock AudioContext ได้
+  if (ctx) {
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    try {
+      const buf    = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buf;
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch(e) {}
+  }
 
   if (iosUnlocked || !window.speechSynthesis) return;
   try {
-    // ต้องใช้ volume > 0 และข้อความมีความยาว — iOS จึงจะนับว่า unlock จริง
-    const utter = new SpeechSynthesisUtterance(' ');
-    utter.volume = 0.01;  // ต่ำมากแต่ > 0
+    const utter  = new SpeechSynthesisUtterance('\u200B');
+    utter.volume = 0.01;
     utter.rate   = 2;
     window.speechSynthesis.speak(utter);
-    iosUnlocked = true;
+    iosUnlocked  = true;
   } catch(e) {}
 }
 
