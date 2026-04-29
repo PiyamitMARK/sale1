@@ -39,6 +39,7 @@ const IMG = (n) => 'images/img' + n + '.png';
 
 const PRODUCTS = {
   setkao: [
+    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:129, img:IMG(10021),   productType:'setkao' },
     { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:85, img:IMG(10012),   productType:'setkao' },
     { id:'setkao2', name:'ข้าวซอยน่องไก่ + ชาไทย',       price:110, img:IMG(10013),  productType:'setkao' },
     { id:'setkao3', name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price:115, img:IMG(10014),   productType:'setkao' },
