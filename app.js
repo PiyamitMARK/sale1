@@ -465,7 +465,12 @@ function renderOptionModalBody(product, config) {
     cfg2.groups.forEach(g => {
       const val = currentOptionValues[g.id];
       if (g.type === 'single') {
-        if (val) parts.push(val);
+        if (val) {
+          parts.push(val);
+          // ✅ Fix: บวกราคาของ single choice ด้วย (เช่น ปั่น +฿10)
+          const choice = g.choices.find(c => c.value === val);
+          if (choice?.price) extraPrice += choice.price;
+        }
       } else {
         (val || []).forEach(v => {
           parts.push(v);
