@@ -72,6 +72,11 @@ const PRODUCTS = {
     { id:'coffee6', name:'อเมริกาโน่มะพร้าว',   price:60, img:IMG(6),  productType:'drink-brew' },
     { id:'coffee7', name:'อเมริกาโน่น้ำผึ้ง',   price:60, img:IMG(5),  productType:'drink-brew' },
     { id:'coffee8', name:'อเมริกาโน่ส้ม',       price:60, img:IMG(8),  productType:'drink-brew' },
+    { id:'coffee9', name:'เอสเปรสโซ่ ร้อน',              price:40, img:IMG(10004), productType:'drink-brew' },
+    { id:'coffee10', name:'อเมริกาโน่ ร้อน',           price:40, img:IMG(10005),  productType:'drink-brew' },
+    { id:'coffee11', name:'ลาเต้ ร้อน',   price:50, img:IMG(10006),  productType:'drink-brew' },
+    { id:'coffee12', name:'คาปูชิโน่ ร้อน',   price:50, img:IMG(10007),  productType:'drink-brew' },
+    { id:'coffee13', name:'มอคค่า ร้อน',       price:50, img:IMG(10008),  productType:'drink-brew' },    
   ],
   soda: [
     { id:'soda1', name:'แดงมะนาวโซดา',      price:35, img:IMG(23), productType:'drink-ready' },
@@ -182,7 +187,7 @@ const OPTION_CONFIGS = {
         id: 'temp', label: '🌡 ร้อน / เย็น', type: 'single',
         defaultValue: 'เย็น',
         choices: [
-          { value: 'ร้อน',   label: '☕ ร้อน', },
+          { value: 'ร้อน -฿10',   label: '☕ ร้อน -฿10',  price: -10 },
           { value: 'เย็น',   label: '🧊 เย็น' },
           { value: 'ปั่น +฿10',   label: '🥤 ปั่น +฿10',  price: 10 },
         ],
