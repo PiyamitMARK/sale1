@@ -38,6 +38,22 @@ signInAnonymously(auth).catch(err => console.error('Auth:', err));
 const IMG = (n) => 'images/img' + n + '.png';
 
 const PRODUCTS = {
+  setkao: [
+    { id:'setkao1', name:'เซ็ตอาหาร 1',      price:100, img:IMG(111),   productType:'setkao' },
+    { id:'setkao2', name:'เซ็ตอาหาร 2',       price:120, img:IMG(1007),  productType:'setkao' },
+    { id:'setkao3', name:'เซ็ตอาหาร 3',            price:150, img:IMG(555),   productType:'setkao' },
+  ],
+  kao: [
+    { id:'kao1', name:'ข้าวซอยน่องไก่',      price:70, img:IMG(111),   productType:'kaosoi' },
+    { id:'kao2', name:'ข้าวซอยหมูทอด',       price:70, img:IMG(1007),  productType:'kaosoi' },
+    { id:'kao3', name:'น้ำเงี้ยว',            price:60, img:IMG(555),   productType:'namngiao' },
+    { id:'kao4', name:'ข้าวหมูทอด',           price:50, img:IMG(7667),  productType:'kaomutod' },
+    { id:'kao7', name:'ลาบเหนือ',           price:60, img:IMG(10001),  productType:'kaomutod' },
+    { id:'kao8', name:'ข้าวเหนียว',           price:10, img:IMG(10002),  productType:'simple' },
+    { id:'kao9', name:'ข้าวสวย',           price:10, img:IMG(10003),  productType:'simple' },
+    { id:'kao5', name:'แคบหมู',               price:15, img:IMG(98789), productType:'simple' },
+    { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
+  ],
   kao: [
     { id:'kao1', name:'ข้าวซอยน่องไก่',      price:70, img:IMG(111),   productType:'kaosoi' },
     { id:'kao2', name:'ข้าวซอยหมูทอด',       price:70, img:IMG(1007),  productType:'kaosoi' },
@@ -71,12 +87,7 @@ const PRODUCTS = {
     { id:'coffee5', name:'อเมริกาโน่',           price:45, img:IMG(5),  productType:'drink-brew' },
     { id:'coffee6', name:'อเมริกาโน่มะพร้าว',   price:60, img:IMG(6),  productType:'drink-brew' },
     { id:'coffee7', name:'อเมริกาโน่น้ำผึ้ง',   price:60, img:IMG(5),  productType:'drink-brew' },
-    { id:'coffee8', name:'อเมริกาโน่ส้ม',       price:60, img:IMG(8),  productType:'drink-brew' },
-    { id:'coffee9', name:'เอสเปรสโซ่ ร้อน',              price:40, img:IMG(10004), productType:'drink-brew' },
-    { id:'coffee10', name:'อเมริกาโน่ ร้อน',           price:40, img:IMG(10005),  productType:'drink-brew' },
-    { id:'coffee11', name:'ลาเต้ ร้อน',   price:50, img:IMG(10006),  productType:'drink-brew' },
-    { id:'coffee12', name:'คาปูชิโน่ ร้อน',   price:50, img:IMG(10007),  productType:'drink-brew' },
-    { id:'coffee13', name:'มอคค่า ร้อน',       price:50, img:IMG(10008),  productType:'drink-brew' },    
+    { id:'coffee8', name:'อเมริกาโน่ส้ม',       price:60, img:IMG(8),  productType:'drink-brew' }, 
   ],
   soda: [
     { id:'soda1', name:'แดงมะนาวโซดา',      price:35, img:IMG(23), productType:'drink-ready' },
@@ -212,6 +223,10 @@ const OPTION_CONFIGS = {
         ],
       },
     ],
+    hasNote: true,
+  },
+  'setkao': {
+    groups: [],
     hasNote: true,
   },
   'drink-ready': {
