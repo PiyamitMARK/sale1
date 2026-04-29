@@ -235,7 +235,7 @@ const OPTION_CONFIGS = {
 // ==================== State ====================
 let cart = [];
 let orderNumber = 1001;
-let currentCategory = 'kao';
+let currentCategory = 'setkao';
 let selectedTable = null;
 
 // สถานะ order ปัจจุบันของโต๊ะที่เลือก
