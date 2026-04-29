@@ -554,8 +554,8 @@ function renderOptionModalBody(product, config) {
   document.getElementById('optionConfirm').addEventListener('click', () => {
     if (!pendingProduct) return;
     const config2 = OPTION_CONFIGS[pendingProduct.productType] || OPTION_CONFIGS['simple'];
-    const rawNote = document.getElementById('optionNote')?.value.trim() || '';
-    const note    = rawNote.slice(0, 200); // hard cap 200 chars
+    const rawNote = document.getElementById('optionNote')?.value ?? '';
+    const note    = rawNote.trim().slice(0, 200);
 
     const parts = [];
     let extraPrice = 0;
@@ -563,7 +563,12 @@ function renderOptionModalBody(product, config) {
     config2.groups.forEach(g => {
       const val = currentOptionValues[g.id];
       if (g.type === 'single') {
-        if (val) parts.push(val);
+        if (val) {
+          parts.push(val);
+          // ✅ Fix: บวกราคาของ single choice ด้วย (เช่น ปั่น +฿10)
+          const choice = g.choices.find(c => c.value === val);
+          if (choice?.price) extraPrice += choice.price;
+        }
       } else {
         (val || []).forEach(v => {
           parts.push(v);
@@ -711,8 +716,10 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
           lastBatchDate: new Date().toISOString(),
         });
       } else {
-        // order ถูกลบไปแล้ว → สร้างใหม่
-        activeOrderKey = null;
+        // order ถูกลบไปแล้ว → ล้าง tableOrders แล้วสร้างใหม่
+        activeOrderKey    = null;
+        activeOrderNumber = null;
+        await set(ref(db, `tableOrders/${tableNum}`), null);
       }
     }
 
