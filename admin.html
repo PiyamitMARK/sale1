@@ -49,7 +49,13 @@
       <div class="admin-header-right">
         <a href="qr.html" class="btn btn-green">📱 QR โต๊ะ</a>
         <button type="button" class="btn btn-green" id="exportSheetBtn">Export Sheet</button>
-        <button type="button" class="btn btn-sound" id="soundToggleBtn" title="เสียงแจ้งเตือน">🔔 เสียงเปิด</button>
+        <div class="sound-control" id="soundControl">
+          <button type="button" class="btn btn-sound" id="soundToggleBtn" title="เปิด/ปิดเสียง">🔔 เสียงเปิด</button>
+          <div class="sound-mode-tabs" id="soundModeTabs" title="เลือกประเภทเสียง">
+            <button class="sound-mode-tab active" data-mode="tts" title="เสียงคนพูด">🗣 พูด</button>
+            <button class="sound-mode-tab" data-mode="beep" title="เสียง Effect">🎵 Effect</button>
+          </div>
+        </div>
         <button type="button" class="btn btn-outline-danger" id="clearDataBtn">🗑 ล้างข้อมูล</button>
         <a href="index.html" class="btn btn-outline">POS</a>
         <button type="button" class="btn btn-outline" id="logoutBtn">ออกจากระบบ</button>

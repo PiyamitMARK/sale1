@@ -167,7 +167,7 @@ function getAllItems(order) {
   return order.items || [];
 }
 
-// ==================== Sound Alert (Text-to-Speech) ====================
+// ==================== Sound Alert (Text-to-Speech + AudioContext fallback) ====================
 let soundEnabled = true;
 let knownOrderKeys = new Set();
 let isFirstLoad = true;
@@ -177,62 +177,140 @@ const TTS_ORDER_TEXT  = 'มีออเดอร์ใหม่จ้า';
 const TTS_BATCH_TEXT  = 'ลูกค้าสั่งเพิ่มจ้า';
 const TTS_CALL_TEXT   = 'ลูกค้าเรียกพนักงานจ้า';
 
+// ---- AudioContext (beep fallback สำหรับ iOS ที่ TTS ใช้ไม่ได้) ----
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  // iOS: resume ถ้า suspended (ต้องอยู่ใน user-gesture context)
+  if (_audioCtx && _audioCtx.state === 'suspended') {
+    _audioCtx.resume().catch(() => {});
+  }
+  return _audioCtx;
+}
+
 /**
- * iOS ต้องการให้ speechSynthesis ถูก "unlock" ด้วย user gesture ก่อน
- * ทำครั้งเดียวตอน login หรือ กดปุ่ม Sound Toggle
+ * เล่นเสียง beep ผ่าน AudioContext
+ * @param {number[]} freqs - อาร์เรย์ของ Hz ที่จะเล่นต่อเนื่อง
+ * @param {number} dur - ความยาวแต่ละโน้ต (วินาที)
+ */
+function playBeep(freqs = [880], dur = 0.18) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  let t = ctx.currentTime + 0.05;
+  freqs.forEach(freq => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.001, t);
+    gain.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.start(t);
+    osc.stop(t + dur + 0.01);
+    t += dur + 0.04;
+  });
+}
+
+// ---- iOS Speech unlock ----
+/**
+ * iOS ต้องการให้ทั้ง AudioContext และ speechSynthesis ถูก "unlock"
+ * ด้วย user gesture โดยตรง (volume > 0 และ resume AudioContext)
  */
 let iosUnlocked = false;
 function unlockIOSSpeech() {
+  // AudioContext: resume ใน gesture context
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+
   if (iosUnlocked || !window.speechSynthesis) return;
   try {
-    const utter = new SpeechSynthesisUtterance('');
-    utter.volume = 0;
+    // ต้องใช้ volume > 0 และข้อความมีความยาว — iOS จึงจะนับว่า unlock จริง
+    const utter = new SpeechSynthesisUtterance(' ');
+    utter.volume = 0.01;  // ต่ำมากแต่ > 0
+    utter.rate   = 2;
     window.speechSynthesis.speak(utter);
     iosUnlocked = true;
   } catch(e) {}
 }
 
+// ---- iOS Safari bug: speechSynthesis หยุดเองหลัง ~30 วิ ----
+// วิธีแก้: cancel + re-speak ถ้า paused ขณะกำลังพูด
+let _ttsWatchdog = null;
+function _startTTSWatchdog(utter) {
+  clearInterval(_ttsWatchdog);
+  _ttsWatchdog = setInterval(() => {
+    if (!window.speechSynthesis) { clearInterval(_ttsWatchdog); return; }
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+  }, 5000);
+  utter.onend = utter.onerror = () => clearInterval(_ttsWatchdog);
+}
+
 /**
- * พูดข้อความด้วย Web Speech API
+ * พูดข้อความด้วย Web Speech API พร้อม beep fallback
  * @param {string} text - ข้อความที่ต้องการพูด
- * @param {object} [opts] - { rate, pitch, volume }
+ * @param {object} [opts] - { rate, pitch, volume, beep }
  */
 function speak(text, opts = {}) {
   if (!soundEnabled) return;
-  if (!window.speechSynthesis) {
-    console.warn('Browser ไม่รองรับ Web Speech API');
-    return;
-  }
+
+  // เล่น beep ก่อนเสมอ (ช่วยให้ AudioContext active บน iOS)
+  if (opts.beep !== false) playBeep(opts.beep || [880, 1100], 0.15);
+
+  if (!window.speechSynthesis) return;
   try {
-    // ยกเลิกเสียงที่กำลังพูดอยู่ก่อน (ถ้ามี)
     window.speechSynthesis.cancel();
 
-    const utter        = new SpeechSynthesisUtterance(text);
-    utter.lang         = 'th-TH';
-    utter.rate         = opts.rate   ?? 0.8;
-    utter.pitch        = opts.pitch  ?? 1.1;
-    utter.volume       = opts.volume ?? 1.0;
+    const utter    = new SpeechSynthesisUtterance(text);
+    utter.lang     = 'th-TH';
+    utter.rate     = opts.rate   ?? 0.85;
+    utter.pitch    = opts.pitch  ?? 1.1;
+    utter.volume   = opts.volume ?? 1.0;
 
-    // เลือก voice ภาษาไทยถ้ามี
-    const voices = window.speechSynthesis.getVoices();
+    // เลือก voice ภาษาไทยถ้ามี, fallback default voice
+    const voices  = window.speechSynthesis.getVoices();
     const thVoice = voices.find(v => v.lang === 'th-TH' || v.lang.startsWith('th'));
     if (thVoice) utter.voice = thVoice;
 
-    window.speechSynthesis.speak(utter);
+    // เริ่ม watchdog แก้บัก iOS pause
+    _startTTSWatchdog(utter);
+
+    // iOS: ต้อง delay เล็กน้อยหลัง cancel() ไม่งั้น speak() ถูกกลืน
+    setTimeout(() => {
+      try { window.speechSynthesis.speak(utter); } catch(e) {}
+    }, 120);
+
   } catch (e) { console.warn('TTS error:', e); }
 }
 
-// ให้ browser โหลด voice list ก่อน (บางเบราว์เซอร์ต้องรอ)
+// โหลด voice list ก่อน (บางเบราว์เซอร์ต้องรอ event)
 if (window.speechSynthesis) {
   window.speechSynthesis.getVoices();
   window.speechSynthesis.addEventListener('voiceschanged', () => {
-    window.speechSynthesis.getVoices(); // refresh voice list
+    window.speechSynthesis.getVoices();
   });
 }
 
-function playOrderAlert()  { speak(TTS_ORDER_TEXT);  }
-function playBatchAlert()  { speak(TTS_BATCH_TEXT, { pitch: 1.2 }); }
-function playCallAlert()   { speak(TTS_CALL_TEXT,  { rate: 0.8, pitch: 0.95 }); }
+// 'tts' = เสียงคนพูด (+ beep นำ), 'beep' = เสียง effect อย่างเดียว
+let soundMode = localStorage.getItem('soundMode') || 'tts';
+
+function playOrderAlert() {
+  if (soundMode === 'beep') { playBeep([880, 1047, 1319], 0.18); }
+  else { speak(TTS_ORDER_TEXT, { beep: [880, 1047] }); }
+}
+function playBatchAlert() {
+  if (soundMode === 'beep') { playBeep([1047, 1319, 1047], 0.15); }
+  else { speak(TTS_BATCH_TEXT, { pitch: 1.2, beep: [1047, 1319] }); }
+}
+function playCallAlert() {
+  if (soundMode === 'beep') { playBeep([660, 784, 880, 784, 660], 0.13); }
+  else { speak(TTS_CALL_TEXT, { rate: 0.8, pitch: 0.95, beep: [660, 784, 880] }); }
+}
 
 // ==================== Firebase: Real-time Listener ====================
 let callStaffUnsubscribe = null;
@@ -1288,19 +1366,48 @@ exportConfirm.addEventListener('click', async () => {
   }
 });
 
-// ==================== Sound Toggle ====================
+// ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
+const soundControl   = document.getElementById('soundControl');
+const soundModeTabs  = document.querySelectorAll('.sound-mode-tab');
+
+// ตั้งค่า mode tabs ตาม localStorage
+function applySoundMode(mode) {
+  soundMode = mode;
+  localStorage.setItem('soundMode', mode);
+  soundModeTabs.forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.mode === mode);
+  });
+}
+applySoundMode(soundMode);
+
 if (soundToggleBtn) {
   soundToggleBtn.addEventListener('click', () => {
-    unlockIOSSpeech(); // iOS: unlock speech ด้วย user gesture
+    unlockIOSSpeech(); // iOS: unlock ด้วย user gesture
     soundEnabled = !soundEnabled;
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
     soundToggleBtn.textContent = soundEnabled ? '🔔 เสียงเปิด' : '🔕 เสียงปิด';
-    soundToggleBtn.classList.toggle('muted', !soundEnabled);
+    soundControl?.classList.toggle('muted', !soundEnabled);
     // ทดสอบเสียงทันทีหลังเปิด (เพื่อให้ iOS unlock สำเร็จ)
-    if (soundEnabled) speak('เสียงเปิดแล้วจ้า');
+    if (soundEnabled) {
+      if (soundMode === 'beep') playBeep([880, 1047], 0.18);
+      else speak('เสียงเปิดแล้วจ้า');
+    }
   });
 }
+
+soundModeTabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    unlockIOSSpeech();
+    const mode = tab.dataset.mode;
+    applySoundMode(mode);
+    // ทดสอบเสียงให้ฟังทันที
+    if (soundEnabled) {
+      if (mode === 'beep') playBeep([880, 1047, 1319], 0.18);
+      else speak('เสียงคนพูดจ้า');
+    }
+  });
+});
 
 // ==================== Inject batch CSS ====================
 (function injectBatchStyle() {

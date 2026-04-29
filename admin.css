@@ -882,27 +882,70 @@ body {
   line-height: 1;
 }
 
-/* ================================================ SOUND TOGGLE BUTTON */
-.btn-sound {
-  background: var(--cream-mid);
-  color: var(--brown-mid);
-  border: 1.5px solid var(--cream-dark);
-  padding: 0.45rem 1rem;
+/* ================================================ SOUND CONTROL GROUP */
+.sound-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
   border-radius: var(--radius-pill);
+  overflow: hidden;
+  border: 1.5px solid var(--cream-dark);
+  background: var(--cream-mid);
+  transition: border-color var(--transition);
+}
+.sound-control:focus-within { border-color: var(--brown-light); }
+
+/* ปุ่ม on/off */
+.btn-sound {
+  background: transparent;
+  color: var(--brown-mid);
+  border: none;
+  border-right: 1.5px solid var(--cream-dark);
+  padding: 0.45rem 1rem;
   font-family: inherit;
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+  border-radius: 0;
   transition: all var(--transition);
   white-space: nowrap;
 }
-.btn-sound:hover { border-color: var(--brown-light); background: var(--cream-dark); }
+.btn-sound:hover { background: var(--cream-dark); color: var(--brown); }
 .btn-sound.muted {
-  background: var(--cream);
   color: var(--brown-light);
-  border-color: var(--cream-dark);
-  opacity: 0.7;
+  opacity: 0.65;
 }
+
+/* divider ระหว่างปุ่มกับ mode tabs */
+.sound-mode-tabs {
+  display: flex;
+  align-items: center;
+}
+.sound-mode-tab {
+  background: transparent;
+  border: none;
+  border-left: 1px solid transparent;
+  padding: 0.45rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--brown-light);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.sound-mode-tab:first-child { border-left: none; }
+.sound-mode-tab:hover { background: var(--cream-dark); color: var(--brown); }
+.sound-mode-tab.active {
+  background: var(--brown);
+  color: var(--white);
+}
+/* ซ่อน mode tabs ตอนเสียงปิด */
+.sound-control.muted .sound-mode-tabs {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
 
 /* ================================================ NEW ORDER TOAST */
 .new-order-toast {
