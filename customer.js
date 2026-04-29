@@ -313,10 +313,19 @@ async function init() {
   document.getElementById('tableLabel').textContent     = lbl;
   document.getElementById('cartTableLabel').textContent = lbl;
 
-  // ปรับสไตล์ header ถ้าเป็นกลับบ้าน
+  // ปรับสไตล์ badge ถ้าเป็นกลับบ้าน
   if (isTA) {
-    document.getElementById('tableLabel').style.background = '#1a7a4a';
-    document.getElementById('cartTableLabel').style.background = '#1a7a4a';
+    // เพิ่ม class สีเขียวเฉพาะ badge เล็กๆ ไม่เป็น background ทั้งแถว
+    const tableEl = document.getElementById('tableLabel');
+    const cartTableEl = document.getElementById('cartTableLabel');
+    if (tableEl) {
+      tableEl.style.background = '#1a7a4a';
+      tableEl.style.color = '#fff';
+    }
+    // cartTableLabel ให้แค่ข้อความ + icon ไม่เป็น full-width green bar
+    if (cartTableEl) {
+      cartTableEl.style.cssText = 'display:inline-block;background:#e8f5e9;color:#1a7a4a;border:1.5px solid #1a7a4a;font-weight:700;';
+    }
     // ซ่อนปุ่มเรียกพนักงาน (ไม่ใช่โต๊ะในร้าน)
     const callBtn = document.getElementById('callStaffBtn');
     if (callBtn) callBtn.style.display = 'none';

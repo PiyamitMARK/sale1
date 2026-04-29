@@ -777,7 +777,7 @@ function renderTakeawayQrPanel() {
   const container = document.getElementById('takeawayQrSlots');
   if (!container) return;
 
-  // ถ้า render แล้ว ไม่ต้อง render ซ้ำ
+  // ถ้า render แล้ว ไม่ต้องสร้าง UI ซ้ำ (update ทำผ่านปุ่ม)
   if (container.dataset.rendered === '1') return;
   container.dataset.rendered = '1';
 
@@ -798,14 +798,99 @@ function renderTakeawayQrPanel() {
 
   document.getElementById('taApplyBtn').addEventListener('click', () => {
     const val = document.getElementById('taBaseUrl').value.trim();
-    if (val) {
-      localStorage.setItem(TA_STORAGE_KEY, val);
-      // force re-render
-      container.dataset.rendered = '0';
-      container.innerHTML = '';
-      renderTakeawayQrPanel();
-    }
+    if (!val) return;
+    localStorage.setItem(TA_STORAGE_KEY, val);
+
+    // อัปเดต QR แต่ละ slot ใน-place (ไม่ rebuild DOM ทั้งหมด)
+    TAKEAWAY_SLOTS.forEach((slotId) => {
+      const url   = getTakeawayUrl(slotId);
+      const boxEl = document.getElementById(`taQrBox_${slotId}`);
+      const urlEl = boxEl?.parentElement?.querySelector('.ta-qr-url');
+      const copyBtn = boxEl?.closest('.ta-qr-card')?.querySelector('.ta-copy-btn');
+      const printBtn = boxEl?.closest('.ta-qr-card')?.querySelector('.ta-print-btn');
+
+      // อัปเดต URL text
+      if (urlEl) urlEl.textContent = url;
+      if (copyBtn) copyBtn.dataset.url = url;
+
+      // ล้าง QR เก่าแล้วสร้างใหม่
+      if (boxEl) {
+        boxEl.innerHTML = '';
+        try {
+          qrInstances[slotId] = new QRCode(boxEl, {
+            text:         url,
+            width:        150,
+            height:       150,
+            colorDark:    '#3d2b1f',
+            colorLight:   '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+        } catch(e) {
+          boxEl.innerHTML = '<p style="font-size:0.7rem;color:#888">QR Error</p>';
+        }
+      }
+
+      // อัปเดต print button ด้วย URL ใหม่
+      if (printBtn) {
+        // rebind print event: clone & replace
+        const newPrintBtn = printBtn.cloneNode(true);
+        printBtn.parentNode.replaceChild(newPrintBtn, printBtn);
+        newPrintBtn.addEventListener('click', () => {
+          const freshUrl = getTakeawayUrl(slotId);
+          const idx = newPrintBtn.dataset.idx;
+          _openPrintWindow(freshUrl, idx);
+        });
+      }
+
+      // rebind copy event
+      if (copyBtn) {
+        const newCopyBtn = copyBtn.cloneNode(true);
+        copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
+        newCopyBtn.dataset.url = url;
+        newCopyBtn.addEventListener('click', () => _copyUrl(newCopyBtn));
+      }
+    });
+
+    // flash ปุ่มให้รู้ว่า update แล้ว
+    const applyBtn = document.getElementById('taApplyBtn');
+    const orig = applyBtn.textContent;
+    applyBtn.textContent = '✅ อัปเดตแล้ว!';
+    setTimeout(() => { applyBtn.textContent = orig; }, 1800);
   });
+}
+
+function _copyUrl(btn) {
+  navigator.clipboard.writeText(btn.dataset.url).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✅ คัดลอกแล้ว!';
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  }).catch(() => {
+    prompt('คัดลอกลิงก์:', btn.dataset.url);
+  });
+}
+
+function _openPrintWindow(url, idx) {
+  const win = window.open('', '_blank', 'width=400,height=580');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+      body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff;}
+      .w{text-align:center;padding:1.5rem;border:2px solid #3d2b1f;border-radius:14px;max-width:260px;}
+      .shop{font-family:'Mitr',sans-serif;font-size:1.1rem;color:#3d2b1f;font-weight:700;margin-bottom:.3rem;}
+      .lbl{font-family:'Mitr',sans-serif;font-size:1.5rem;font-weight:700;color:#1a7a4a;margin:.4rem 0;}
+      .hint{font-size:.82rem;color:#8b6655;margin-top:.4rem;}
+      #qr{border:3px solid #1a7a4a;border-radius:8px;padding:5px;display:inline-block;margin:.6rem 0;}
+    </style></head><body>
+    <div class="w">
+      <div class="shop">🍛 ข้าวซอย 90</div>
+      <div id="qr"></div>
+      <div class="lbl">📦 กลับบ้าน (ลิงก์ ${idx})</div>
+      <div class="hint">สแกน QR เพื่อสั่งกลับบ้าน</div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <script>new QRCode(document.getElementById('qr'),{text:'${url}',width:170,height:170,colorDark:'#3d2b1f',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>window.print(),800);<\/script>
+    </body></html>`);
+  win.document.close();
 }
 
 function renderTaSlots() {
@@ -853,43 +938,14 @@ function renderTaSlots() {
 
   // bind copy buttons
   grid.querySelectorAll('.ta-copy-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      navigator.clipboard.writeText(btn.dataset.url).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = '✅ คัดลอกแล้ว!';
-        setTimeout(() => { btn.textContent = orig; }, 2000);
-      }).catch(() => {
-        prompt('คัดลอกลิงก์:', btn.dataset.url);
-      });
-    });
+    btn.addEventListener('click', () => _copyUrl(btn));
   });
 
   // bind print buttons
   grid.querySelectorAll('.ta-print-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const url = getTakeawayUrl(btn.dataset.slot);
-      const idx = btn.dataset.idx;
-      const win = window.open('', '_blank', 'width=400,height=580');
-      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-        <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
-        <style>
-          body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff;}
-          .w{text-align:center;padding:1.5rem;border:2px solid #3d2b1f;border-radius:14px;max-width:260px;}
-          .shop{font-family:'Mitr',sans-serif;font-size:1.1rem;color:#3d2b1f;font-weight:700;margin-bottom:.3rem;}
-          .lbl{font-family:'Mitr',sans-serif;font-size:1.5rem;font-weight:700;color:#1a7a4a;margin:.4rem 0;}
-          .hint{font-size:.82rem;color:#8b6655;margin-top:.4rem;}
-          #qr{border:3px solid #1a7a4a;border-radius:8px;padding:5px;display:inline-block;margin:.6rem 0;}
-        </style></head><body>
-        <div class="w">
-          <div class="shop">🍛 ข้าวซอย 90</div>
-          <div id="qr"></div>
-          <div class="lbl">📦 กลับบ้าน (ลิงก์ ${idx})</div>
-          <div class="hint">สแกน QR เพื่อสั่งกลับบ้าน</div>
-        </div>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-        <script>new QRCode(document.getElementById('qr'),{text:'${url}',width:170,height:170,colorDark:'#3d2b1f',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>window.print(),800);<\/script>
-        </body></html>`);
-      win.document.close();
+      _openPrintWindow(url, btn.dataset.idx);
     });
   });
 }
