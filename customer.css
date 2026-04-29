@@ -455,6 +455,13 @@ body {
 
 /* ================================================ HISTORY MODAL */
 .cust-history-box { display: flex; flex-direction: column; }
+.cust-cart-table-badge {
+  display: inline-block; width: fit-content;
+  background: var(--cream-mid);
+  color: var(--brown-mid); font-size: 0.82rem; font-weight: 600;
+  padding: 0.25rem 0.75rem; border-radius: var(--radius-pill);
+  margin-bottom: 1rem;
+}
 .cust-history-table-badge {
   display: inline-block; background: var(--cream-mid);
   color: var(--brown-mid); font-size: 0.82rem; font-weight: 600;
