@@ -64,17 +64,6 @@ const PRODUCTS = {
     { id:'kao5', name:'แคบหมู',               price:15, img:IMG(98789), productType:'simple' },
     { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
   ],
-  kao: [
-    { id:'kao1', name:'ข้าวซอยน่องไก่',      price:70, img:IMG(111),   productType:'kaosoi' },
-    { id:'kao2', name:'ข้าวซอยหมูทอด',       price:70, img:IMG(1007),  productType:'kaosoi' },
-    { id:'kao3', name:'น้ำเงี้ยว',            price:60, img:IMG(555),   productType:'namngiao' },
-    { id:'kao4', name:'ข้าวหมูทอด',           price:50, img:IMG(7667),  productType:'kaomutod' },
-    { id:'kao7', name:'ลาบเหนือ',           price:60, img:IMG(10001),  productType:'kaomutod' },
-    { id:'kao8', name:'ข้าวเหนียว',           price:10, img:IMG(10002),  productType:'simple' },
-    { id:'kao9', name:'ข้าวสวย',           price:10, img:IMG(10003),  productType:'simple' },
-    { id:'kao5', name:'แคบหมู',               price:15, img:IMG(98789), productType:'simple' },
-    { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
-  ],
   nam: [
     { id:'nam1',  name:'น้ำเปล่า',       price:10, img:IMG(60),  productType:'simple' },
     { id:'nam2',  name:'โค๊ก',           price:15, img:IMG(80),  productType:'simple' },
