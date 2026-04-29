@@ -39,9 +39,12 @@ const IMG = (n) => 'images/img' + n + '.png';
 
 const PRODUCTS = {
   setkao: [
-    { id:'setkao1', name:'ข้าวหมูทอด + โค๊ก',      price:69, img:IMG(10009),   productType:'setkao' },
-    { id:'setkao2', name:'เซ็ตอาหาร 2',       price:120, img:IMG(1007),  productType:'setkao' },
-    { id:'setkao3', name:'เซ็ตอาหาร 3',            price:150, img:IMG(555),   productType:'setkao' },
+    { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:65, img:IMG(10009),   productType:'setkao' },
+    { id:'setkao2', name:'ข้าวซอยน่องไก่ + ชาไทย',       price:90, img:IMG(10010),  productType:'setkao' },
+    { id:'setkao3', name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price:95, img:IMG(10011),   productType:'setkao' },
+    { id:'setkao4', name:'ข้าวหมูทอด + โค๊ก',      price:65, img:IMG(10009),   productType:'setkao' },
+    { id:'setkao5', name:'ข้าวหมูทอด + ชาไทย',       price:90, img:IMG(10010),  productType:'setkao' },
+    { id:'setkao6', name:'ข้าวหมูทอด + มะพร้าวปั่น',            price:95, img:IMG(10011),   productType:'setkao' },
   ],
   kao: [
     { id:'kao1', name:'ข้าวซอยน่องไก่',      price:70, img:IMG(111),   productType:'kaosoi' },
