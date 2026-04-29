@@ -228,10 +228,7 @@ const OPTION_CONFIGS = {
     ],
     hasNote: true,
   },
-  'setkao': {
-    groups: [],
-    hasNote: true,
-  },
+  'setkao':      { groups: [], hasNote: true, },
   'drink-ready': { groups: [], hasNote: true },
   'simple':      { groups: [], hasNote: false },
 };
