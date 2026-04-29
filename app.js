@@ -40,6 +40,28 @@ const IMG = (n) => 'images/img' + n + '.png';
 
 // ==================== เมนูสินค้า ====================
 const products = {
+  setkao: [
+    { id: 'setkao1', name: 'ข้าวซอยน่องไก่ + โค๊ก',      price: 85, image: IMG(10012),   productType: 'setkao' },
+    { id: 'setkao2', name: 'ข้าวซอยน่องไก่ + ชาไทย',       price: 110, image: IMG(10013),  productType: 'setkao' },
+    { id: 'setkao3', name: 'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price: 115, image: IMG(10014),   productType: 'setkao' },
+    { id: 'setkao4', name: 'ข้าวซอยหมูทอด + โค๊ก',      price: 85, image: IMG(10020),   productType: 'setkao' },
+    { id: 'setkao5', name: 'ข้าวซอยหมูทอด + ชาไทย',       price: 110, image: IMG(10019),  productType: 'setkao' },
+    { id: 'setkao6', name: 'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price: 115, image: IMG(10018),   productType: 'setkao' },
+    { id: 'setkao7', name: 'น้ำเงี้ยว + โค๊ก',      price: 75, image: IMG(10015),   productType: 'setkao' },
+    { id: 'setkao8', name: 'น้ำเงี้ยว + ชาไทย',       price: 100, image: IMG(10016),  productType: 'setkao' },
+    { id: 'setkao9', name: 'น้ำเงี้ยว + มะพร้าวปั่น',            price: 105, image: IMG(10017),   productType: 'setkao' },
+    { id: 'setkao10', name: 'ข้าวหมูทอด + โค๊ก',      price: 65, image: IMG(10009),   productType: 'setkao' },
+    { id: 'setkao11', name: 'ข้าวหมูทอด + ชาไทย',       price: 90, image: IMG(10010),  productType: 'setkao' },
+    { id: 'setkao12', name: 'ข้าวหมูทอด + มะพร้าวปั่น',            price: 95, image: IMG(10011),   productType: 'setkao' },
+  ],
+  kao: [
+    { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, image: IMG(111),   productType: 'kaosoi'   },
+    { id: 'kao2', name: 'ข้าวซอยหมูทอด',       price: 70, image: IMG(1007),   productType: 'kaosoi'  },
+    { id: 'kao3', name: 'น้ำเงี้ยว',            price: 60, image: IMG(555),    productType: 'namngiao'  },
+    { id: 'kao4', name: 'ข้าวหมูทอด',           price: 50, image: IMG(7667),   productType: 'kaomutod'  },
+    { id: 'kao5', name: 'แคบหมู',               price: 15, image: IMG(98789),  },
+    { id: 'kao6', name: 'ไข่ต้ม',               price: 10, image: IMG(1090),  },
+  ],
   kao: [
     { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, image: IMG(111),   productType: 'kaosoi'   },
     { id: 'kao2', name: 'ข้าวซอยหมูทอด',       price: 70, image: IMG(1007),   productType: 'kaosoi'  },
@@ -200,6 +222,10 @@ const OPTION_CONFIGS = {
         ],
       },
     ],
+    hasNote: true,
+  },
+  'setkao': {
+    groups: [],
     hasNote: true,
   },
   'drink-ready': { groups: [], hasNote: true },
