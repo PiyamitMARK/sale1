@@ -820,7 +820,10 @@ loginBtn.addEventListener('click', async () => {
 logoutBtn.addEventListener('click', () => {
   setLoggedIn(false);
   if (unsubscribeListener) { unsubscribeListener(); unsubscribeListener = null; }
+  if (callStaffUnsubscribe) { callStaffUnsubscribe(); callStaffUnsubscribe = null; }
   allOrders = [];
+  knownOrderKeys = new Set();
+  knownCallKeys  = new Set();
   showScreen(loginScreen);
   usernameInput.value    = '';
   passwordInput.value    = '';

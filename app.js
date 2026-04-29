@@ -587,6 +587,7 @@ async function loadOrderNumber() {
 }
 
 // ==================== Firebase: Save Order (batch-aware) ====================
+// คืนค่า { allBatches, grandTotal } เพื่อให้ receipt แสดงยอดรวมทั้ง order
 async function saveOrder() {
   const today = new Date().toISOString().slice(0, 10);
   const batchItems = cart.map((i) => ({
@@ -596,12 +597,14 @@ async function saveOrder() {
     ...(i.optionLabel ? { option: i.optionLabel } : {}),
   }));
 
+  // ─── Fix 2: อ่าน snap ครั้งเดียว แล้ว reuse ───
+  let existingSnap = null;
   if (currentTableOrderKey) {
-    // ─── มี order active อยู่ → เพิ่ม batch ใหม่ต่อท้าย ───
-    const orderSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
-    if (!orderSnap.exists()) {
+    existingSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
+    if (!existingSnap.exists()) {
       // order ถูกลบไปแล้ว → สร้างใหม่
       currentTableOrderKey = null;
+      existingSnap = null;
     }
   }
 
@@ -642,11 +645,12 @@ async function saveOrder() {
     });
 
     orderNumberEl.textContent = orderNumber;
+    // ─── Fix 1: คืนข้อมูลสำหรับ receipt (order ใหม่) ───
+    return { allBatches: [batchItems], grandTotal: total };
 
   } else {
-    // ─── เพิ่ม batch ต่อท้าย order เดิม ───
-    const orderSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
-    const existingOrder = orderSnap.val();
+    // ─── Fix 2: reuse snap ที่อ่านแล้ว ไม่ต้อง get ซ้ำ ───
+    const existingOrder = existingSnap.val();
     const batches = existingOrder.batches || [existingOrder.items || []];
     batches.push(batchItems);
 
@@ -658,22 +662,28 @@ async function saveOrder() {
       status: 'pending', // reset เป็น pending เพื่อให้ admin เห็น batch ใหม่
       lastBatchDate: new Date().toISOString(),
     });
+    // ─── Fix 1: คืนข้อมูลสำหรับ receipt (เพิ่ม batch) ───
+    return { allBatches: batches, grandTotal: newTotal };
   }
 }
 
 // ==================== Receipt ====================
-function showReceipt() {
-  const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+// Fix 1: รับ allBatches + grandTotal จาก saveOrder เพื่อแสดงยอดรวมทั้ง order
+function showReceipt({ allBatches, grandTotal }) {
   receiptOrderNum.textContent = currentTableOrderNumber || orderNumber;
   receiptTableEl.textContent  = `โต๊ะ ${selectedTable}`;
   receiptDate.textContent     = new Date().toLocaleString('th-TH');
-  receiptItemsEl.innerHTML    = cart.map((i) =>
+
+  // แสดงทุก item จากทุก batch (ยอดรวมทั้ง order)
+  const allItems = allBatches.flat();
+  receiptItemsEl.innerHTML = allItems.map((i) =>
     `<div class="receipt-item">
-      <span>${escapeHtml(i.name)}${i.optionLabel ? ` (${escapeHtml(i.optionLabel)})` : ''} × ${i.qty}</span>
+      <span>${escapeHtml(i.name)}${i.option ? ` (${escapeHtml(i.option)})` : ''} × ${i.qty}</span>
       <span>${formatMoney(i.price * i.qty)}</span>
     </div>`
   ).join('');
-  receiptTotal.textContent = formatMoney(total);
+
+  receiptTotal.textContent = formatMoney(grandTotal);
   receiptModal.setAttribute('aria-hidden', 'false');
 }
 
@@ -756,8 +766,9 @@ receiptModal.addEventListener('click', (e) => {
 confirmOrderOk.addEventListener('click', async () => {
   confirmOrderOk.disabled = true;
   closeConfirmOrderModal();
+  let receiptData;
   try {
-    await saveOrder();
+    receiptData = await saveOrder();
   } catch (err) {
     console.error('saveOrder error:', err);
     alert('เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาตรวจสอบการเชื่อมต่อ');
@@ -765,11 +776,11 @@ confirmOrderOk.addEventListener('click', async () => {
     return;
   }
   confirmOrderOk.disabled = false;
-  showReceipt();
   // หลังบันทึกสำเร็จ → ล้าง cart แต่คง tableOrderKey ไว้
   cart = [];
   renderCart();
   showTableOrderBanner(selectedTable, currentTableOrderNumber);
+  showReceipt(receiptData);
 });
 
 // ==================== Mobile Cart Toggle + Smooth Drag ====================
