@@ -121,6 +121,7 @@
 
     /* ===== PRINT ===== */
     @media print {
+      @page { size: A4 portrait; margin: 10mm; }
       .page-header, .settings-bar, .btn-print-one, .qr-card-footer { display: none !important; }
       body { background: white; }
       .qr-grid {
@@ -130,6 +131,7 @@
       .qr-card {
         box-shadow: none; border: 1.5px solid #ccc;
         break-inside: avoid; page-break-inside: avoid;
+        height: 260px; overflow: hidden;
       }
     }
   </style>
@@ -238,11 +240,13 @@
 <title>QR โต๊ะ ${tableNum}</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
 <style>
-  @page { size: 58mm auto; margin: 3mm 3mm; }
+  @page { size: 58mm 100mm; margin: 3mm 3mm; }
   * { box-sizing:border-box; margin:0; padding:0; }
-  html {
+  html, body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    height: 100mm;
+    overflow: hidden;
   }
   body {
     font-family: 'Courier New', Courier, monospace;
