@@ -542,11 +542,11 @@ body {
   margin-top: 0.75rem;
 }
 
-/* ================================================ PRINT — thermal 80mm */
+/* ================================================ PRINT — thermal 58mm */
 @media print {
   @page {
-    size: 80mm auto;
-    margin: 3mm 4mm;
+    size: 58mm auto;      /* ← เปลี่ยนจาก 80mm เป็น 58mm */
+    margin: 2mm 3mm;      /* ← margin แคบลงหน่อย */
   }
 
   body * { visibility: hidden; }
@@ -558,16 +558,16 @@ body {
     position: fixed;
     top: 0;
     left: 0;
-    width: 72mm;
+    width: 52mm;          /* ← เปลี่ยนจาก 72mm เป็น 52mm */
     font-family: 'Courier New', monospace;
-    font-size: 10.5pt;
+    font-size: 9pt;       /* ← ลดขนาดตัวอักษรเล็กน้อย */
     color: #000;
     background: #fff;
   }
 
   .receipt-shop {
     font-family: serif;
-    font-size: 13pt;
+    font-size: 11pt;      /* ← ลดจาก 13pt */
     font-weight: bold;
     display: block;
   }
@@ -578,7 +578,7 @@ body {
     font-size: 0;
     height: 0;
     color: transparent;
-    margin: 5pt 0;
+    margin: 4pt 0;
   }
 
   .no-print, .modal-actions { display: none !important; }
