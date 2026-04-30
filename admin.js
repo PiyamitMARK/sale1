@@ -1496,7 +1496,7 @@ function printOrderReceipt(order) {
 <style>
   @page {
     size: 58mm auto;
-    margin: 2mm 4mm;   /* เพิ่ม margin ขวาป้องกันถูกตัด */
+    margin: 1mm 4mm 1mm 3mm;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html{
@@ -1504,48 +1504,73 @@ function printOrderReceipt(order) {
     print-color-adjust: exact;
   }
   body{
+    /* Courier New — bitmap monospace คมที่สุดบน thermal */
     font-family: 'Courier New', Courier, monospace;
-    font-size: 9pt;            /* ลดลงอีกนิดให้ content พอดี */
+    font-size: 9pt;
     font-weight: normal;
-    color: #000;
+    color: #000 !important;
     background: #fff;
-    width: 50mm;               /* แคบลงให้พอดีกับ margin ใหม่ */
+    width: 51mm;
+    /* ปิด anti-aliasing ทุกรูปแบบ */
     -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: unset;
     font-smooth: never;
-    text-rendering: geometricPrecision;
+    /* render เส้นให้คมที่สุด */
+    text-rendering: optimizeSpeed;
+    /* บังคับ black เต็ม 100% */
+    -webkit-text-stroke: 0px;
+  }
+  /* บังคับทุก element ให้สี #000 จริง ไม่ใช่ gray */
+  *, *::before, *::after {
+    color: #000 !important;
+    border-color: #000 !important;
   }
   .r-header{ text-align:center; margin-bottom:3pt; }
-  .r-shop{ font-size:12pt; font-weight:bold; margin-bottom:1pt; letter-spacing:0.03em; }
-  .r-sub{ font-size:8pt; font-weight:normal; }
-  hr.r-div{ border:none; border-top:1px solid #000; margin:4pt 0; }
+  .r-shop{ font-size:11.5pt; font-weight:bold; margin-bottom:1pt; }
+  .r-sub{ font-size:8pt; }
+  hr.r-div{
+    border:none;
+    /* ใช้ border-top สีดำแท้ ไม่ใช่ gray */
+    border-top: 1px solid #000 !important;
+    margin:3pt 0;
+  }
   .r-meta{ font-size:8.5pt; }
   .r-meta-row{ display:flex; justify-content:space-between; padding:1pt 0; }
   table{ width:100%; border-collapse:collapse; font-size:8.5pt; }
-  .col-name{ width:66%; padding:2pt 0; vertical-align:top; }
-  .col-price{ width:34%; text-align:right; padding:2pt 0; vertical-align:top; white-space:nowrap; }
-  .batch-sep{ text-align:center; font-size:7.5pt; padding:3pt 0 1pt; }
+  .col-name{ width:65%; padding:1.5pt 0; vertical-align:top; word-break:break-word; }
+  .col-price{ width:35%; text-align:right; padding:1.5pt 0; vertical-align:top; white-space:nowrap; }
+  .batch-sep{ text-align:center; font-size:7.5pt; padding:2pt 0 1pt; }
   .r-total{
     display:flex; justify-content:space-between;
     font-size:11pt; font-weight:bold;
-    margin:3pt 0 2pt; padding-top:3pt; border-top:1.5px solid #000;
+    margin:3pt 0 2pt; padding-top:3pt;
+    border-top: 1.5px solid #000 !important;
   }
   .r-qr-section{ text-align:center; margin:5pt 0 2pt; }
   .r-qr-label{ font-size:8.5pt; font-weight:bold; margin-bottom:3pt; }
   .r-qr-img{
-    width:42mm; height:42mm;
-    object-fit:contain; display:block; margin:0 auto;
-    image-rendering: pixelated;
-    image-rendering: -moz-crisp-edges;
-    image-rendering: crisp-edges;
+    /* QR: render แบบ pixel-perfect ห้าม browser blur เด็ดขาด */
+    width:40mm; height:40mm;
+    object-fit:contain;
+    display:block; margin:0 auto;
+    image-rendering: pixelated !important;
+    image-rendering: -moz-crisp-edges !important;
+    image-rendering: crisp-edges !important;
+    /* ป้องกัน Edge ลด opacity */
+    opacity: 1 !important;
+    filter: none !important;
+    /* scale up จาก source ให้ชัด ถ้า source QR เล็กกว่า 40mm */
+    transform: translateZ(0);
   }
   .r-qr-hint{ font-size:8pt; margin-top:3pt; }
-  .r-footer{ text-align:center; font-size:8pt; margin-top:4pt; }
+  .r-footer{ text-align:center; font-size:8pt; margin-top:3pt; }
   .no-print{ display:flex; justify-content:center; gap:8px; margin-top:12pt; }
   .no-print button{
     font-family:'Sarabun',sans-serif; font-size:10pt;
-    padding:6px 18px; border-radius:6px; cursor:pointer; border:1.5px solid #333; background:#fff;
+    padding:6px 18px; border-radius:6px; cursor:pointer;
+    border:1.5px solid #333 !important; background:#fff; color:#000 !important;
   }
-  .no-print .btn-doit{ background:#3d2b1f; color:#fff; border-color:#3d2b1f; }
+  .no-print .btn-doit{ background:#3d2b1f !important; color:#fff !important; border-color:#3d2b1f !important; }
   @media print{ .no-print{ display:none !important; } }
 </style>
 </head><body>
