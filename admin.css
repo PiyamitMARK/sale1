@@ -496,6 +496,24 @@ body {
 }
 .btn-delete:hover { background: #fff5f5; border-color: var(--red); }
 
+.btn-print-receipt {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  font-weight: 600;
+  background: #f0f7ff;
+  color: #1a5fa8;
+  border: 1.5px solid #aac8ef;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-print-receipt:hover {
+  background: #daeaff;
+  border-color: #1a5fa8;
+  transform: translateY(-1px);
+}
+
 /* Order body */
 .order-card-body { padding: 0.9rem 1.1rem; }
 

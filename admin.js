@@ -748,6 +748,7 @@ function renderOrders() {
             <div class="order-actions">
               ${actionBtns}
               <button type="button" class="btn-add-item" data-key="${order.firebaseKey}">+ เพิ่มเมนู</button>
+              <button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>
               <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
             </div>
           </div>
@@ -775,6 +776,12 @@ function renderOrders() {
     btn.addEventListener('click', () => {
       const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
       if (order) openAddItemModal(btn.dataset.key, order);
+    });
+  });
+  ordersList.querySelectorAll('.btn-print-receipt').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      if (order) printOrderReceipt(order);
     });
   });
   ordersList.querySelectorAll('.btn-delete').forEach((btn) => {
@@ -1448,3 +1455,121 @@ soundModeTabs.forEach(tab => {
 
 // ==================== Init ====================
 checkAuth();
+// ==================== Print Receipt (admin) ====================
+/**
+ * เปิดหน้าต่างใหม่ พิมพ์ใบเสร็จ 58mm พร้อม QR ธนาคาร
+ * วางไฟล์ qr-bank.png ในโฟลเดอร์เดียวกับ admin.html
+ */
+function printOrderReceipt(order) {
+  const batches  = order.batches || [order.items || []];
+  const dateStr  = new Date(order.date).toLocaleString('th-TH', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  const itemsHtml = batches.map((batchItems, bIdx) => {
+    const rows = batchItems.map(i => {
+      const name     = escapeHtml(i.name) + (i.option ? ` (${escapeHtml(i.option)})` : '');
+      const subtotal = (i.price * i.qty).toFixed(2);
+      return `<tr>
+        <td class="col-name">${name} ×${i.qty}</td>
+        <td class="col-price">&#3647;${subtotal}</td>
+      </tr>`;
+    }).join('');
+    const batchLabel = batches.length > 1
+      ? `<tr><td colspan="2" class="batch-sep">— รอบที่ ${bIdx + 1} —</td></tr>`
+      : '';
+    return batchLabel + rows;
+  }).join('');
+
+  const totalStr = Number(order.total).toFixed(2);
+  const qrSrc    = new URL('qr-bank.png', location.href).href;
+
+  const win = window.open('', '_blank', 'width=340,height=720');
+  if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อนนะครับ'); return; }
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="th"><head>
+<meta charset="UTF-8">
+<title>ใบเสร็จ #${escapeHtml(String(order.orderNumber))}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  @page { size: 58mm auto; margin: 2mm 2mm; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    font-family:'Sarabun','Courier New',monospace;
+    font-size:10pt; color:#000; background:#fff; width:54mm;
+  }
+  .r-header{ text-align:center; margin-bottom:3pt; }
+  .r-shop{ font-size:14pt; font-weight:700; margin-bottom:1pt; }
+  .r-sub{ font-size:8pt; color:#555; }
+  hr.r-div{ border:none; border-top:1px dashed #555; margin:4pt 0; }
+  .r-meta{ font-size:8.5pt; }
+  .r-meta-row{ display:flex; justify-content:space-between; padding:1pt 0; }
+  .r-meta-label{ color:#555; }
+  table{ width:100%; border-collapse:collapse; font-size:9pt; }
+  .col-name{ width:68%; padding:2pt 0; vertical-align:top; }
+  .col-price{ width:32%; text-align:right; padding:2pt 0; vertical-align:top; }
+  .batch-sep{ text-align:center; font-size:7.5pt; color:#888; padding:3pt 0 1pt; }
+  .r-total{
+    display:flex; justify-content:space-between;
+    font-size:12pt; font-weight:700;
+    margin:3pt 0 2pt; padding-top:3pt; border-top:1.5px solid #000;
+  }
+  .r-qr-section{ text-align:center; margin:5pt 0 2pt; }
+  .r-qr-label{ font-size:8pt; color:#555; margin-bottom:3pt; }
+  .r-qr-img{ width:44mm; height:44mm; object-fit:contain; display:block; margin:0 auto; }
+  .r-qr-hint{ font-size:8pt; color:#444; margin-top:3pt; font-weight:600; }
+  .r-footer{ text-align:center; font-size:8pt; color:#555; margin-top:4pt; }
+  .no-print{ display:flex; justify-content:center; gap:8px; margin-top:12pt; }
+  .no-print button{
+    font-family:'Sarabun',sans-serif; font-size:10pt;
+    padding:6px 18px; border-radius:6px; cursor:pointer; border:1.5px solid #333; background:#fff;
+  }
+  .no-print .btn-doit{ background:#3d2b1f; color:#fff; border-color:#3d2b1f; }
+  @media print{ .no-print{ display:none !important; } }
+</style>
+</head><body>
+
+<div class="r-header">
+  <div class="r-shop">&#127835; ข้าวซอย 90</div>
+  <div class="r-sub">ใบเสร็จรับเงิน</div>
+</div>
+
+<hr class="r-div">
+
+<div class="r-meta">
+  <div class="r-meta-row"><span class="r-meta-label">ออเดอร์</span><span><strong>#${escapeHtml(String(order.orderNumber))}</strong></span></div>
+  <div class="r-meta-row"><span class="r-meta-label">โต๊ะ</span><span>${escapeHtml(String(order.table || '-'))}</span></div>
+  <div class="r-meta-row"><span class="r-meta-label">วันที่</span><span>${escapeHtml(dateStr)}</span></div>
+</div>
+
+<hr class="r-div">
+
+<table><tbody>${itemsHtml}</tbody></table>
+
+<hr class="r-div">
+
+<div class="r-total">
+  <span>รวมทั้งหมด</span>
+  <span>&#3647;${totalStr}</span>
+</div>
+
+<div class="r-qr-section">
+  <div class="r-qr-label">&#128179; สแกนจ่ายพร้อมเพย์</div>
+  <img class="r-qr-img" src="${qrSrc}" alt="QR ธนาคาร"
+    onerror="this.outerHTML='<div style=\\'font-size:8pt;color:#c00;margin:4pt 0;text-align:center\\'>&#9888; ไม่พบไฟล์ qr-bank.png</div>'">
+  <div class="r-qr-hint">ขอบคุณที่ใช้บริการ &#128591;</div>
+</div>
+
+<hr class="r-div">
+
+<div class="r-footer">ข้าวซอย 90</div>
+
+<div class="no-print">
+  <button class="btn-doit" onclick="window.print()">&#128424; พิมพ์</button>
+  <button onclick="window.close()">&#10005; ปิด</button>
+</div>
+</body></html>`);
+  win.document.close();
+}
