@@ -1575,7 +1575,7 @@ function printOrderReceipt(order) {
 </div>
 
 <div class="r-qr-section">
-  <div class="r-qr-label">&#128179; สแกนจ่ายพร้อมเพย์</div>
+  <div class="r-qr-label">&#128179; สแกนจ่าย K Bank</div>
   <img class="r-qr-img" src="${qrSrc}" alt="QR ธนาคาร"
     onerror="this.outerHTML='<div style=\\'font-size:8pt;color:#c00;margin:4pt 0;text-align:center\\'>&#9888; ไม่พบไฟล์ qr-bank.png</div>'">
   <div class="r-qr-hint">ขอบคุณที่ใช้บริการ &#128591;</div>
