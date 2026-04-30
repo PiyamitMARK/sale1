@@ -1496,7 +1496,7 @@ function printOrderReceipt(order) {
 <style>
   @page {
     size: 58mm auto;
-    margin: 2mm 3mm;   /* margin ซ้าย-ขวา 3mm ป้องกันถูกตัด */
+    margin: 2mm 4mm;   /* เพิ่ม margin ขวาป้องกันถูกตัด */
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html{
@@ -1505,11 +1505,11 @@ function printOrderReceipt(order) {
   }
   body{
     font-family: 'Courier New', Courier, monospace;
-    font-size: 9.5pt;          /* ลดลงจาก 11pt — อ่านง่ายขึ้น */
-    font-weight: normal;       /* ปกติ ไม่หนาเกิน */
+    font-size: 9pt;            /* ลดลงอีกนิดให้ content พอดี */
+    font-weight: normal;
     color: #000;
     background: #fff;
-    width: 52mm;               /* แคบลงเผื่อ margin ขวา */
+    width: 50mm;               /* แคบลงให้พอดีกับ margin ใหม่ */
     -webkit-font-smoothing: none;
     font-smooth: never;
     text-rendering: geometricPrecision;
