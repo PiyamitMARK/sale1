@@ -1494,59 +1494,52 @@ function printOrderReceipt(order) {
 <title>ใบเสร็จ #${escapeHtml(String(order.orderNumber))}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  /* ── ให้ Edge/Chrome render ที่ resolution สูงก่อนส่งไปพิมพ์ ── */
   @page {
     size: 58mm auto;
-    margin: 2mm 2mm;
+    margin: 2mm 3mm;   /* margin ซ้าย-ขวา 3mm ป้องกันถูกตัด */
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html{
-    /* บังคับ DPI สูงเพื่อให้ thermal head รับข้อมูลได้ครบ */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
   body{
-    /* Courier New ชัดที่สุดบน thermal 58mm เพราะเป็น monospace bitmap-friendly */
     font-family: 'Courier New', Courier, monospace;
-    font-size: 11pt;
-    font-weight: bold;          /* ตัวหนาช่วยให้หัวความร้อนกดชัดขึ้น */
+    font-size: 9.5pt;          /* ลดลงจาก 11pt — อ่านง่ายขึ้น */
+    font-weight: normal;       /* ปกติ ไม่หนาเกิน */
     color: #000;
     background: #fff;
-    width: 54mm;
-    /* anti-aliasing แบบ subpixel ทำให้ blur บน thermal — ปิดทิ้ง */
+    width: 52mm;               /* แคบลงเผื่อ margin ขวา */
     -webkit-font-smoothing: none;
     font-smooth: never;
     text-rendering: geometricPrecision;
   }
   .r-header{ text-align:center; margin-bottom:3pt; }
-  .r-shop{ font-size:13pt; font-weight:900; margin-bottom:1pt; letter-spacing:0.04em; }
-  .r-sub{ font-size:8.5pt; font-weight:bold; }
-  hr.r-div{ border:none; border-top:1.5px solid #000; margin:4pt 0; }
-  .r-meta{ font-size:9pt; }
-  .r-meta-row{ display:flex; justify-content:space-between; padding:1.5pt 0; }
-  .r-meta-label{ }
-  table{ width:100%; border-collapse:collapse; font-size:9.5pt; }
-  .col-name{ width:68%; padding:2pt 0; vertical-align:top; }
-  .col-price{ width:32%; text-align:right; padding:2pt 0; vertical-align:top; white-space:nowrap; }
-  .batch-sep{ text-align:center; font-size:8pt; padding:3pt 0 1pt; }
+  .r-shop{ font-size:12pt; font-weight:bold; margin-bottom:1pt; letter-spacing:0.03em; }
+  .r-sub{ font-size:8pt; font-weight:normal; }
+  hr.r-div{ border:none; border-top:1px solid #000; margin:4pt 0; }
+  .r-meta{ font-size:8.5pt; }
+  .r-meta-row{ display:flex; justify-content:space-between; padding:1pt 0; }
+  table{ width:100%; border-collapse:collapse; font-size:8.5pt; }
+  .col-name{ width:66%; padding:2pt 0; vertical-align:top; }
+  .col-price{ width:34%; text-align:right; padding:2pt 0; vertical-align:top; white-space:nowrap; }
+  .batch-sep{ text-align:center; font-size:7.5pt; padding:3pt 0 1pt; }
   .r-total{
     display:flex; justify-content:space-between;
-    font-size:13pt; font-weight:900;
-    margin:3pt 0 2pt; padding-top:4pt; border-top:2px solid #000;
-    letter-spacing:0.02em;
+    font-size:11pt; font-weight:bold;
+    margin:3pt 0 2pt; padding-top:3pt; border-top:1.5px solid #000;
   }
-  .r-qr-section{ text-align:center; margin:6pt 0 2pt; }
-  .r-qr-label{ font-size:9pt; font-weight:bold; margin-bottom:3pt; }
-  /* QR ต้องคม — ใช้ image-rendering: pixelated ป้องกัน browser blur */
+  .r-qr-section{ text-align:center; margin:5pt 0 2pt; }
+  .r-qr-label{ font-size:8.5pt; font-weight:bold; margin-bottom:3pt; }
   .r-qr-img{
-    width:44mm; height:44mm;
+    width:42mm; height:42mm;
     object-fit:contain; display:block; margin:0 auto;
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
   }
-  .r-qr-hint{ font-size:8.5pt; font-weight:bold; margin-top:3pt; }
-  .r-footer{ text-align:center; font-size:8.5pt; margin-top:4pt; }
+  .r-qr-hint{ font-size:8pt; margin-top:3pt; }
+  .r-footer{ text-align:center; font-size:8pt; margin-top:4pt; }
   .no-print{ display:flex; justify-content:center; gap:8px; margin-top:12pt; }
   .no-print button{
     font-family:'Sarabun',sans-serif; font-size:10pt;
