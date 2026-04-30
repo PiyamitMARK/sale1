@@ -6,6 +6,7 @@
  *   - สั่งเพิ่มในโต๊ะเดิม → ต่อท้าย order เดิม (แยก batch)
  *   - จ่ายแล้ว → order ใหม่ได้เลขถัดไป
  */
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getDatabase, ref, push, update, get, remove, runTransaction

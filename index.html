@@ -146,6 +146,27 @@
     </div>
 
   </div>
+  <!-- Auth Guard: ป้องกันลูกค้าเข้า POS โดยตรง -->
+  <script>
+    (function() {
+      if (sessionStorage.getItem('krua-khun-mae-auth') !== 'true') {
+        document.body.innerHTML = [
+          '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;',
+          'justify-content:center;font-family:Sarabun,sans-serif;background:#faf6f0;',
+          'color:#3d2b1f;text-align:center;padding:2rem">',
+          '<div style="font-size:3.5rem;margin-bottom:1rem">🔒</div>',
+          '<h2 style="font-family:Mitr,sans-serif;font-size:1.5rem;margin-bottom:0.5rem">',
+          'ไม่มีสิทธิ์เข้าใช้งาน</h2>',
+          '<p style="color:#8b6655;margin-bottom:1.5rem">',
+          'หน้านี้สำหรับพนักงานเท่านั้น<br>กรุณาล็อกอินผ่านหน้าแอดมินก่อน</p>',
+          '<a href="admin.html" style="background:#c8853a;color:#fff;text-decoration:none;',
+          'padding:0.65rem 1.75rem;border-radius:999px;',
+          'font-family:Mitr,sans-serif;font-size:0.95rem;font-weight:600">',
+          'ไปหน้าล็อกอิน →</a></div>'
+        ].join('');
+      }
+    })();
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
