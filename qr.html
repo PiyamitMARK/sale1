@@ -230,36 +230,98 @@
 
   window.printTable = function(tableNum) {
     const url = getCustomerUrl(tableNum);
-    const win = window.open('', '_blank', 'width=400,height=600');
-    win.document.write(`
-      <!DOCTYPE html><html><head>
-      <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
-      <style>
-        body { margin:0; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; }
-        .wrap { text-align:center; padding:2rem; border:2px solid #3d2b1f; border-radius:14px; max-width:280px; }
-        .shop { font-family:'Mitr',sans-serif; font-size:1.2rem; color:#3d2b1f; font-weight:700; margin-bottom:0.5rem; }
-        .table { font-family:'Mitr',sans-serif; font-size:2rem; font-weight:700; color:#c8853a; margin:0.5rem 0; }
-        .hint { font-size:0.85rem; color:#8b6655; margin-top:0.5rem; }
-        #qr { border:3px solid #c8853a; border-radius:8px; padding:6px; display:inline-block; margin:0.75rem 0; }
-      </style>
-      </head><body>
-      <div class="wrap">
-        <div class="shop">🍛 ข้าวซอย 90</div>
-        <div id="qr"></div>
-        <div class="table">โต๊ะ ${tableNum}</div>
-        <div class="hint">สแกน QR เพื่อสั่งอาหาร</div>
-      </div>
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-      <script>
-        new QRCode(document.getElementById('qr'), {
-          text: '${url}', width:180, height:180,
-          colorDark:'#3d2b1f', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M
-        });
-        setTimeout(() => window.print(), 800);
-      <\/script>
-      </body></html>
-    `);
+    const win = window.open('', '_blank', 'width=300,height=500');
+    if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อนนะครับ'); return; }
+    win.document.write(`<!DOCTYPE html>
+<html lang="th"><head>
+<meta charset="UTF-8">
+<title>QR โต๊ะ ${tableNum}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>
+  @page { size: 58mm auto; margin: 3mm 3mm; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    background: #fff;
+    color: #000;
+    width: 52mm;
+    text-align: center;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+  }
+  .shop {
+    font-size: 11pt;
+    font-weight: bold;
+    margin-bottom: 2pt;
+    letter-spacing: 0.03em;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid #000;
+    margin: 3pt 0;
+  }
+  .table-num {
+    font-size: 22pt;
+    font-weight: bold;
+    margin: 3pt 0;
+    letter-spacing: 0.05em;
+  }
+  .table-label {
+    font-size: 9pt;
+    margin-bottom: 4pt;
+  }
+  #qr {
+    display: inline-block;
+    margin: 3pt 0;
+    /* pixel-perfect — ห้าม browser blur */
+    image-rendering: pixelated;
+  }
+  #qr img, #qr canvas {
+    image-rendering: pixelated !important;
+    image-rendering: crisp-edges !important;
+  }
+  .hint {
+    font-size: 8pt;
+    margin-top: 3pt;
+  }
+  .no-print {
+    display: flex; justify-content: center; gap: 8px; margin-top: 10pt;
+  }
+  .no-print button {
+    font-size: 10pt; padding: 5px 16px;
+    border-radius: 6px; cursor: pointer; border: 1.5px solid #333;
+  }
+  .btn-do { background:#3d2b1f; color:#fff; border-color:#3d2b1f; }
+  @media print { .no-print { display:none !important; } }
+</style>
+</head><body>
+<div class="shop">&#127835; ข้าวซอย 90</div>
+<hr>
+<div class="table-label">โต๊ะ</div>
+<div class="table-num">${tableNum}</div>
+<div id="qr"></div>
+<div class="hint">สแกน QR เพื่อสั่งอาหาร</div>
+<hr>
+<div class="no-print">
+  <button class="btn-do" onclick="window.print()">&#128424; พิมพ์</button>
+  <button onclick="window.close()">&#10005; ปิด</button>
+</div>
+<script>
+  new QRCode(document.getElementById('qr'), {
+    text: '${url}',
+    width: 160, height: 160,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+  // auto print หลัง QR render เสร็จ
+  setTimeout(() => window.print(), 900);
+<\/script>
+</body></html>`);
     win.document.close();
   };
 
