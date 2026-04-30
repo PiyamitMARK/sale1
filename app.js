@@ -440,8 +440,6 @@ function renderOptionModalBody(product, config) {
       <textarea class="option-note" id="optionNote" placeholder="เช่น ไม่ใส่ผักชี, หวานน้อย..." rows="2"></textarea>
     </div>` : '';
 
-  const simpleNote = product.productType === 'simple' ? '' : '';
-
   box.innerHTML = `
     <h3 class="modal-title">ตั้งค่าเมนู</h3>
     <p class="option-product-name">${escapeHtml(product.name)}</p>
@@ -642,6 +640,7 @@ async function saveOrder() {
       newOrderNum = meta.orderNumber;
       return meta;
     });
+    if (!newOrderNum) throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
 
     const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
     const order = {

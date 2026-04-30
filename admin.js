@@ -369,8 +369,13 @@ function showCallStaffToast(data, tableKey) {
 
 function startRealtimeListener() {
   if (unsubscribeListener) unsubscribeListener();
-  knownOrderKeys = new Set();
-  isFirstLoad    = true;
+  // ไม่ reset knownOrderKeys และ isFirstLoad ถ้าเคย load แล้ว
+  // เพื่อให้ยังได้เสียงแจ้งเตือนออเดอร์ที่เข้ามาขณะ reconnect
+  const isReconnect = knownOrderKeys.size > 0;
+  if (!isReconnect) {
+    knownOrderKeys = new Set();
+    isFirstLoad    = true;
+  }
 
   unsubscribeListener = onValue(ref(db, 'orders'), (snapshot) => {
     const newOrders = [];
@@ -388,8 +393,9 @@ function startRealtimeListener() {
         if (!knownOrderKeys.has(o.firebaseKey) && o.status === 'pending') {
           hasNewOrder = true;
           showOrderToast(o);
-        } else if (knownOrderKeys.has(o.firebaseKey) && o.status === 'pending' && o.lastBatchDate) {
-          // batch ใหม่ถูกเพิ่มเข้า order เดิม
+        } else if (knownOrderKeys.has(o.firebaseKey) && o.lastBatchDate) {
+          // batch ใหม่ถูกเพิ่มเข้า order เดิม — ตรวจด้วย batch count เปรียบเทียบ
+          // ไม่สนใจ status เพราะ status อาจถูก reset หลัง admin รับออเดอร์แล้ว
           const old = allOrders.find(x => x.firebaseKey === o.firebaseKey);
           if (old) {
             const oldBatchCount  = (old.batches  || [old.items  || []]).length;
@@ -505,58 +511,70 @@ async function clearAllOrders() {
 }
 
 // ==================== Products (admin add-item) ====================
+// *** ต้องตรงกับ products ใน app.js เสมอ ***
 const ALL_PRODUCTS = [
-  // ข้าวซอย
-  { id: 'soi1',  name: 'ข้าวซอยน่องไก่', price: 70, category: 'kaosoi' },
-  { id: 'soi2',  name: 'ข้าวซอยหมูทอด',  price: 70, category: 'kaosoi' },
-  { id: 'soi4',  name: 'น้ำเงี้ยว',       price: 60, category: 'kaosoi' },
-  { id: 'soi5',  name: 'เพิ่มน่องไก่',    price: 20, category: 'kaosoi' },
-  { id: 'soi6',  name: 'เพิ่มหมูทอด',     price: 20, category: 'kaosoi' },
-  { id: 'soi8',  name: 'แคบหมู',          price: 15, category: 'kaosoi' },
-  { id: 'soi9',  name: 'ไข่ต้ม',          price: 10, category: 'kaosoi' },
-  // ข้าวหมูทอด
-  { id: 'kao1',    name: 'ข้าวหมูทอด', price: 50, category: 'kaomutod' },
-  { id: 'kao-egg', name: 'ไข่ต้ม',     price: 10, category: 'kaomutod' },
-  // น้ำ
-  { id: 'water',          name: 'น้ำเปล่า',       price: 10, category: 'nam' },
-  { id: 'pepsi',          name: 'โค๊ก',           price: 15, category: 'nam' },
-  { id: 'fantag',         name: 'น้ำเขียวแฟนต้า', price: 15, category: 'nam' },
-  { id: 'fanta',          name: 'น้ำแดงแฟนต้า',  price: 15, category: 'nam' },
-  { id: 'sprite',         name: 'สไปร์ท',         price: 15, category: 'nam' },
-  { id: 'coconut',        name: 'มะพร้าวปั่น',    price: 45, category: 'nam' },
-  { id: 'thai-tea',       name: 'ชาไทย',          price: 40, category: 'nam' },
-  { id: 'black-tea',      name: 'ชาดำเย็น',       price: 40, category: 'nam' },
-  { id: 'lemon-tea',      name: 'ชามะนาว',        price: 40, category: 'nam' },
-  { id: 'pink-milk',      name: 'นมชมพู',         price: 40, category: 'nam' },
-  { id: 'cocoa',          name: 'โกโก้',          price: 40, category: 'nam' },
-  { id: 'coconut-matcha', name: 'มัทฉะมะพร้าว',   price: 60, category: 'nam' },
-  { id: 'matcha-latte',   name: 'มัทฉะลาเต้',     price: 60, category: 'nam' },
-  { id: 'pure-matcha',    name: 'เพียวมัทฉะ',     price: 55, category: 'nam' },
+  // เซ็ตอาหาร
+  { id: 'setkao13', name: 'เซ็ตอิ่มคุ้มคู่❗',            price: 129, category: 'setkao' },
+  { id: 'setkao1',  name: 'ข้าวซอยน่องไก่ + โค๊ก',        price: 85,  category: 'setkao' },
+  { id: 'setkao2',  name: 'ข้าวซอยน่องไก่ + ชาไทย',       price: 110, category: 'setkao' },
+  { id: 'setkao3',  name: 'ข้าวซอยน่องไก่ + มะพร้าวปั่น', price: 115, category: 'setkao' },
+  { id: 'setkao4',  name: 'ข้าวซอยหมูทอด + โค๊ก',         price: 85,  category: 'setkao' },
+  { id: 'setkao5',  name: 'ข้าวซอยหมูทอด + ชาไทย',        price: 110, category: 'setkao' },
+  { id: 'setkao6',  name: 'ข้าวซอยหมูทอด + มะพร้าวปั่น',  price: 115, category: 'setkao' },
+  { id: 'setkao7',  name: 'น้ำเงี้ยว + โค๊ก',             price: 75,  category: 'setkao' },
+  { id: 'setkao8',  name: 'น้ำเงี้ยว + ชาไทย',            price: 100, category: 'setkao' },
+  { id: 'setkao9',  name: 'น้ำเงี้ยว + มะพร้าวปั่น',      price: 105, category: 'setkao' },
+  { id: 'setkao10', name: 'ข้าวหมูทอด + โค๊ก',            price: 65,  category: 'setkao' },
+  { id: 'setkao11', name: 'ข้าวหมูทอด + ชาไทย',           price: 90,  category: 'setkao' },
+  { id: 'setkao12', name: 'ข้าวหมูทอด + มะพร้าวปั่น',     price: 95,  category: 'setkao' },
+  // อาหาร
+  { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, category: 'kao' },
+  { id: 'kao2', name: 'ข้าวซอยหมูทอด', price: 70, category: 'kao' },
+  { id: 'kao3', name: 'น้ำเงี้ยว',      price: 60, category: 'kao' },
+  { id: 'kao4', name: 'ข้าวหมูทอด',    price: 50, category: 'kao' },
+  { id: 'kao5', name: 'แคบหมู',         price: 15, category: 'kao' },
+  { id: 'kao7', name: 'ลาบเหนือ',       price: 60, category: 'kao' },
+  { id: 'kao8', name: 'ข้าวเหนียว',     price: 10, category: 'kao' },
+  { id: 'kao9', name: 'ข้าวสวย',        price: 10, category: 'kao' },
+  { id: 'kao6', name: 'ไข่ต้ม',         price: 10, category: 'kao' },
+  // เครื่องดื่ม
+  { id: 'nam1',  name: 'น้ำเปล่า',      price: 10, category: 'nam' },
+  { id: 'nam2',  name: 'โค๊ก',          price: 15, category: 'nam' },
+  { id: 'nam3',  name: 'สไปร์ท',        price: 15, category: 'nam' },
+  { id: 'nam4',  name: 'มะพร้าวปั่น',   price: 45, category: 'nam' },
+  { id: 'nam5',  name: 'ชาไทย',         price: 40, category: 'nam' },
+  { id: 'nam6',  name: 'ชาดำเย็น',      price: 40, category: 'nam' },
+  { id: 'nam7',  name: 'ชามะนาว',       price: 40, category: 'nam' },
+  { id: 'nam8',  name: 'นมชมพู',        price: 40, category: 'nam' },
+  { id: 'nam9',  name: 'โกโก้',         price: 40, category: 'nam' },
+  { id: 'nam10', name: 'มัทฉะมะพร้าว',  price: 60, category: 'nam' },
+  { id: 'nam11', name: 'มัทฉะลาเต้',    price: 60, category: 'nam' },
+  { id: 'nam12', name: 'เพียวมัทฉะ',    price: 55, category: 'nam' },
   // กาแฟ
-  { id: 'espresso',          name: 'เอสเปรสโซ่',       price: 55, category: 'coffee' },
-  { id: 'cappuccino',        name: 'คาปูชิโน่',         price: 55, category: 'coffee' },
-  { id: 'latte',             name: 'ลาเต้',             price: 55, category: 'coffee' },
-  { id: 'mocha',             name: 'มอคค่า',            price: 55, category: 'coffee' },
-  { id: 'americano',         name: 'อเมริกาโน่',         price: 45, category: 'coffee' },
-  { id: 'coconut-americano', name: 'อเมริกาโน่มะพร้าว', price: 60, category: 'coffee' },
-  { id: 'honey-americano',   name: 'อเมริกาโน่น้ำผึ้ง', price: 60, category: 'coffee' },
-  { id: 'orange-americano',  name: 'อเมริกาโน่ส้ม',     price: 60, category: 'coffee' },
+  { id: 'coffee1', name: 'เอสเปรสโซ่',        price: 55, category: 'coffee' },
+  { id: 'coffee2', name: 'คาปูชิโน่',          price: 55, category: 'coffee' },
+  { id: 'coffee3', name: 'ลาเต้',              price: 55, category: 'coffee' },
+  { id: 'coffee4', name: 'มอคค่า',             price: 55, category: 'coffee' },
+  { id: 'coffee5', name: 'อเมริกาโน่',          price: 45, category: 'coffee' },
+  { id: 'coffee6', name: 'อเมริกาโน่มะพร้าว',  price: 60, category: 'coffee' },
+  { id: 'coffee7', name: 'อเมริกาโน่น้ำผึ้ง',  price: 60, category: 'coffee' },
+  { id: 'coffee8', name: 'อเมริกาโน่ส้ม',      price: 60, category: 'coffee' },
   // โซดา
-  { id: 'red-lime-soda',    name: 'แดงมะนาวโซดา',      price: 35, category: 'soda' },
-  { id: 'blue-hawaii-soda', name: 'บลูฮาวายมะนาวโซดา', price: 35, category: 'soda' },
-  { id: 'apple-soda',       name: 'แอปเปิ้ลโซดา',      price: 35, category: 'soda' },
-  { id: 'orange-soda',      name: 'ส้มโซดา',           price: 35, category: 'soda' },
-  { id: 'strawberry-soda',  name: 'สตรอเบอร์รี่โซดา',  price: 35, category: 'soda' },
-  { id: 'blueberry-soda',   name: 'บลูเบอร์รี่โซดา',   price: 35, category: 'soda' },
+  { id: 'soda1', name: 'แดงมะนาวโซดา',      price: 35, category: 'soda' },
+  { id: 'soda2', name: 'บลูฮาวายมะนาวโซดา', price: 35, category: 'soda' },
+  { id: 'soda3', name: 'แอปเปิ้ลโซดา',      price: 35, category: 'soda' },
+  { id: 'soda4', name: 'ส้มโซดา',           price: 35, category: 'soda' },
+  { id: 'soda5', name: 'สตรอเบอร์รี่โซดา',  price: 35, category: 'soda' },
+  { id: 'soda6', name: 'บลูเบอร์รี่โซดา',   price: 35, category: 'soda' },
 ];
 
 const ADD_ITEM_CATEGORIES = [
-  { id: 'all',      label: '🍽 ทั้งหมด' },
-  { id: 'kaosoi',   label: '🍜 ข้าวซอย' },
-  { id: 'kaomutod', label: '🍚 ข้าวหมูทอด' },
-  { id: 'nam',      label: '🥤 น้ำ' },
-  { id: 'coffee',   label: '☕ กาแฟ' },
-  { id: 'soda',     label: '🫧 โซดา' },
+  { id: 'all',    label: '🍽 ทั้งหมด' },
+  { id: 'setkao', label: '🍱 เซ็ตอาหาร' },
+  { id: 'kao',    label: '🍜 อาหาร' },
+  { id: 'nam',    label: '🥤 เครื่องดื่ม' },
+  { id: 'coffee', label: '☕ กาแฟ' },
+  { id: 'soda',   label: '🫧 โซดา' },
 ];
 let addItemActiveCategory = 'all';
 
@@ -636,7 +654,7 @@ async function addItemToOrder({ name, price }) {
   if (existing) {
     existing.qty += 1;
   } else {
-    lastBatch.push({ name, price: parseFloat(price), qty: 1 });
+    lastBatch.push({ name, price: parseFloat(price), qty: 1, option: '' });
   }
   batches[batches.length - 1] = lastBatch;
 
@@ -961,6 +979,7 @@ function _copyUrl(btn) {
 
 function _openPrintWindow(url, idx) {
   const win = window.open('', '_blank', 'width=400,height=580');
+  const safeUrl = JSON.stringify(url); // ป้องกัน quote injection ใน inline script
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
     <style>
@@ -978,7 +997,7 @@ function _openPrintWindow(url, idx) {
       <div class="hint">สแกน QR เพื่อสั่งกลับบ้าน</div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-    <script>new QRCode(document.getElementById('qr'),{text:'${url}',width:170,height:170,colorDark:'#3d2b1f',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>window.print(),800);<\/script>
+    <script>new QRCode(document.getElementById('qr'),{text:${safeUrl},width:170,height:170,colorDark:'#3d2b1f',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});setTimeout(()=>window.print(),800);<\/script>
     </body></html>`);
   win.document.close();
 }
@@ -1304,14 +1323,15 @@ function isInDateRange(isoString, from, to) {
   return key >= from && key <= to;
 }
 function getFilteredOrders(range) {
-  if (range === 'today')  return allOrders.filter(o => isToday(o.date));
-  if (range === 'month')  return allOrders.filter(o => isWithinLast30Days(o.date));
+  const paid = allOrders.filter(o => o.status === 'paid');
+  if (range === 'today')  return paid.filter(o => isToday(o.date));
+  if (range === 'month')  return paid.filter(o => isWithinLast30Days(o.date));
   if (range === 'custom') {
     const from = dateFrom.value, to = dateTo.value;
     if (!from || !to) return [];
-    return allOrders.filter(o => isInDateRange(o.date, from, to));
+    return paid.filter(o => isInDateRange(o.date, from, to));
   }
-  return allOrders;
+  return paid;
 }
 function buildSummary(orders) {
   const byDay = {};

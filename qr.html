@@ -254,6 +254,7 @@
 
   window.printTable = function(tableNum) {
     const url = getCustomerUrl(tableNum);
+    const safeUrl = JSON.stringify(url); // ป้องกัน quote injection
     const win = window.open('', '_blank', 'width=300,height=500');
     if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อนนะครับ'); return; }
     win.document.write(`<!DOCTYPE html>
@@ -338,7 +339,7 @@
 </div>
 <script>
   new QRCode(document.getElementById('qr'), {
-    text: '${url}',
+    text: ${safeUrl},
     width: 160, height: 160,
     colorDark: '#000000',
     colorLight: '#ffffff',
