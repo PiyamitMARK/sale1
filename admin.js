@@ -114,6 +114,7 @@ const dateTo           = document.getElementById('dateTo');
 // ==================== State ====================
 let allOrders = [];
 let unsubscribeListener = null;
+let tableFilter = '';   // ── Feature #4: กรองตามโต๊ะ ──
 
 // ==================== Auth ====================
 function isLoggedIn()     { return sessionStorage.getItem(AUTH_KEY) === 'true'; }
@@ -317,6 +318,30 @@ function playCallAlert() {
   else { speak(TTS_CALL_TEXT, { rate: 0.8, pitch: 0.95, beep: [660, 784, 880] }); }
 }
 
+
+// ==================== Popular Items (Feature #1) ====================
+// นับจำนวนออเดอร์ของแต่ละเมนูจาก paid orders ในวันนี้ + 30 วัน
+// แล้วเขียนลง Firebase เพื่อให้ customer.js อ่านได้
+async function updatePopularItems(orders) {
+  try {
+    const counts = {};
+    orders
+      .filter(o => o.status === 'paid')
+      .forEach(o => {
+        const items = o.batches ? o.batches.flat() : (o.items || []);
+        items.forEach(i => {
+          counts[i.name] = (counts[i.name] || 0) + i.qty;
+        });
+      });
+    // เอาแค่ Top 5
+    const top5 = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name]) => name);
+    await update(ref(db, 'meta'), { popularItems: top5 });
+  } catch (_) {}
+}
+
 // ==================== Firebase: Real-time Listener ====================
 let callStaffUnsubscribe = null;
 let knownCallKeys = new Set();
@@ -415,6 +440,7 @@ function startRealtimeListener() {
     isFirstLoad    = false;
     allOrders      = newOrders;
 
+    updatePopularItems(newOrders); // ── Feature #1: อัปเดต popular stats ──
     renderDailySummary();
     renderOrders();
     renderHistory();
@@ -423,7 +449,7 @@ function startRealtimeListener() {
 }
 
 function showOrderToast(order) {
-  document.querySelectorAll('.new-order-toast').forEach(t => t.remove());
+  document.querySelectorAll('.new-order-toast:not(.call-staff-toast)').forEach(t => t.remove());
   const toast = document.createElement('div');
   toast.className = 'new-order-toast';
 
@@ -688,16 +714,63 @@ if (addItemModal)  addItemModal.addEventListener('click', (e) => { if (e.target 
 
 // ==================== Render Summary ====================
 function renderDailySummary() {
-  const paidToday = allOrders.filter((o) => o.status === 'paid' && isToday(o.date));
+  const paidToday    = allOrders.filter((o) => o.status === 'paid' && isToday(o.date));
+  const pendingCount = allOrders.filter((o) => o.status === 'pending').length;
+  const cookingCount = allOrders.filter((o) => o.status === 'cooking').length;
+
   todayOrderCount.textContent = paidToday.length;
   todayTotal.textContent      = formatMoney(paidToday.reduce((sum, o) => sum + o.total, 0));
+
+  // ── Feature #5: Live status chips ──
+  let liveChips = document.getElementById('liveSummaryChips');
+  if (!liveChips) {
+    liveChips = document.createElement('div');
+    liveChips.id = 'liveSummaryChips';
+    liveChips.className = 'live-summary-chips';
+    const summarySection = document.querySelector('.summary-section');
+    if (summarySection) summarySection.insertAdjacentElement('afterend', liveChips);
+  }
+  const chips = [];
+  if (pendingCount > 0) chips.push(`<span class="live-chip live-chip--pending">🔔 รอรับ ${pendingCount} รายการ</span>`);
+  if (cookingCount > 0) chips.push(`<span class="live-chip live-chip--cooking">👨‍🍳 กำลังทำ ${cookingCount} รายการ</span>`);
+  if (chips.length === 0) chips.push(`<span class="live-chip live-chip--ok">✅ ไม่มีออเดอร์ค้าง</span>`);
+  liveChips.innerHTML = chips.join('');
 }
 
 // ==================== Render Orders (with batch display) ====================
 const TAKEAWAY_IDS_ADMIN = ['takeaway1','takeaway2','takeaway3'];
 
 function renderOrders() {
-  const nonTaOrders = allOrders.filter(o => !TAKEAWAY_IDS_ADMIN.includes(String(o.table)) && !o.takeaway);
+  // ── Feature #4: inject filter bar (ครั้งแรก) ──
+  if (!document.getElementById('tableFilterBar')) {
+    const bar = document.createElement('div');
+    bar.id = 'tableFilterBar';
+    bar.className = 'table-filter-bar';
+    bar.innerHTML = `
+      <input type="search" class="table-filter-input" id="tableFilterInput"
+        placeholder="🔍 กรองโต๊ะ... (เช่น 3)" maxlength="20" autocomplete="off">
+      <button type="button" class="btn btn-outline table-filter-clear hidden" id="tableFilterClear">✕ ล้าง</button>`;
+    const tabRecent = document.getElementById('tabRecent');
+    if (tabRecent) tabRecent.prepend(bar);
+
+    document.getElementById('tableFilterInput').addEventListener('input', (e) => {
+      tableFilter = e.target.value.trim();
+      document.getElementById('tableFilterClear').classList.toggle('hidden', !tableFilter);
+      renderOrders();
+    });
+    document.getElementById('tableFilterClear').addEventListener('click', () => {
+      tableFilter = '';
+      document.getElementById('tableFilterInput').value = '';
+      document.getElementById('tableFilterClear').classList.add('hidden');
+      renderOrders();
+    });
+  }
+
+  const baseOrders = allOrders.filter(o => !TAKEAWAY_IDS_ADMIN.includes(String(o.table)) && !o.takeaway);
+  const nonTaOrders = tableFilter
+    ? baseOrders.filter(o => String(o.table).includes(tableFilter))
+    : baseOrders;
+
   if (nonTaOrders.length === 0) {
     ordersList.innerHTML = '';
     ordersList.classList.add('hidden');
@@ -1639,3 +1712,37 @@ function printOrderReceipt(order) {
 </body></html>`);
   win.document.close();
 }
+// ==================== Inject CSS (new features) ====================
+(function injectNewFeatureStyles() {
+  const style = document.createElement('style');
+  style.textContent = `
+    /* ── Feature #5: Live status chips ── */
+    .live-summary-chips {
+      display: flex; gap: 0.5rem; flex-wrap: wrap;
+      padding: 0.5rem 1.5rem 0;
+    }
+    .live-chip {
+      font-family: 'Mitr', sans-serif; font-size: 0.8rem; font-weight: 600;
+      padding: 0.3rem 0.85rem; border-radius: 999px;
+    }
+    .live-chip--pending { background: #fff3cd; color: #856404; }
+    .live-chip--cooking { background: #fff0e6; color: #c8853a; }
+    .live-chip--ok      { background: #d1fae5; color: #065f46; }
+
+    /* ── Feature #4: Table filter bar ── */
+    .table-filter-bar {
+      display: flex; gap: 0.5rem; align-items: center;
+      padding: 0.6rem 0 0.75rem; flex-wrap: wrap;
+    }
+    .table-filter-input {
+      border: 2px solid #e2d8cb; border-radius: 999px;
+      padding: 0.4rem 0.9rem; font-family: 'Sarabun', sans-serif;
+      font-size: 0.9rem; color: #3d2b1f; outline: none;
+      transition: border-color 0.2s; width: 200px;
+    }
+    .table-filter-input:focus { border-color: #c8853a; }
+    .table-filter-clear { font-size: 0.82rem !important; }
+    .table-filter-clear.hidden { display: none !important; }
+  `;
+  document.head.appendChild(style);
+})();

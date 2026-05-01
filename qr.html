@@ -254,13 +254,14 @@
 
   window.printTable = function(tableNum) {
     const url = getCustomerUrl(tableNum);
-    const safeUrl = JSON.stringify(url); // ป้องกัน quote injection
+    const safeUrl      = JSON.stringify(url); // ป้องกัน quote injection
+    const safeTableNum = parseInt(tableNum, 10) || 0; // ป้องกัน XSS ใน title/label
     const win = window.open('', '_blank', 'width=300,height=500');
     if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อนนะครับ'); return; }
     win.document.write(`<!DOCTYPE html>
 <html lang="th"><head>
 <meta charset="UTF-8">
-<title>QR โต๊ะ ${tableNum}</title>
+<title>QR โต๊ะ ${safeTableNum}</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
 <style>
   @page { size: 58mm 100mm; margin: 3mm 3mm; }
@@ -329,7 +330,7 @@
 <div class="shop">&#127835; ข้าวซอย 90</div>
 <hr>
 <div class="table-label">โต๊ะ</div>
-<div class="table-num">${tableNum}</div>
+<div class="table-num">${safeTableNum}</div>
 <div id="qr"></div>
 <div class="hint">สแกน QR เพื่อสั่งอาหาร</div>
 <hr>

@@ -241,6 +241,7 @@ const OPTION_CONFIGS = {
 // ==================== State ====================
 let tableNum      = null;
 let currentCat    = 'setkao';
+let searchQuery   = '';         // ข้อความค้นหาเมนู
 let cart          = [];
 let pendingProduct = null;
 let optionQty     = 1;
@@ -248,6 +249,7 @@ let optionQty     = 1;
 // สถานะ order ปัจจุบันของโต๊ะ
 let activeOrderKey    = null; // Firebase key ของ order ที่ยังไม่ได้จ่าย
 let activeOrderNumber = null; // order number ที่ active
+let popularItems      = [];   // ── Feature #1: รายชื่อเมนูยอดนิยม ──
 
 // ==================== Cart Persistence (sessionStorage) ====================
 // เก็บตะกร้าไว้ใน sessionStorage แยกตามโต๊ะ
@@ -337,11 +339,15 @@ async function init() {
   // ตรวจ order active ของโต๊ะ
   await checkActiveOrder();
 
+  // ── Feature #1: โหลด popular items ──
+  loadPopularItems();
+
   // เริ่ม watch สถานะครัว
   if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
 
   renderProducts();
   bindCats();
+  initSearchBar();   // ── Feature: ค้นหาเมนู ──
   updateCartBar(); // แสดง cart bar ถ้ามีรายการค้างอยู่
 }
 
@@ -467,12 +473,31 @@ function show(id) {
   });
 }
 
+// ==================== Popular Items ====================
+function loadPopularItems() {
+  onValue(ref(db, 'meta/popularItems'), snap => {
+    popularItems = snap.exists() ? (snap.val() || []) : [];
+    renderProducts(); // re-render เพื่อให้ badge ขึ้น
+  }, { onlyOnce: false });
+}
+
 // ==================== Products ====================
 function renderProducts() {
   const grid = document.getElementById('productGrid');
-  const list = PRODUCTS[currentCat] || [];
-  grid.innerHTML = list.map(p => `
-    <button class="cust-product-card" data-id="${p.id}" type="button">
+  // กรองตาม search query ถ้ามี
+  const allList = searchQuery
+    ? Object.values(PRODUCTS).flat().filter(p =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : (PRODUCTS[currentCat] || []);
+  const list = allList;
+  const QUICKADD_TYPES = ['simple', 'drink-ready'];
+  grid.innerHTML = list.map(p => {
+    const isQuick   = QUICKADD_TYPES.includes(p.productType);
+    const isPopular = popularItems.includes(p.name);
+    return `
+    <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}" data-id="${p.id}" type="button">
+      ${isPopular ? '<span class="cust-popular-badge">🔥 ยอดนิยม</span>' : ''}
+      ${isQuick && !isPopular ? '<span class="cust-quick-badge">+</span>' : ''}
       <div class="cust-product-img-wrap">
         <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}" loading="lazy"
              onerror="this.parentNode.innerHTML='<span class=cust-product-img-fallback>🍽</span>'">
@@ -481,13 +506,33 @@ function renderProducts() {
         <div class="cust-product-name">${esc(p.name)}</div>
         <div class="cust-product-price">${fmt(p.price)}</div>
       </div>
-    </button>
-  `).join('');
+    </button>`;
+  }).join('');
 
   grid.querySelectorAll('.cust-product-card').forEach(btn => {
     btn.addEventListener('click', () => {
       const p = (PRODUCTS[currentCat] || []).find(x => x.id === btn.dataset.id);
-      if (p) openOptionModal(p);
+      if (!p) return;
+
+      // ── Quick-add: เมนูไม่มี option → เพิ่มตะกร้าทันที ──
+      const QUICKADD_TYPES = ['simple', 'drink-ready'];
+      if (QUICKADD_TYPES.includes(p.productType)) {
+        const cartKey = p.id + '|';
+        const existing = cart.find(i => i.cartKey === cartKey);
+        if (existing) {
+          existing.qty++;
+        } else {
+          cart.push({ cartKey, id: p.id, name: p.name, price: p.price, qty: 1, optionLabel: '' });
+        }
+        saveCart();
+        updateCartBar();
+        // flash feedback
+        btn.classList.add('quick-add-flash');
+        setTimeout(() => btn.classList.remove('quick-add-flash'), 400);
+        return;
+      }
+
+      openOptionModal(p);
     });
   });
 }
@@ -500,6 +545,42 @@ function bindCats() {
       currentCat = btn.dataset.cat;
       renderProducts();
     });
+  });
+}
+
+// ==================== Search Bar ====================
+function initSearchBar() {
+  const catBar = document.getElementById('catBar');
+  if (!catBar || document.getElementById('menuSearchBar')) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'menuSearchBar';
+  bar.innerHTML = `
+    <div class="cust-search-wrap">
+      <input class="cust-search-input" id="menuSearchInput" type="search"
+        placeholder="🔍 ค้นหาเมนู..." autocomplete="off" maxlength="60">
+      <button class="cust-search-clear hidden" id="menuSearchClear" type="button">✕</button>
+    </div>`;
+  catBar.insertAdjacentElement('afterend', bar);
+
+  const input   = document.getElementById('menuSearchInput');
+  const clearBtn = document.getElementById('menuSearchClear');
+
+  input.addEventListener('input', () => {
+    searchQuery = input.value.trim();
+    clearBtn.classList.toggle('hidden', !searchQuery);
+    // ซ่อน/แสดง cat tabs เมื่อค้นหา
+    catBar.style.display = searchQuery ? 'none' : '';
+    renderProducts();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    searchQuery = '';
+    clearBtn.classList.add('hidden');
+    catBar.style.display = '';
+    input.focus();
+    renderProducts();
   });
 }
 
@@ -911,8 +992,8 @@ function renderHistoryContent(order) {
     ? orderDate.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })
     : '';
   metaEl.innerHTML = `
-    <span class="cust-history-meta-chip">ออเดอร์ #${order.orderNumber}</span>
-    <span class="cust-history-meta-chip">โต๊ะ ${order.table}</span>
+    <span class="cust-history-meta-chip">ออเดอร์ #${esc(String(order.orderNumber))}</span>
+    <span class="cust-history-meta-chip">โต๊ะ ${esc(String(order.table))}</span>
     ${dateStr ? `<span class="cust-history-meta-chip">🕐 ${dateStr}</span>` : ''}
   `;
 
@@ -920,11 +1001,11 @@ function renderHistoryContent(order) {
   const batchesEl = document.getElementById('historyBatches');
   const batches = order.batches || (order.items ? [order.items] : []);
   batchesEl.innerHTML = batches.map((batch, bi) => {
-    const batchTime = bi === 0 && order.date
-      ? new Date(order.date)
-      : order.lastBatchDate && bi === batches.length - 1
-        ? new Date(order.lastBatchDate)
-        : null;
+    const batchTime = bi === 0
+      ? (order.date ? new Date(order.date) : null)
+      : (bi === batches.length - 1 && order.lastBatchDate
+          ? new Date(order.lastBatchDate)
+          : null);
     const timeStr = batchTime
       ? batchTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
       : '';
@@ -1014,3 +1095,57 @@ function closeModal(id) { document.getElementById(id).setAttribute('aria-hidden'
 // ==================== Start ====================
 
 init();
+// ==================== Inject CSS (new features) ====================
+(function injectFeatureStyles() {
+  const style = document.createElement('style');
+  style.textContent = `
+    /* ── Search Bar ── */
+    #menuSearchBar { padding: 0.5rem 1rem 0; background: var(--cream, #faf6f0); }
+    .cust-search-wrap {
+      position: relative; display: flex; align-items: center;
+      background: #fff; border: 2px solid #e2d8cb; border-radius: 999px;
+      padding: 0.4rem 0.9rem; gap: 0.4rem; transition: border-color 0.2s;
+    }
+    .cust-search-wrap:focus-within { border-color: #c8853a; }
+    .cust-search-input {
+      flex: 1; border: none; outline: none; font-family: 'Sarabun', sans-serif;
+      font-size: 0.95rem; background: transparent; color: #3d2b1f;
+    }
+    .cust-search-input::placeholder { color: #b5a090; }
+    .cust-search-clear {
+      border: none; background: none; color: #8b6655; cursor: pointer;
+      font-size: 0.85rem; padding: 0; line-height: 1;
+    }
+    .cust-search-clear.hidden { display: none; }
+
+    /* ── Quick-add badge & flash ── */
+    .cust-product-card--quick { position: relative; }
+    .cust-quick-badge {
+      position: absolute; top: 6px; right: 6px;
+      background: #c8853a; color: #fff;
+      font-size: 0.75rem; font-weight: 700; font-family: 'Mitr', sans-serif;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 6px rgba(200,133,58,0.35); z-index: 2;
+    }
+    .quick-add-flash { animation: qaFlash 0.4s ease; }
+    @keyframes qaFlash {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(0.93); background: #e8a055; }
+      100% { transform: scale(1); }
+    }
+
+    /* ── Popular badge ── */
+    .cust-popular-badge {
+      position: absolute; top: 6px; left: 6px;
+      background: linear-gradient(135deg, #ff6b35, #f7c59f);
+      color: #fff; font-size: 0.68rem; font-weight: 700;
+      font-family: 'Mitr', sans-serif;
+      padding: 0.15rem 0.5rem; border-radius: 999px;
+      box-shadow: 0 2px 6px rgba(255,107,53,0.35);
+      z-index: 2; white-space: nowrap;
+    }
+    .cust-product-card { position: relative; }
+  `;
+  document.head.appendChild(style);
+})();
