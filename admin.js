@@ -1115,7 +1115,7 @@ function renderTakeawayOrders() {
         </div>`;
     }).join('');
 
-    const slotNum = String(order.table).replace('takeaway','');
+    const slotNum = String(order.table).replace('takeaway', '') || '-';
 
     return `
       <article class="order-card order-card--${statusCls} order-card--takeaway" data-key="${order.firebaseKey}">
@@ -1382,7 +1382,9 @@ exportConfirm.addEventListener('click', async () => {
       body: JSON.stringify({ orders, summary: buildSummary(orders) }),
     });
     const text = await res.text();
-    const result = JSON.parse(text);
+    let result;
+    try { result = JSON.parse(text); }
+    catch { throw new Error('Server ตอบกลับผิดรูปแบบ กรุณาตรวจสอบ Google Apps Script'); }
     if (result.success) {
       exportStatus.textContent  = `✅ ส่งสำเร็จ! ${result.inserted} ออเดอร์ (ข้ามซ้ำ ${result.skipped} รายการ)`;
       exportStatus.className    = 'export-status success';

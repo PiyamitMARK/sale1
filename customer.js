@@ -960,9 +960,11 @@ function renderHistoryContent(order) {
 
   // Status badge
   const statusMap = {
-    pending:  { label: '⏳ รอดำเนินการ', cls: 'status-pending' },
-    paid:     { label: '✅ ชำระแล้ว',    cls: 'status-paid' },
-    canceled: { label: '❌ ยกเลิก',      cls: 'status-canceled' },
+    pending:  { label: '⏳ รอดำเนินการ',   cls: 'status-pending'  },
+    cooking:  { label: '👨‍🍳 กำลังทำอาหาร', cls: 'status-cooking'  },
+    served:   { label: '🍽 เสิร์ฟแล้ว!',    cls: 'status-served'   },
+    paid:     { label: '✅ ชำระแล้ว',       cls: 'status-paid'     },
+    canceled: { label: '❌ ยกเลิก',         cls: 'status-canceled' },
   };
   const s = statusMap[order.status] || statusMap.pending;
   document.getElementById('historyStatusRow').innerHTML = `
@@ -971,7 +973,7 @@ function renderHistoryContent(order) {
 
   // ถ้า pending → แสดงปุ่ม "สั่งเพิ่ม"
   const moreBtn = document.getElementById('historyOrderMoreBtn');
-  if (order.status === 'pending') {
+  if (order.status !== 'paid') {
     moreBtn.style.display = '';
   } else {
     moreBtn.style.display = 'none';
