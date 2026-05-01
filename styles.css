@@ -997,3 +997,37 @@ body {
 .cart-item-remove:active {
   transform: scale(0.95);
 }
+
+/* ================================================ DARK MODE */
+[data-theme="dark"] {
+  --cream:        #1a1310;
+  --cream-mid:    #231a15;
+  --cream-dark:   #2e221a;
+  --brown:        #f0e6d8;
+  --brown-mid:    #d4c4b0;
+  --brown-light:  #a89080;
+  --accent:       #e09050;
+  --accent-light: #eeaa70;
+  --white:        #2a1f18;
+  --shadow-sm:    0 1px 4px rgba(0,0,0,0.35);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,0.55);
+}
+[data-theme="dark"] body { background: var(--cream); color: var(--brown); }
+[data-theme="dark"] .header { background: #110d09; border-bottom: 1px solid var(--cream-dark); }
+[data-theme="dark"] .cart-section { background: #1e1510; border-left: 1.5px solid var(--cream-dark); }
+[data-theme="dark"] .modal-content { background: #231a15; }
+[data-theme="dark"] .product-card { background: #2a1f18; }
+[data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
+[data-theme="dark"] .receipt { background: #231a15; color: var(--brown); }
+
+/* Dark Mode Toggle Button */
+.dark-toggle {
+  font-size: 1.1rem; padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--cream-mid); border: 1.5px solid var(--cream-dark);
+  cursor: pointer; transition: background 0.2s;
+  color: var(--brown);
+}
+.dark-toggle:hover { background: var(--cream-dark); }
+[data-theme="dark"] .dark-toggle { background: var(--cream-dark); }

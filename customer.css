@@ -569,3 +569,43 @@ body {
 }
 
 .hidden { display: none !important; }
+/* ================================================ DARK MODE */
+[data-theme="dark"] {
+  --cream:        #1a1310;
+  --cream-mid:    #231a15;
+  --cream-dark:   #2e221a;
+  --brown:        #f0e6d8;
+  --brown-mid:    #d4c4b0;
+  --brown-light:  #a89080;
+  --accent:       #e09050;
+  --accent-light: #eeaa70;
+  --accent-dark:  #c07030;
+  --white:        #2a1f18;
+  --shadow-sm:    0 1px 4px rgba(0,0,0,0.35);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,0.55);
+}
+[data-theme="dark"] body { background: var(--cream); }
+[data-theme="dark"] .cust-header { background: #110d09; }
+[data-theme="dark"] .cust-cats { background: #1a1310; border-bottom-color: var(--cream-dark); }
+[data-theme="dark"] .cust-cat { color: var(--brown-light); }
+[data-theme="dark"] .cust-cat.active { background: var(--accent); color: #fff; }
+[data-theme="dark"] .cust-product-card { background: #2a1f18; }
+[data-theme="dark"] .cust-modal-box { background: #231a15; }
+[data-theme="dark"] .cust-cart-list { background: #1a1310; }
+[data-theme="dark"] .cust-history-box { background: #231a15; }
+[data-theme="dark"] .cust-kitchen-bar { background: #231a15; border-bottom-color: var(--cream-dark); }
+[data-theme="dark"] .cust-kitchen-bar.status-cooking { background: #2a2010; }
+[data-theme="dark"] .cust-kitchen-bar.status-served  { background: #10201a; }
+[data-theme="dark"] .cust-step-dot { background: #3a2a20; border-color: #3a2a20; }
+[data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
+
+/* Dark Mode Toggle Button */
+.cust-dark-btn {
+  background: none; border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-pill); font-size: 1rem;
+  padding: 0.25rem 0.55rem; cursor: pointer; flex-shrink: 0;
+  color: var(--brown); transition: background 0.2s;
+}
+.cust-dark-btn:hover { background: var(--cream-dark); }
+[data-theme="dark"] .cust-dark-btn { border-color: var(--cream-dark); }

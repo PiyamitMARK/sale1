@@ -7,6 +7,7 @@
  *   - ถ้าไม่มี → สร้าง order ใหม่
  */
 
+import './darkmode.js';
 import { initializeApp }      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";

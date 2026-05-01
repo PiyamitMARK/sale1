@@ -1131,3 +1131,45 @@ body {
   color: var(--green) !important;
   font-weight: 700;
 }
+/* ================================================ DARK MODE */
+[data-theme="dark"] {
+  --cream:        #1a1310;
+  --cream-mid:    #231a15;
+  --cream-dark:   #2e221a;
+  --brown:        #f0e6d8;
+  --brown-mid:    #d4c4b0;
+  --brown-light:  #a89080;
+  --accent:       #e09050;
+  --accent-light: #eeaa70;
+  --white:        #2a1f18;
+  --shadow-sm:    0 1px 4px rgba(0,0,0,0.35);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.45);
+  --shadow-lg:    0 12px 40px rgba(0,0,0,0.55);
+}
+[data-theme="dark"] body { background: var(--cream); color: var(--brown); }
+[data-theme="dark"] .admin-header { background: #110d09; border-bottom: 1px solid var(--cream-dark); }
+[data-theme="dark"] .admin-main { background: var(--cream); }
+[data-theme="dark"] .order-card { background: #2a1f18; border-color: var(--cream-dark); }
+[data-theme="dark"] .order-card--pending { background: #2a2215; border-color: #6a4e28; }
+[data-theme="dark"] .order-card--cooking { background: #26200e; border-color: #7a6020; }
+[data-theme="dark"] .order-card--served  { background: #12201a; border-color: #2a6040; }
+[data-theme="dark"] .order-card--paid    { background: #1a2014; border-color: #3a5028; }
+[data-theme="dark"] .summary-card { background: #2a1f18; }
+[data-theme="dark"] .modal-box { background: #231a15; }
+[data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
+[data-theme="dark"] .tab-nav { background: #1a1310; border-bottom-color: var(--cream-dark); }
+[data-theme="dark"] .tab-btn { color: var(--brown-light); }
+[data-theme="dark"] .tab-btn.active { background: var(--accent); color: #fff; }
+[data-theme="dark"] .login-card { background: #231a15; }
+[data-theme="dark"] .history-group { background: #2a1f18; }
+
+/* Dark Mode Toggle Button */
+.dark-toggle {
+  font-size: 1.1rem; padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--cream-mid); border: 1.5px solid var(--cream-dark);
+  cursor: pointer; transition: background 0.2s;
+  color: var(--brown);
+}
+.dark-toggle:hover { background: var(--cream-dark); }
+[data-theme="dark"] .dark-toggle { background: var(--cream-dark); }

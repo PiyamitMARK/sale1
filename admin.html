@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>/* prevent flash */(function(){var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);})();</script>
 </head>
 <body>
 <div class="admin-app">
@@ -59,6 +60,7 @@
         <button type="button" class="btn btn-outline-danger" id="clearDataBtn">🗑 ล้างข้อมูล</button>
         <a href="index.html" class="btn btn-outline">POS</a>
         <button type="button" class="btn btn-outline" id="logoutBtn">ออกจากระบบ</button>
+        <button type="button" class="btn btn-ghost dark-toggle" id="darkToggleBtn" title="Dark Mode">🌙</button>
       </div>
     </header>
 

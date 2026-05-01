@@ -7,6 +7,7 @@
  *   - จ่ายแล้ว → order ใหม่ได้เลขถัดไป
  */
 
+import './darkmode.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getDatabase, ref, push, update, get, remove, runTransaction
