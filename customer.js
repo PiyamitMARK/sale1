@@ -65,9 +65,9 @@ const PRODUCTS = {
     { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
   ],
   nam: [
-    { id:'nam1',  name:'น้ำเปล่า',       price:10, img:IMG(60),  productType:'simple' },
-    { id:'nam2',  name:'โค๊ก',           price:15, img:IMG(80),  productType:'simple' },
-    { id:'nam3',  name:'สไปร์ท',         price:15, img:IMG(345), productType:'simple' },
+    { id:'nam1',  name:'น้ำเปล่า',       price:10, img:IMG(60),  productType:'drink-ready' },
+    { id:'nam2',  name:'โค๊ก',           price:15, img:IMG(80),  productType:'drink-ready' },
+    { id:'nam3',  name:'สไปร์ท',         price:15, img:IMG(345), productType:'drink-ready' },
     { id:'nam4',  name:'มะพร้าวปั่น',    price:45, img:IMG(333), productType:'mapraopun' },
     { id:'nam5',  name:'ชาไทย',          price:40, img:IMG(1),   productType:'drink-brew' },
     { id:'nam6',  name:'ชาดำเย็น',       price:40, img:IMG(5),   productType:'drink-brew' },
@@ -213,7 +213,7 @@ const OPTION_CONFIGS = {
         ],
       },
       {
-        id: 'extra', label: '✨ เพิ่มเติม', type: 'single',
+        id: 'extra', label: '✨ เพิ่มเติม', type: 'multi',
         choices: [
           { value: 'ไม่ใส่นม',    label: 'ไม่ใส่นม' },
           { value: 'นมข้นเพิ่ม', label: 'นมข้นเพิ่ม' },
@@ -774,7 +774,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
     if (!activeOrderKey) {
       // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
       let newOrderNum;
-      await runTransaction(ref(db, 'meta'), (meta) => {
+      const txResult = await runTransaction(ref(db, 'meta'), (meta) => {
         if (!meta) meta = {};
         if (meta.lastOrderDate !== today) {
           meta.orderNumber   = 1001;
@@ -782,9 +782,12 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
         } else {
           meta.orderNumber = (meta.orderNumber || 1000) + 1;
         }
-        newOrderNum = meta.orderNumber;
         return meta;
       });
+      if (!txResult.committed || !txResult.snapshot.exists()) {
+        throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
+      }
+      newOrderNum  = txResult.snapshot.val().orderNumber;
       usedOrderNum = newOrderNum;
 
       const total = cart.reduce((s, i) => s + i.price * i.qty, 0);

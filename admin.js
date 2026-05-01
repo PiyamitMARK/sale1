@@ -654,7 +654,7 @@ async function addItemToOrder({ name, price }) {
   if (existing) {
     existing.qty += 1;
   } else {
-    lastBatch.push({ name, price: parseFloat(price), qty: 1, option: '' });
+    lastBatch.push({ name, price: parseFloat(price), qty: 1 });
   }
   batches[batches.length - 1] = lastBatch;
 

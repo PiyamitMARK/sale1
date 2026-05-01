@@ -629,7 +629,7 @@ async function saveOrder() {
   if (!currentTableOrderKey) {
     // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
     let newOrderNum;
-    await runTransaction(ref(db, 'meta'), (meta) => {
+    const txResult = await runTransaction(ref(db, 'meta'), (meta) => {
       if (!meta) meta = {};
       if (meta.lastOrderDate !== today) {
         meta.orderNumber   = 1001;
@@ -637,9 +637,12 @@ async function saveOrder() {
       } else {
         meta.orderNumber = (meta.orderNumber || 1000) + 1;
       }
-      newOrderNum = meta.orderNumber;
       return meta;
     });
+    if (!txResult.committed || !txResult.snapshot.exists()) {
+      throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
+    }
+    newOrderNum = txResult.snapshot.val().orderNumber;
     if (!newOrderNum) throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
 
     const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
