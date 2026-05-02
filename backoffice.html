@@ -1506,9 +1506,17 @@ tr.drag-over td { background: #fff3e0 !important; }
      ========================================================= -->
 <script type="module">
 // ============================================================
+//  IMPORTS — must be at top of module
+// ============================================================
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, onValue, update, remove, push, set }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { initializeAppCheck, ReCaptchaV3Provider }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js';
+
+// ============================================================
 //  Back Office — main script
-//  Connects to the same Firebase project as admin.js
-//  Imports from app.js / admin.js patterns
 // ============================================================
 
 // ---- dark mode ----
@@ -1578,12 +1586,6 @@ document.querySelectorAll('.bo-modal').forEach(m => {
 // ============================================================
 //  FIREBASE CONNECTION — same config as admin.js
 // ============================================================
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, onValue, update, remove, push, set }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { initializeAppCheck, ReCaptchaV3Provider }
-  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js';
 
 const firebaseConfig = {
   apiKey:            'AIzaSyDStC4nTnL38Wndrmm_Nn8ufJ-8KFo1BdM',
@@ -1671,16 +1673,6 @@ function subscribeMenu(cb) {
   });
 }
 
-async function initFirebase() {
-  try {
-    // compat shim — ไม่ได้ใช้ Firestore แล้ว return empty object
-    return {};
-
-  } catch (err) {
-    console.error('Firebase init error:', err);
-    return {};
-  }
-}
 
 // ============================================================
 //  UTILS
