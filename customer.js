@@ -529,10 +529,13 @@ function renderProducts() {
   const list = allList;
   const QUICKADD_TYPES = ['simple', 'drink-ready'];
   grid.innerHTML = list.map(p => {
-    const isQuick   = QUICKADD_TYPES.includes(p.productType);
-    const isPopular = popularItems.includes(p.name);
+    const isDisabled = p.enabled === false;
+    const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType);
+    const isPopular  = !isDisabled && popularItems.includes(p.name);
     return `
-    <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}" data-id="${p.id}" type="button">
+    <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}${isDisabled ? ' cust-product-card--disabled' : ''}"
+      data-id="${p.id}" type="button" ${isDisabled ? 'disabled aria-disabled="true"' : ''}>
+      ${isDisabled ? '<span class="cust-soldout-badge">หมดชั่วคราว</span>' : ''}
       ${isPopular ? '<span class="cust-popular-badge">🔥 ยอดนิยม</span>' : ''}
       ${isQuick && !isPopular ? '<span class="cust-quick-badge">+</span>' : ''}
       <div class="cust-product-img-wrap">
@@ -1183,6 +1186,23 @@ init();
       z-index: 2; white-space: nowrap;
     }
     .cust-product-card { position: relative; }
+
+    /* Disabled / sold-out menu item */
+    .cust-product-card--disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+      filter: grayscale(60%);
+    }
+    .cust-soldout-badge {
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(61,43,31,0.75);
+      color: #fff; font-size: 0.68rem; font-weight: 700;
+      font-family: 'Mitr', sans-serif;
+      padding: 0.15rem 0.5rem; border-radius: 999px;
+      z-index: 2; white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
   `;
   document.head.appendChild(style);
 })();

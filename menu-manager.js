@@ -120,7 +120,6 @@ export function subscribeMenu(db, callback) {
 function parseMenuSnapshot(data) {
   const result = { setkao: [], kao: [], nam: [], coffee: [], soda: [] };
   Object.values(data).forEach(item => {
-    if (!item.enabled) return;
     const cat = item.category;
     if (!result[cat]) result[cat] = [];
 
@@ -136,6 +135,7 @@ function parseMenuSnapshot(data) {
       image:       item.imageUrl || IMG(item.imageNum),
       productType: item.productType,
       options:     item.options || null,
+      enabled:     item.enabled !== false, // ส่ง flag ให้ customer.js แสดงแบบ greyed-out
     });
   });
   Object.keys(result).forEach(cat => {
