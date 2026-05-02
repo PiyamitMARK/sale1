@@ -15,13 +15,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import {
-  subscribeAllMenuAdmin, saveMenuItem, toggleMenuItem, deleteMenuItem, generateMenuId,
-  CATEGORY_LABELS, PRODUCT_TYPES, DEFAULT_MENU,
-  initMenuFormHelper, openMenuAddModal, openMenuEditModal,
-  enableMenuDragSort, duplicateMenuItem, updateSortOrders,
-} from './menu-manager.js';
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -36,7 +29,6 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db      = getDatabase(firebaseApp);
-const storage = getStorage(firebaseApp);
 const auth    = getAuth(firebaseApp);
 
 initializeAppCheck(firebaseApp, {
@@ -102,23 +94,14 @@ const logoutBtn        = document.getElementById('logoutBtn');
 const todayOrderCount  = document.getElementById('todayOrderCount');
 const todayTotal       = document.getElementById('todayTotal');
 const tabRecent        = document.getElementById('tabRecent');
-const tabHistory       = document.getElementById('tabHistory');
-const historyContent   = document.getElementById('historyContent');
-const historyEmpty     = document.getElementById('historyEmpty');
+
 const clearDataBtn     = document.getElementById('clearDataBtn');
 const clearDataModal   = document.getElementById('clearDataModal');
 const clearDataCode    = document.getElementById('clearDataCode');
 const clearDataError   = document.getElementById('clearDataError');
 const clearDataCancel  = document.getElementById('clearDataCancel');
 const clearDataConfirm = document.getElementById('clearDataConfirm');
-const exportSheetBtn   = document.getElementById('exportSheetBtn');
-const exportModal      = document.getElementById('exportModal');
-const exportCancel     = document.getElementById('exportCancel');
-const exportConfirm    = document.getElementById('exportConfirm');
-const exportStatus     = document.getElementById('exportStatus');
-const customDateRange  = document.getElementById('customDateRange');
-const dateFrom         = document.getElementById('dateFrom');
-const dateTo           = document.getElementById('dateTo');
+
 
 // ==================== State ====================
 let allOrders = [];
@@ -535,7 +518,6 @@ function startRealtimeListener() {
     updatePopularItems(newOrders); // ── Feature #1: อัปเดต popular stats ──
     renderDailySummary();
     renderOrders();
-    renderHistory();
     renderTakeawayOrders();
   });
 }
@@ -627,6 +609,10 @@ async function clearAllOrders() {
   });
   closeClearDataModal();
 }
+
+// ==================== Menu Data (for add-item modal) ====================
+let allMenuData = {};
+onValue(ref(db, 'menu'), snap => { allMenuData = snap.val() || {}; });
 
 // ==================== Products (admin add-item) ====================
 // ใช้ allMenuData จาก Firebase แทน hardcode (ดูที่ renderAddItemList)
@@ -921,71 +907,19 @@ function renderOrders() {
   });
 }
 
-// ==================== Render History ====================
-function renderHistory() {
-  const paidLast30 = allOrders.filter((o) => o.status === 'paid' && isWithinLast30Days(o.date));
-
-  if (paidLast30.length === 0) {
-    historyContent.innerHTML = '';
-    historyContent.classList.add('hidden');
-    historyEmpty.classList.remove('hidden');
-    return;
-  }
-
-  historyEmpty.classList.add('hidden');
-  historyContent.classList.remove('hidden');
-
-  const byDay = {};
-  paidLast30.forEach((o) => {
-    const key = getDateKey(o.date);
-    if (!byDay[key]) byDay[key] = { date: o.date, orders: [], total: 0 };
-    byDay[key].orders.push(o);
-    byDay[key].total += o.total;
-  });
-
-  historyContent.innerHTML = Object.keys(byDay).sort((a, b) => b.localeCompare(a)).map((key) => {
-    const day = byDay[key];
-    return `
-      <section class="history-day">
-        <div class="history-day-header">
-          <span class="history-day-date">${formatDateOnly(day.date)}</span>
-          <div class="history-day-summary">
-            <span class="history-day-count">${day.orders.length} ออเดอร์</span>
-            <span class="history-day-total">${formatMoney(day.total)}</span>
-          </div>
-        </div>
-        <div class="history-day-body">
-          <ul class="history-orders">
-            ${day.orders.map((o) => {
-              const batches = o.batches || [o.items || []];
-              return `<li class="history-order-row">
-                <span>ออเดอร์ #${escapeHtml(String(o.orderNumber))}${o.table ? ` · โต๊ะ ${o.table}` : ''} · ${formatDate(o.date)}${batches.length > 1 ? ` <em>(${batches.length} รอบ)</em>` : ''}</span>
-                <span>${formatMoney(o.total)}</span>
-              </li>`;
-            }).join('')}
-          </ul>
-        </div>
-      </section>`;
-  }).join('');
-}
-
 // ==================== Tabs ====================
 const tabTakeaway = document.getElementById('tabTakeaway');
 const tabCallLog  = document.getElementById('tabCallLog');
-const tabMenu     = document.getElementById('tabMenu');
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach((t) =>
     t.classList.toggle('active', t.dataset.tab === tabId)
   );
-  tabRecent.classList.toggle('hidden',    tabId !== 'recent');
-  tabHistory.classList.toggle('hidden',   tabId !== 'history');
-  tabTakeaway.classList.toggle('hidden',  tabId !== 'takeaway');
-  tabCallLog.classList.toggle('hidden',   tabId !== 'calllog');
-  if (tabMenu) tabMenu.classList.toggle('hidden', tabId !== 'menu');
+  tabRecent.classList.toggle('hidden',   tabId !== 'recent');
+  tabTakeaway.classList.toggle('hidden', tabId !== 'takeaway');
+  tabCallLog.classList.toggle('hidden',  tabId !== 'calllog');
   if (tabId === 'takeaway') renderTakeawayQrPanel();
   if (tabId === 'calllog')  renderCallLog();
-  if (tabId === 'menu')     renderMenuTab();
 }
 
 // ==================== Takeaway QR Panel ====================
@@ -1293,7 +1227,6 @@ function checkAuth() {
     showScreen(dashboardScreen);
     startRealtimeListener();
     startCallStaffListener();
-    initMenuTab();
     switchTab('recent');
   } else {
     showScreen(loginScreen);
@@ -1329,7 +1262,6 @@ loginBtn.addEventListener('click', async () => {
       showScreen(dashboardScreen);
       startRealtimeListener();
       startCallStaffListener();
-      initMenuTab();
       switchTab('recent');
     } else {
       const attempts = incrementAttempts();
@@ -1413,115 +1345,6 @@ clearDataConfirm.addEventListener('click', async () => {
   }
 });
 
-// ==================== Export to Google Sheet ====================
-function initDatePicker() {
-  const today   = new Date().toISOString().slice(0, 10);
-  dateFrom.value = today;
-  dateTo.value   = today;
-}
-
-document.querySelectorAll('input[name="exportRange"]').forEach(radio => {
-  radio.addEventListener('change', () => {
-    customDateRange.classList.toggle('hidden', radio.value !== 'custom');
-  });
-});
-
-function openExportModal() {
-  exportStatus.textContent  = '';
-  exportStatus.className    = 'export-status';
-  exportConfirm.disabled    = false;
-  exportConfirm.textContent = '📤 ส่งข้อมูล';
-  document.querySelector('input[name="exportRange"][value="today"]').checked = true;
-  customDateRange.classList.add('hidden');
-  initDatePicker();
-  exportModal.setAttribute('aria-hidden', 'false');
-}
-function closeExportModal() {
-  exportModal.setAttribute('aria-hidden', 'true');
-  exportStatus.textContent = '';
-}
-function isInDateRange(isoString, from, to) {
-  const key = getDateKey(isoString);
-  return key >= from && key <= to;
-}
-function getFilteredOrders(range) {
-  const paid = allOrders.filter(o => o.status === 'paid');
-  if (range === 'today')  return paid.filter(o => isToday(o.date));
-  if (range === 'month')  return paid.filter(o => isWithinLast30Days(o.date));
-  if (range === 'custom') {
-    const from = dateFrom.value, to = dateTo.value;
-    if (!from || !to) return [];
-    return paid.filter(o => isInDateRange(o.date, from, to));
-  }
-  return paid;
-}
-function buildSummary(orders) {
-  const byDay = {};
-  orders.filter(o => o.status === 'paid').forEach(o => {
-    const key = getDateKey(o.date);
-    if (!byDay[key]) byDay[key] = { date: key, orderCount: 0, total: 0 };
-    byDay[key].orderCount++;
-    byDay[key].total += o.total;
-  });
-  return Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-exportSheetBtn.addEventListener('click', openExportModal);
-exportCancel.addEventListener('click', closeExportModal);
-exportModal.addEventListener('click', (e) => { if (e.target === exportModal) closeExportModal(); });
-
-exportConfirm.addEventListener('click', async () => {
-  const range = document.querySelector('input[name="exportRange"]:checked').value;
-
-  if (range === 'custom') {
-    if (!dateFrom.value || !dateTo.value) {
-      exportStatus.textContent = '⚠️ กรุณาเลือกวันที่ให้ครบ';
-      exportStatus.className   = 'export-status error';
-      return;
-    }
-    if (dateFrom.value > dateTo.value) {
-      exportStatus.textContent = '⚠️ วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด';
-      exportStatus.className   = 'export-status error';
-      return;
-    }
-  }
-
-  const orders = getFilteredOrders(range);
-  if (orders.length === 0) {
-    exportStatus.textContent = '⚠️ ไม่มีข้อมูลในช่วงที่เลือก';
-    exportStatus.className   = 'export-status error';
-    return;
-  }
-
-  exportConfirm.disabled    = true;
-  exportConfirm.textContent = 'กำลังส่ง...';
-  exportStatus.textContent  = '';
-  exportStatus.className    = 'export-status';
-
-  try {
-    const res = await fetch(GOOGLE_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ orders, summary: buildSummary(orders) }),
-    });
-    const text = await res.text();
-    let result;
-    try { result = JSON.parse(text); }
-    catch { throw new Error('Server ตอบกลับผิดรูปแบบ กรุณาตรวจสอบ Google Apps Script'); }
-    if (result.success) {
-      exportStatus.textContent  = `✅ ส่งสำเร็จ! ${result.inserted} ออเดอร์ (ข้ามซ้ำ ${result.skipped} รายการ)`;
-      exportStatus.className    = 'export-status success';
-      exportConfirm.textContent = '✅ สำเร็จ';
-    } else {
-      throw new Error(result.error || 'Unknown error');
-    }
-  } catch (err) {
-    exportStatus.textContent  = '❌ เกิดข้อผิดพลาด: ' + err.message;
-    exportStatus.className    = 'export-status error';
-    exportConfirm.disabled    = false;
-    exportConfirm.textContent = '📤 ส่งข้อมูล';
-  }
-});
-
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
@@ -1593,226 +1416,6 @@ soundModeTabs.forEach(tab => {
   `;
   document.head.appendChild(style);
 })();
-
-// ==================== Menu Management ====================
-let allMenuData = {}; // { id: { id, name, price, category, productType, imageNum, enabled, sortOrder } }
-let menuTabCategory = 'all';
-let menuUnsubscribe = null;
-
-function initMenuTab() {
-  menuUnsubscribe = subscribeAllMenuAdmin(db, (data) => {
-    allMenuData = data || {};
-    initMenuFormHelper(db, storage, allMenuData, () => {});
-    if (!document.getElementById('tabMenu')?.classList.contains('hidden')) {
-      renderMenuTab();
-    }
-  });
-}
-
-function renderMenuTab() {
-  const container = document.getElementById('menuTabContent');
-  if (!container) return;
-
-  const categories = [
-    { id: 'all',    label: '🍽 ทั้งหมด' },
-    { id: 'setkao', label: '🍱 เซ็ตอาหาร' },
-    { id: 'kao',    label: '🍜 อาหาร' },
-    { id: 'nam',    label: '🥤 เครื่องดื่ม' },
-    { id: 'coffee', label: '☕ กาแฟ' },
-    { id: 'soda',   label: '🫧 โซดา' },
-  ];
-
-  const items = Object.values(allMenuData)
-    .filter(p => menuTabCategory === 'all' || p.category === menuTabCategory)
-    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
-
-  container.innerHTML = `
-    <div class="menu-mgr-toolbar">
-      <div class="menu-mgr-cats">
-        ${categories.map(c => `
-          <button type="button" class="menu-cat-btn${menuTabCategory === c.id ? ' active' : ''}" data-cat="${c.id}">${escapeHtml(c.label)}</button>
-        `).join('')}
-      </div>
-      <button type="button" class="btn btn-primary menu-add-btn" id="menuAddBtn">＋ เพิ่มเมนู</button>
-    </div>
-
-    <p class="menu-drag-hint">⠿ ลากแถวเพื่อเรียงลำดับเมนูใหม่</p>
-
-    <div class="menu-mgr-table-wrap">
-      <table class="menu-mgr-table">
-        <thead>
-          <tr>
-            <th style="width:32px"></th>
-            <th>สถานะ</th>
-            <th>ชื่อเมนู</th>
-            <th>หมวด</th>
-            <th>ประเภท</th>
-            <th class="th-price">ราคา (฿)</th>
-            <th>จัดการ</th>
-          </tr>
-        </thead>
-        <tbody id="menuTableBody">
-          ${items.length === 0
-            ? `<tr><td colspan="7" class="menu-empty">ไม่มีเมนูในหมวดนี้</td></tr>`
-            : items.map(p => renderMenuRow(p)).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-
-  container.querySelectorAll('.menu-cat-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      menuTabCategory = btn.dataset.cat;
-      renderMenuTab();
-    });
-  });
-
-  document.getElementById('menuAddBtn')?.addEventListener('click', openMenuAddModal);
-  bindMenuTableActions(container);
-}
-
-function renderMenuRow(p) {
-  const catLabel  = CATEGORY_LABELS[p.category] || p.category;
-  const typeLabel = (PRODUCT_TYPES.find(t => t.value === p.productType) || {}).label || p.productType;
-  const hasPromo  = p.promo?.enabled;
-  const effectivePrice = hasPromo ? (p.promo.promoPrice ?? p.price) : p.price;
-
-  return `
-    <tr class="menu-row${p.enabled ? '' : ' menu-row--disabled'}" data-id="${escapeHtml(p.id)}" draggable="true">
-      <td style="width:32px; text-align:center">
-        <span class="menu-drag-handle" title="ลากเพื่อเรียงลำดับ">⠿</span>
-      </td>
-      <td>
-        <label class="menu-toggle" title="${p.enabled ? 'คลิกเพื่อซ่อน' : 'คลิกเพื่อเปิด'}">
-          <input type="checkbox" class="menu-toggle-input" data-id="${escapeHtml(p.id)}" ${p.enabled ? 'checked' : ''}>
-          <span class="menu-toggle-slider"></span>
-        </label>
-      </td>
-      <td>
-        <span class="menu-item-name" data-id="${escapeHtml(p.id)}">${escapeHtml(p.name)}</span>
-        ${hasPromo ? `<span class="menu-promo-badge">${escapeHtml(p.promo.label || 'โปร')}</span>` : ''}
-        <button type="button" class="menu-inline-edit-btn" data-field="name" data-id="${escapeHtml(p.id)}" title="แก้ชื่อ">✏️</button>
-      </td>
-      <td><span class="menu-cat-chip menu-cat-chip--${escapeHtml(p.category)}">${escapeHtml(catLabel)}</span></td>
-      <td><span class="menu-type-chip">${escapeHtml(typeLabel)}</span></td>
-      <td class="td-price">
-        ${hasPromo
-          ? `<span class="menu-promo-orig">${p.price}</span><span class="menu-promo-price">${effectivePrice}</span>`
-          : `<span class="menu-price-display" data-id="${escapeHtml(p.id)}">${p.price}</span>`
-        }
-        <button type="button" class="menu-inline-edit-btn" data-field="price" data-id="${escapeHtml(p.id)}" title="แก้ราคา">✏️</button>
-      </td>
-      <td>
-        <div class="menu-action-btns">
-          <button type="button" class="btn-menu-edit" data-id="${escapeHtml(p.id)}">🖊 แก้ไข</button>
-          <button type="button" class="btn-menu-dup" data-id="${escapeHtml(p.id)}" title="Duplicate">📋</button>
-          <button type="button" class="btn-menu-delete" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">🗑</button>
-        </div>
-      </td>
-    </tr>
-  `;
-}
-
-function bindMenuTableActions(container) {
-  // toggle enable/disable
-  container.querySelectorAll('.menu-toggle-input').forEach(chk => {
-    chk.addEventListener('change', async () => {
-      await toggleMenuItem(db, chk.dataset.id, chk.checked);
-    });
-  });
-
-  // inline edit
-  container.querySelectorAll('.menu-inline-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const { field, id } = btn.dataset;
-      const p = allMenuData[id];
-      if (!p) return;
-      const cell = btn.parentElement;
-      const span = cell.querySelector(field === 'price' ? '.menu-price-display' : '.menu-item-name');
-      if (span) {
-        if (field === 'name')  startInlineEdit(span, btn, id, 'name',  p.name,  'text');
-        if (field === 'price') startInlineEdit(span, btn, id, 'price', p.price, 'number');
-      }
-    });
-  });
-
-  // full edit modal (using new modal from menu-manager.js)
-  container.querySelectorAll('.btn-menu-edit').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const p = allMenuData[btn.dataset.id];
-      if (p) openMenuEditModal(p);
-    });
-  });
-
-  // duplicate
-  container.querySelectorAll('.btn-menu-dup').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const p = allMenuData[btn.dataset.id];
-      if (!p) return;
-      btn.disabled = true;
-      try {
-        await duplicateMenuItem(db, p);
-      } catch (err) {
-        alert('Duplicate ไม่สำเร็จ: ' + err.message);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  });
-
-  // delete
-  container.querySelectorAll('.btn-menu-delete').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm(`ลบเมนู "${btn.dataset.name}" ออก?`)) return;
-      await deleteMenuItem(db, btn.dataset.id);
-    });
-  });
-
-  // drag & drop sort
-  const tbody = container.querySelector('#menuTableBody');
-  if (tbody) {
-    enableMenuDragSort(tbody, async (orderedIds) => {
-      await updateSortOrders(db, orderedIds);
-    });
-  }
-}
-
-function startInlineEdit(cell, btn, id, field, currentVal, inputType) {
-  const origText = cell.textContent;
-
-  const input = document.createElement('input');
-  input.type      = inputType;
-  input.value     = currentVal;
-  input.className = 'menu-inline-input';
-  if (inputType === 'number') { input.min = '0'; input.step = '1'; }
-
-  cell.style.display = 'none';
-  btn.style.display  = 'none';
-  cell.insertAdjacentElement('afterend', input);
-
-  const finish = async (save) => {
-    if (save) {
-      const val = inputType === 'number' ? parseInt(input.value, 10) : input.value.trim();
-      if (val === '' || (inputType === 'number' && isNaN(val))) {
-        input.classList.add('menu-inline-input--error');
-        return;
-      }
-      const p = { ...allMenuData[id], [field]: val };
-      await saveMenuItem(db, p);
-    }
-    input.remove();
-    cell.style.display = '';
-    btn.style.display  = '';
-  };
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter')  { e.preventDefault(); finish(true);  }
-    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-  });
-  input.addEventListener('blur', () => finish(true));
-  input.focus();
-  input.select();
-}
 
 // ==================== Init ====================
 checkAuth();
