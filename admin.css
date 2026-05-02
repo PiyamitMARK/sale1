@@ -1214,7 +1214,10 @@ body {
 [data-theme="dark"] .order-card--cooking { background: #26200e; border-color: #7a6020; }
 [data-theme="dark"] .order-card--served  { background: #12201a; border-color: #2a6040; }
 [data-theme="dark"] .order-card--paid    { background: #1a2014; border-color: #3a5028; }
-[data-theme="dark"] .summary-card { background: #2a1f18; }
+[data-theme="dark"] .summary-card { background: #2a1f18; color: var(--brown); }
+[data-theme="dark"] .summary-card.accent { background: linear-gradient(135deg, #3d2b1f 0%, #5c3d2e 100%); }
+[data-theme="dark"] .summary-card.accent .summary-label { color: rgba(255,255,255,0.75); }
+[data-theme="dark"] .summary-card.accent .summary-value { color: #ffffff; }
 [data-theme="dark"] .modal-box { background: #231a15; }
 [data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
 [data-theme="dark"] .tab-nav { background: #1a1310; border-bottom-color: var(--cream-dark); }
