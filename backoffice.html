@@ -1576,34 +1576,106 @@ document.querySelectorAll('.bo-modal').forEach(m => {
 });
 
 // ============================================================
-//  FIREBASE CONNECTION — reads from the same config
+//  FIREBASE CONNECTION — same config as admin.js
 // ============================================================
-// NOTE: Replace these values with your actual Firebase project config
-// (same as what's in your app.js / admin.js)
-let db = null;
-let storage = null;
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getDatabase, ref, onValue, update, remove, push, set }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { initializeAppCheck, ReCaptchaV3Provider }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js';
+
+const firebaseConfig = {
+  apiKey:            'AIzaSyDStC4nTnL38Wndrmm_Nn8ufJ-8KFo1BdM',
+  authDomain:        'kaosoi2.firebaseapp.com',
+  databaseURL:       'https://kaosoi2-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId:         'kaosoi2',
+  storageBucket:     'kaosoi2.firebasestorage.app',
+  messagingSenderId: '389832285290',
+  appId:             '1:389832285290:web:1f69a33761125c4a44fe13',
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db  = getDatabase(firebaseApp);
+const auth = getAuth(firebaseApp);
+
+initializeAppCheck(firebaseApp, {
+  provider: new ReCaptchaV3Provider('6LdcccksAAAAAIU2DAOVbhc0yao-zcNxHWyApA17'),
+  isTokenAutoRefreshEnabled: true,
+});
+signInAnonymously(auth).catch(e => console.error('Auth:', e));
+
+// ---- Live data from Firebase ----
+let LIVE_ORDERS = [];   // all orders from Firebase (converted to flat array)
+let LIVE_MENU   = {};   // menu keyed by id
+
+// Subscribe to orders (completedOrders + tableOrders)
+function subscribeOrders(cb) {
+  // completedOrders — จ่ายแล้ว
+  onValue(ref(db, 'completedOrders'), snap => {
+    const completed = [];
+    snap.forEach(child => {
+      const o = child.val();
+      // flatten batches like admin.js
+      const items = [];
+      if (Array.isArray(o.batches)) {
+        o.batches.forEach(b => b.forEach(it => items.push(it)));
+      } else if (Array.isArray(o.items)) {
+        o.items.forEach(it => items.push(it));
+      }
+      completed.push({
+        id:            child.key,
+        orderNumber:   o.orderNumber || o.id || child.key,
+        table:         o.table || o.tableNumber || '—',
+        status:        o.status || 'paid',
+        total:         o.total || 0,
+        items,
+        createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
+        paymentMethod: o.paymentMethod || 'cash',
+      });
+    });
+
+    // tableOrders — ยังไม่จ่าย
+    onValue(ref(db, 'tableOrders'), snap2 => {
+      const active = [];
+      snap2.forEach(tableChild => {
+        const o = tableChild.val();
+        const items = [];
+        if (Array.isArray(o.batches)) {
+          o.batches.forEach(b => b.forEach(it => items.push(it)));
+        } else if (Array.isArray(o.items)) {
+          o.items.forEach(it => items.push(it));
+        }
+        active.push({
+          id:            tableChild.key,
+          orderNumber:   o.orderNumber || tableChild.key,
+          table:         o.table || o.tableNumber || tableChild.key,
+          status:        o.status || 'pending',
+          total:         o.total || 0,
+          items,
+          createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
+          paymentMethod: o.paymentMethod || '',
+        });
+      });
+      LIVE_ORDERS = [...completed, ...active].sort((a, b) => b.createdAt - a.createdAt);
+      cb(LIVE_ORDERS);
+    }, { onlyOnce: true });
+  });
+}
+
+// Subscribe to menu
+function subscribeMenu(cb) {
+  onValue(ref(db, 'menu'), snap => {
+    LIVE_MENU = snap.val() || {};
+    cb(LIVE_MENU);
+  });
+}
 
 async function initFirebase() {
   try {
-    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js');
-    const { getFirestore, collection, getDocs, query, where, orderBy, limit,
-            doc, updateDoc, deleteDoc, addDoc, writeBatch, onSnapshot }
-      = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
-    const { getStorage } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js');
+    // compat shim — ไม่ได้ใช้ Firestore แล้ว return empty object
+    return {};
 
-    // Read config saved by admin.js login (stored in sessionStorage for reuse)
-    const cfg = JSON.parse(sessionStorage.getItem('fb-config') || 'null');
-    if (!cfg) {
-      console.warn('No Firebase config in session. Functions will use mock data.');
-      return { getFirestore, collection, getDocs, query, where, orderBy, limit,
-               doc, updateDoc, deleteDoc, addDoc, writeBatch, onSnapshot, null: true };
-    }
-
-    const app = getApps().length ? getApps()[0] : initializeApp(cfg);
-    db = getFirestore(app);
-    storage = getStorage(app);
-    return { db, storage, getFirestore, collection, getDocs, query, where, orderBy, limit,
-             doc, updateDoc, deleteDoc, addDoc, writeBatch, onSnapshot };
   } catch (err) {
     console.error('Firebase init error:', err);
     return {};
@@ -1637,69 +1709,10 @@ const CAT_LABELS = {
   nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
 };
 
-// ============================================================
-//  MOCK DATA (used when Firebase not available)
-// ============================================================
-function genMockOrders(days = 30) {
-  const menus = [
-    { name: 'ข้าวซอยไก่', price: 60, cat: 'setkao' },
-    { name: 'ข้าวซอยเนื้อ', price: 70, cat: 'setkao' },
-    { name: 'ข้าวผัด', price: 50, cat: 'kao' },
-    { name: 'น้ำเปล่า', price: 10, cat: 'nam' },
-    { name: 'ชาเย็น', price: 30, cat: 'nam' },
-    { name: 'อเมริกาโน่', price: 45, cat: 'coffee' },
-    { name: 'โซดาเลม่อน', price: 35, cat: 'soda' },
-    { name: 'ผัดกะเพรา', price: 55, cat: 'kao' },
-    { name: 'ลาเต้', price: 55, cat: 'coffee' },
-    { name: 'น้ำส้มคั้น', price: 40, cat: 'nam' },
-  ];
-  const statuses = ['paid','paid','paid','paid','pending','cooking','served'];
-  const orders = [];
-  const now = new Date();
-  for (let i = 0; i < 120; i++) {
-    const daysBack = Math.floor(Math.random() * days);
-    const d = new Date(now); d.setDate(d.getDate() - daysBack);
-    const items = [];
-    const n = Math.ceil(Math.random() * 4);
-    for (let j = 0; j < n; j++) {
-      const m = menus[Math.floor(Math.random() * menus.length)];
-      const qty = Math.ceil(Math.random() * 3);
-      items.push({ name: m.name, price: m.price, qty, category: m.cat });
-    }
-    const total = items.reduce((s, it) => s + it.price * it.qty, 0);
-    orders.push({
-      id: 'ord' + String(i + 1001).padStart(4, '0'),
-      orderNumber: 1001 + i,
-      table: Math.ceil(Math.random() * 9),
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      total,
-      items,
-      createdAt: d,
-      paymentMethod: ['cash','qr','credit'][Math.floor(Math.random() * 3)],
-    });
-  }
-  return orders.sort((a, b) => b.createdAt - a.createdAt);
-}
-
-function genMockMenu() {
-  return [
-    { id: 'm1', name: 'ข้าวซอยไก่', category: 'setkao', price: 60, enabled: true, sortOrder: 1, promo: null },
-    { id: 'm2', name: 'ข้าวซอยเนื้อ', category: 'setkao', price: 70, enabled: true, sortOrder: 2, promo: { enabled: true, promoPrice: 60, label: 'ลด10' } },
-    { id: 'm3', name: 'ข้าวซอยหมู', category: 'setkao', price: 65, enabled: false, sortOrder: 3, promo: null },
-    { id: 'm4', name: 'ข้าวผัด', category: 'kao', price: 50, enabled: true, sortOrder: 4, promo: null },
-    { id: 'm5', name: 'ผัดกะเพราหมู', category: 'kao', price: 55, enabled: true, sortOrder: 5, promo: null },
-    { id: 'm6', name: 'น้ำเปล่า', category: 'nam', price: 10, enabled: true, sortOrder: 6, promo: null },
-    { id: 'm7', name: 'ชาเย็น', category: 'nam', price: 30, enabled: true, sortOrder: 7, promo: null },
-    { id: 'm8', name: 'น้ำส้มคั้น', category: 'nam', price: 40, enabled: true, sortOrder: 8, promo: null },
-    { id: 'm9', name: 'อเมริกาโน่', category: 'coffee', price: 45, enabled: true, sortOrder: 9, promo: null },
-    { id: 'm10', name: 'ลาเต้', category: 'coffee', price: 55, enabled: true, sortOrder: 10, promo: { enabled: true, promoPrice: 45, label: 'Happy Hr' } },
-    { id: 'm11', name: 'โซดาเลม่อน', category: 'soda', price: 35, enabled: true, sortOrder: 11, promo: null },
-    { id: 'm12', name: 'โซดาลิ้นจี่', category: 'soda', price: 35, enabled: true, sortOrder: 12, promo: null },
-  ];
-}
-
-let MOCK_ORDERS = genMockOrders(30);
-let MOCK_MENU   = genMockMenu();
+// LIVE_ORDERS และ LIVE_MENU ถูก declare ไว้ข้างบนแล้ว (Firebase)
+// ใช้ตัวแปรเหล่านี้แทน MOCK_ORDERS / MOCK_MENU ทุกที่
+let MOCK_ORDERS = LIVE_ORDERS;
+let MOCK_MENU   = Object.values(LIVE_MENU);
 
 // ============================================================
 //  ===== PANEL: EXPORT =====
@@ -1715,9 +1728,7 @@ document.querySelectorAll('.export-range-card').forEach(card => {
   });
 });
 
-// Set default dates
-document.getElementById('exportDateFrom').value = daysAgo(7);
-document.getElementById('exportDateTo').value = todayStr();
+// Set default dates (handled above in INIT block)
 
 function getExportOrders() {
   const today = todayStr();
@@ -1889,6 +1900,7 @@ function renderTopSellers() {
 
 async function loadTopSellers() {
   tsLoaded = true;
+  MOCK_ORDERS = LIVE_ORDERS;
   renderTopSellers();
 }
 
@@ -1902,7 +1914,7 @@ document.querySelectorAll('.topseller-filter-btn').forEach(btn => {
 });
 
 document.getElementById('tsRefreshBtn').addEventListener('click', () => {
-  MOCK_ORDERS = genMockOrders(30);
+  MOCK_ORDERS = LIVE_ORDERS;
   renderTopSellers();
 });
 
@@ -2066,11 +2078,11 @@ function renderHistTable() {
 
 async function loadHistory() {
   histLoaded = true;
-  // Default date range: last 30 days
   document.getElementById('histDateFrom').value = daysAgo(30);
   document.getElementById('histDateTo').value   = todayStr();
-  histFiltered = [...MOCK_ORDERS];
-  buildDailyChart(MOCK_ORDERS);
+  MOCK_ORDERS = LIVE_ORDERS;
+  histFiltered = [...LIVE_ORDERS];
+  buildDailyChart(LIVE_ORDERS);
   renderHistTable();
 }
 
@@ -2078,9 +2090,9 @@ document.getElementById('histApplyFilter').addEventListener('click', applyHistFi
 document.getElementById('histSearchInput').addEventListener('input', applyHistFilters);
 document.getElementById('histStatusFilter').addEventListener('change', applyHistFilters);
 document.getElementById('histRefreshBtn').addEventListener('click', () => {
-  MOCK_ORDERS = genMockOrders(30);
-  histFiltered = [...MOCK_ORDERS];
-  buildDailyChart(MOCK_ORDERS);
+  MOCK_ORDERS = LIVE_ORDERS;
+  histFiltered = [...LIVE_ORDERS];
+  buildDailyChart(LIVE_ORDERS);
   renderHistTable();
 });
 
@@ -2164,8 +2176,8 @@ function renderMenuTable() {
   // bind events
   body.querySelectorAll('.menu-toggle').forEach(chk => {
     chk.addEventListener('change', () => {
-      const item = MOCK_MENU.find(m => m.id === chk.dataset.id);
-      if (item) { item.enabled = chk.checked; renderMenuTable(); }
+      const id = chk.dataset.id;
+      update(ref(db, 'menu/' + id), { enabled: chk.checked });
     });
   });
   body.querySelectorAll('.menu-edit').forEach(btn => {
@@ -2177,8 +2189,7 @@ function renderMenuTable() {
   body.querySelectorAll('.menu-del').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm(`ลบ "${btn.dataset.name}" ออก?`)) {
-        MOCK_MENU = MOCK_MENU.filter(m => m.id !== btn.dataset.id);
-        renderMenuTable();
+        remove(ref(db, 'menu/' + btn.dataset.id));
       }
     });
   });
@@ -2197,18 +2208,20 @@ function renderMenuTable() {
       const ids = [...body.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
       const fromIdx = ids.indexOf(draggingRow.dataset.id);
       const toIdx   = ids.indexOf(row.dataset.id);
-      // reorder MOCK_MENU
+      // reorder และ save sortOrder ลง Firebase
       const filtered = getFilteredMenu();
       const moved = filtered.splice(fromIdx, 1)[0];
       filtered.splice(toIdx, 0, moved);
-      filtered.forEach((m, i) => { const item = MOCK_MENU.find(x => x.id === m.id); if (item) item.sortOrder = i + 1; });
-      renderMenuTable();
+      filtered.forEach((m, i) => {
+        update(ref(db, 'menu/' + m.id), { sortOrder: i + 1 });
+      });
     });
   });
 }
 
 async function loadMenuItems() {
   menuLoaded = true;
+  MOCK_MENU = Object.values(LIVE_MENU);
   renderMenuTable();
 }
 
@@ -2249,7 +2262,7 @@ function clearMenuModal() {
 function openMenuModal(id = null) {
   clearMenuModal();
   if (id) {
-    const m = MOCK_MENU.find(x => x.id === id);
+    const m = LIVE_MENU[id] || MOCK_MENU.find(x => x.id === id);
     if (!m) return;
     editingMenuId = id;
     document.getElementById('menuModalTitle').textContent = '✏️ แก้ไขเมนู';
@@ -2289,15 +2302,16 @@ document.getElementById('menuSaveBtn').addEventListener('click', () => {
   if (isNaN(price)) { alert('กรุณาใส่ราคา'); return; }
 
   const promoEnabled = document.getElementById('menuPromoEnabled').checked;
+  const id = editingMenuId || 'm' + Date.now();
   const item = {
-    id: editingMenuId || 'm' + Date.now(),
+    id,
     name,
     desc: document.getElementById('menuDesc').value.trim(),
     category: document.getElementById('menuCategory').value,
     productType: document.getElementById('menuProductType').value,
     price,
-    sortOrder: parseInt(document.getElementById('menuSortOrder').value) || MOCK_MENU.length + 1,
-    enabled: true,
+    sortOrder: parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
+    enabled: editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
     imageUrl: document.getElementById('menuImgUrl').value.trim() || null,
     optionGroups: optionGroups,
     promo: promoEnabled ? {
@@ -2307,22 +2321,16 @@ document.getElementById('menuSaveBtn').addEventListener('click', () => {
     } : null,
   };
 
-  if (editingMenuId) {
-    const idx = MOCK_MENU.findIndex(m => m.id === editingMenuId);
-    if (idx !== -1) MOCK_MENU[idx] = { ...MOCK_MENU[idx], ...item };
-  } else {
-    MOCK_MENU.push(item);
-  }
+  set(ref(db, 'menu/' + id), item);
   closeModal('menuModal');
-  renderMenuTable();
 });
 
 function duplicateMenu(id) {
-  const m = MOCK_MENU.find(x => x.id === id);
+  const m = LIVE_MENU[id];
   if (!m) return;
-  const copy = { ...m, id: 'm' + Date.now(), name: m.name + ' (สำเนา)', sortOrder: MOCK_MENU.length + 1 };
-  MOCK_MENU.push(copy);
-  renderMenuTable();
+  const newId = 'm' + Date.now();
+  const copy = { ...m, id: newId, name: m.name + ' (สำเนา)', sortOrder: Object.keys(LIVE_MENU).length + 1 };
+  set(ref(db, 'menu/' + newId), copy);
 }
 
 // option groups
@@ -2382,8 +2390,29 @@ document.getElementById('addOptionGroupBtn').addEventListener('click', () => {
   renderOptionGroups();
 });
 
-// image upload preview
-document.getElementById('menuImgInput').addEventListener('change', function() {
+// ============================================================
+//  INIT — subscribe Firebase live data
+// ============================================================
+subscribeOrders(orders => {
+  MOCK_ORDERS = orders;
+  // re-render panels ที่เปิดอยู่
+  if (activePanelId === 'topsellers' && tsLoaded)   renderTopSellers();
+  if (activePanelId === 'history' && histLoaded) {
+    histFiltered = [...orders];
+    buildDailyChart(orders);
+    renderHistTable();
+  }
+});
+
+subscribeMenu(menuObj => {
+  MOCK_MENU = Object.values(menuObj).sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
+  if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+});
+
+// init export default dates
+document.getElementById('exportDateFrom').value = daysAgo(7);
+document.getElementById('exportDateTo').value = todayStr();
+
   const file = this.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
