@@ -705,6 +705,7 @@ function addItemToEditOrder({ name, price }) {
   }
 
   renderEditAddItemList();   // refresh badge
+  renderEditOrderBatches();  // update order view ทันที
 }
 
 // ==================== Edit Order Modal ====================
