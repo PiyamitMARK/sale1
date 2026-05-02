@@ -61,6 +61,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 .hidden { display: none !important; }
@@ -71,7 +72,6 @@ body {
 .bo-shell {
   display: flex;
   min-height: 100vh;
-  overflow-x: hidden;
 }
 
 /* ---- Sidebar ---- */
@@ -85,6 +85,8 @@ body {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  isolation: isolate;
+  z-index: 10;
 }
 [data-theme="dark"] .bo-sidebar { background: #111113; }
 
@@ -179,7 +181,7 @@ body {
    PANELS (each feature = .bo-panel)
    ============================================================ */
 .bo-panel { display: none; flex-direction: column; gap: 1.25rem; }
-.bo-panel.active { display: flex !important; animation: panelIn .25s ease both; }
+.bo-panel.active { display: flex !important; animation: panelIn .25s ease forwards; }
 @keyframes panelIn {
   from { opacity:0; transform:translateY(8px); }
   to   { opacity:1; transform:translateY(0); }
