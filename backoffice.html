@@ -1017,7 +1017,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 <!-- =============== AUTH GUARD =============== -->
 <script>
 (function() {
-  if (sessionStorage.getItem('krua-khun-mae-auth') !== 'true') {
+  if (localStorage.getItem('krua-khun-mae-auth') !== 'true') {
     document.body.innerHTML = [
       '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;',
       'justify-content:center;font-family:Sarabun,sans-serif;background:#faf6f0;',
