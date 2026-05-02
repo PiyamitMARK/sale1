@@ -652,6 +652,20 @@ body {
 [data-theme="dark"] .cust-kitchen-bar.status-served  { background: #10201a; }
 [data-theme="dark"] .cust-step-dot { background: #3a2a20; border-color: #3a2a20; }
 [data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
+
+/* ── Dark mode: fix header text visibility ── */
+[data-theme="dark"] .cust-logo-text { color: #f0e6d8; }
+[data-theme="dark"] .cust-history-btn {
+  color: #f0e6d8;
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.25);
+}
+[data-theme="dark"] .cust-table-badge { color: #ffffff; }
+[data-theme="dark"] .cust-dark-btn {
+  color: #f0e6d8;
+  border-color: rgba(255,255,255,0.25);
+}
+
 .cust-dark-btn {
   background: none; border: 1.5px solid var(--cream-dark);
   border-radius: var(--radius-pill); font-size: 1rem;
