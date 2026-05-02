@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script>/* prevent flash */(function(){var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);})();</script>
   <style>
 /* ============================================================
@@ -1010,6 +1011,107 @@ tr.drag-over td { background: var(--cream-dark) !important; }
   padding: .25rem;
 }
 @media (max-width: 768px) { .hamburger { display: block; } }
+/* ============================================================
+   QR PANEL
+   ============================================================ */
+.qr-settings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  background: var(--cream-mid);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+}
+.qr-url-preview {
+  font-size: .8rem;
+  color: var(--brown-light);
+  word-break: break-all;
+  background: var(--cream);
+  padding: .5rem .75rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--cream-dark);
+  flex: 1;
+  min-width: 200px;
+}
+.qr-url-preview strong { color: var(--accent); }
+
+.qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+.qr-card {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.qr-card-header {
+  background: #3d2b1f;
+  width: 100%;
+  padding: .55rem .5rem;
+}
+[data-theme="dark"] .qr-card-header { background: #110d09; }
+.qr-card-header-shop {
+  font-family: 'Mitr', sans-serif;
+  font-size: .82rem;
+  color: #faf6f0;
+  font-weight: 600;
+}
+.qr-card-body {
+  padding: .9rem .9rem .4rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.qr-code-box {
+  border: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 5px;
+  margin-bottom: .5rem;
+  background: #fff;
+}
+.qr-table-label {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--brown);
+  margin-bottom: .2rem;
+}
+.qr-scan-hint { font-size: .75rem; color: var(--brown-light); margin-bottom: .6rem; }
+.qr-card-footer {
+  padding: 0 .9rem .9rem;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+@media print {
+  @page { size: A4 portrait; margin: 10mm; }
+  .bo-sidebar, .bo-topbar, .bo-panel-heading,
+  .qr-settings-bar, .qr-card-footer,
+  .btn, .hamburger { display: none !important; }
+  .bo-content { padding: 0 !important; }
+  body { background: white !important; }
+  .qr-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: .5rem !important;
+  }
+  .qr-card {
+    box-shadow: none !important;
+    border: 1.5px solid #ccc !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
   </style>
 </head>
 <body>
@@ -1063,9 +1165,9 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </button>
 
       <hr class="bo-nav-divider">
-      <a class="bo-nav-item" href="qr.html">
+      <button class="bo-nav-item" data-panel="qr">
         <span class="bo-nav-icon">📱</span>QR โต๊ะ
-      </a>
+      </button>
     </nav>
 
     <div class="bo-sidebar-footer">
@@ -1085,7 +1187,6 @@ tr.drag-over td { background: var(--cream-dark) !important; }
         <span class="bo-topbar-title" id="topbarTitle">Export Sheet</span>
       </div>
       <div class="bo-topbar-right">
-        <button class="btn btn-danger btn-sm" id="clearDataBtn">🗑 ล้างข้อมูล</button>
         <a href="admin.html" class="btn btn-ghost btn-sm">⬅ แอดมิน</a>
       </div>
     </div>
@@ -1422,6 +1523,37 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </div>
 
     </div><!-- /bo-content -->
+
+      <!-- =========================================================
+           PANEL: QR โต๊ะ
+           ========================================================= -->
+      <div class="bo-panel" id="panelQr" style="display:none">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">📱 QR Code โต๊ะ</div>
+            <div class="bo-panel-sub">สร้าง QR สำหรับสั่งอาหารแต่ละโต๊ะ</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="window.print()">🖨 พิมพ์ทั้งหมด</button>
+        </div>
+
+        <!-- Settings bar -->
+        <div class="qr-settings-bar">
+          <div class="field">
+            <label class="field-label">URL ของเว็บไซต์</label>
+            <input class="field-input" type="text" id="qrBaseUrl" placeholder="https://yoursite.com" style="min-width:260px">
+          </div>
+          <div class="field">
+            <label class="field-label">จำนวนโต๊ะ</label>
+            <input class="field-input" type="number" id="qrTableCount" value="9" min="1" max="99" style="width:80px">
+          </div>
+          <button class="btn btn-primary btn-sm" id="qrGenerateBtn">🔄 สร้าง QR</button>
+          <div class="qr-url-preview" id="qrUrlPreview">ตัวอย่าง URL: <strong>—</strong></div>
+        </div>
+
+        <!-- QR Grid -->
+        <div class="qr-grid" id="qrGrid"></div>
+      </div>
+
   </div><!-- /bo-main -->
 </div><!-- /bo-shell -->
 
@@ -1520,56 +1652,8 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 </div>
 
 <!-- =========================================================
-     MODAL: Clear Data
+     SCRIPTS
      ========================================================= -->
-<div class="bo-modal" id="clearDataModal">
-  <div class="bo-modal-box" style="max-width:420px">
-    <div class="bo-modal-header">
-      <span class="bo-modal-title">🗑 ล้างรายการสั่งซื้อทั้งหมด</span>
-      <button class="bo-modal-close" data-close="clearDataModal">✕</button>
-    </div>
-    <div class="bo-modal-body">
-      <p style="font-size:.88rem;color:var(--brown-light)">กรอกรหัสผ่านแอดมินเพื่อยืนยันการล้างข้อมูลและรีเซ็ตหมายเลขออเดอร์</p>
-      <div class="field">
-        <label class="field-label">รหัสยืนยัน</label>
-        <input type="password" id="clearDataCode" class="field-input" placeholder="••••••" autocomplete="off">
-      </div>
-      <p id="clearDataError" style="color:var(--red);font-size:.85rem;min-height:1.2em" aria-live="polite"></p>
-    </div>
-    <div class="bo-modal-footer">
-      <button class="btn btn-outline" data-close="clearDataModal">ยกเลิก</button>
-      <button class="btn btn-danger" id="clearDataConfirm">ล้างข้อมูล</button>
-    </div>
-  </div>
-</div>
-
-<script>
-// ---- Clear Data (Backoffice) ----
-document.getElementById('clearDataBtn').addEventListener('click', () => {
-  document.getElementById('clearDataCode').value = '';
-  document.getElementById('clearDataError').textContent = '';
-  document.getElementById('clearDataModal').classList.add('open');
-});
-document.getElementById('clearDataConfirm').addEventListener('click', async () => {
-  const ADMIN_USERS = { admin: 'admin123', owner: 'owner888' };
-  const code = document.getElementById('clearDataCode').value;
-  const errEl = document.getElementById('clearDataError');
-  if (!Object.values(ADMIN_USERS).includes(code)) {
-    errEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง';
-    return;
-  }
-  errEl.textContent = '';
-  try {
-    const { remove, ref: dbRef } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
-    await remove(dbRef(db, 'orders'));
-    document.getElementById('clearDataModal').classList.remove('open');
-    alert('✅ ล้างข้อมูลเรียบร้อย');
-  } catch (e) {
-    errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
-  }
-});
-</script>
-
 <script type="module">
 // ============================================================
 //  IMPORTS — must be at top of module
@@ -1618,13 +1702,18 @@ const PANEL_TITLES = {
   topsellers: 'เมนูขายดี',
   history: 'ย้อนหลัง 1 เดือน',
   menu: 'จัดการเมนู',
+  qr: 'QR Code โต๊ะ',
 };
 
 let activePanelId = 'export';
 function switchPanel(id) {
-  document.querySelectorAll('.bo-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.bo-panel').forEach(p => {
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
   document.querySelectorAll('.bo-nav-item[data-panel]').forEach(b => b.classList.remove('active'));
-  document.getElementById('panel' + id.charAt(0).toUpperCase() + id.slice(1))?.classList.add('active');
+  const panel = document.getElementById('panel' + id.charAt(0).toUpperCase() + id.slice(1));
+  if (panel) { panel.style.display = 'flex'; panel.classList.add('active'); }
   document.querySelector(`.bo-nav-item[data-panel="${id}"]`)?.classList.add('active');
   document.getElementById('topbarTitle').textContent = PANEL_TITLES[id] || id;
   activePanelId = id;
@@ -1633,6 +1722,7 @@ function switchPanel(id) {
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history' && !histLoaded) loadHistory();
   if (id === 'menu' && !menuLoaded) loadMenuItems();
+  if (id === 'qr') initQrPanel();
 }
 
 document.querySelectorAll('.bo-nav-item[data-panel]').forEach(btn => {
@@ -2449,6 +2539,122 @@ subscribeMenu(menuObj => {
   MOCK_MENU = Object.values(menuObj).sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
 });
+
+// ============================================================
+//  ===== PANEL: QR โต๊ะ =====
+// ============================================================
+let qrInited = false;
+
+function initQrPanel() {
+  const baseInput  = document.getElementById('qrBaseUrl');
+  const countInput = document.getElementById('qrTableCount');
+  const preview    = document.getElementById('qrUrlPreview');
+  const grid       = document.getElementById('qrGrid');
+  const genBtn     = document.getElementById('qrGenerateBtn');
+
+  if (!qrInited) {
+    qrInited = true;
+    baseInput.value = location.origin + '/';
+
+    function updatePreview() {
+      preview.innerHTML = 'ตัวอย่าง URL: <strong>' + getQrUrl(1) + '</strong>';
+    }
+    function getQrUrl(t) {
+      let base = baseInput.value.trim();
+      if (!base.endsWith('/')) base += '/';
+      return base + 'customer.html?table=' + t;
+    }
+    updatePreview();
+    baseInput.addEventListener('input', updatePreview);
+
+    function generateQRs() {
+      const count = Math.max(1, Math.min(99, parseInt(countInput.value) || 9));
+      grid.innerHTML = '';
+      for (let t = 1; t <= count; t++) {
+        const url = getQrUrl(t);
+        const card = document.createElement('div');
+        card.className = 'qr-card';
+        card.innerHTML = `
+          <div class="qr-card-header">
+            <div class="qr-card-header-shop">🍛 ข้าวซอย 90</div>
+          </div>
+          <div class="qr-card-body">
+            <div class="qr-code-box" id="bo-qr-${t}"></div>
+            <div class="qr-table-label">โต๊ะ ${t}</div>
+            <div class="qr-scan-hint">สแกน QR เพื่อสั่งอาหาร</div>
+          </div>
+          <div class="qr-card-footer">
+            <button class="btn btn-primary btn-sm" id="bo-qr-print-${t}">🖨 พิมพ์โต๊ะนี้</button>
+          </div>`;
+        grid.appendChild(card);
+
+        try {
+          new QRCode(document.getElementById('bo-qr-' + t), {
+            text: url, width: 150, height: 150,
+            colorDark: '#3d2b1f', colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+        } catch(e) {
+          document.getElementById('bo-qr-' + t).textContent = 'QR Error';
+        }
+
+        document.getElementById('bo-qr-print-' + t).addEventListener('click', () => printQrTable(t, url));
+      }
+    }
+
+    genBtn.addEventListener('click', generateQRs);
+    generateQRs();
+  }
+}
+
+function printQrTable(tableNum, url) {
+  const safeUrl = JSON.stringify(url);
+  const win = window.open('', '_blank', 'width=300,height=500');
+  if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อนนะครับ'); return; }
+  win.document.write(`<!DOCTYPE html>
+<html lang="th"><head>
+<meta charset="UTF-8">
+<title>QR โต๊ะ ${tableNum}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>
+  @page { size: 58mm 100mm; margin: 3mm; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Courier New',monospace; background:#fff; color:#000; width:52mm; text-align:center; }
+  .shop { font-size:11pt; font-weight:bold; margin-bottom:2pt; }
+  hr { border:none; border-top:1px solid #000; margin:3pt 0; }
+  .table-num { font-size:22pt; font-weight:bold; margin:3pt 0; }
+  .table-label { font-size:9pt; margin-bottom:4pt; }
+  #qr { display:inline-block; margin:3pt 0; image-rendering:pixelated; }
+  #qr img, #qr canvas { image-rendering:pixelated !important; }
+  .hint { font-size:8pt; margin-top:3pt; }
+  .no-print { display:flex; justify-content:center; gap:8px; margin-top:10pt; }
+  .no-print button { font-size:10pt; padding:5px 16px; border-radius:6px; cursor:pointer; border:1.5px solid #333; }
+  .btn-do { background:#3d2b1f; color:#fff; border-color:#3d2b1f; }
+  @media print { .no-print { display:none !important; } }
+</style>
+</head><body>
+<div class="shop">🍛 ข้าวซอย 90</div>
+<hr>
+<div class="table-label">โต๊ะ</div>
+<div class="table-num">${tableNum}</div>
+<div id="qr"></div>
+<div class="hint">สแกน QR เพื่อสั่งอาหาร</div>
+<hr>
+<div class="no-print">
+  <button class="btn-do" onclick="window.print()">🖨 พิมพ์</button>
+  <button onclick="window.close()">✕ ปิด</button>
+</div>
+<script>
+  new QRCode(document.getElementById('qr'), {
+    text: ${safeUrl}, width:160, height:160,
+    colorDark:'#000000', colorLight:'#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+  setTimeout(() => window.print(), 900);
+<\/script>
+</body></html>`);
+  win.document.close();
+}
 
 // init export default dates
 document.getElementById('exportDateFrom').value = daysAgo(7);
