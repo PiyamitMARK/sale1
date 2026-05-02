@@ -749,57 +749,6 @@ async function addItemToOrder({ name, price }) {
   renderAddItemList();
 }
 
-// ── แก้จำนวน item ใน order (delta = +1 หรือ -1) ──
-async function updateItemQty(firebaseKey, batchIdx, itemIdx, delta) {
-  const order = allOrders.find(o => o.firebaseKey === firebaseKey);
-  if (!order) return;
-
-  const batches = JSON.parse(JSON.stringify(order.batches || [order.items || []]));
-  const item = batches[batchIdx]?.[itemIdx];
-  if (!item) return;
-
-  item.qty = Math.max(1, item.qty + delta); // ไม่ให้ต่ำกว่า 1 (ถ้าต้องการลบให้กด 🗑)
-  const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
-
-  try {
-    await update(ref(db, `orders/${firebaseKey}`), { batches, total: newTotal });
-  } catch (err) {
-    console.error('updateItemQty error:', err);
-    alert('แก้ไขไม่สำเร็จ: ' + err.message);
-  }
-}
-
-// ── ลบ item ออกจาก order ──
-async function removeItemFromOrder(firebaseKey, batchIdx, itemIdx) {
-  const order = allOrders.find(o => o.firebaseKey === firebaseKey);
-  if (!order) return;
-
-  const batches = JSON.parse(JSON.stringify(order.batches || [order.items || []]));
-  if (!batches[batchIdx]) return;
-
-  batches[batchIdx].splice(itemIdx, 1);
-
-  // ถ้า batch นั้นว่างเปล่า และมีหลาย batch ให้ลบ batch นั้นทิ้ง
-  if (batches[batchIdx].length === 0 && batches.length > 1) {
-    batches.splice(batchIdx, 1);
-  }
-
-  // ถ้า batch เดียวและว่าง ถามยืนยันก่อนลบทั้ง order
-  if (batches.flat().length === 0) {
-    if (!confirm('ออเดอร์จะไม่มีรายการเหลือ ต้องการลบออเดอร์นี้ทั้งหมดหรือไม่?')) return;
-    await deleteOrder(firebaseKey, order.orderNumber);
-    return;
-  }
-
-  const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
-  try {
-    await update(ref(db, `orders/${firebaseKey}`), { batches, total: newTotal });
-  } catch (err) {
-    console.error('removeItemFromOrder error:', err);
-    alert('ลบรายการไม่สำเร็จ: ' + err.message);
-  }
-}
-
 if (addItemCancel) addItemCancel.addEventListener('click', closeAddItemModal);
 if (addItemModal)  addItemModal.addEventListener('click', (e) => { if (e.target === addItemModal) closeAddItemModal(); });
 
@@ -826,6 +775,65 @@ function renderDailySummary() {
   if (cookingCount > 0) chips.push(`<span class="live-chip live-chip--cooking">👨‍🍳 กำลังทำ ${cookingCount} รายการ</span>`);
   if (chips.length === 0) chips.push(`<span class="live-chip live-chip--ok">✅ ไม่มีออเดอร์ค้าง</span>`);
   liveChips.innerHTML = chips.join('');
+
+  renderBestSellers();
+}
+
+// ==================== Best Sellers ====================
+function renderBestSellers() {
+  // นับจาก paid orders ทั้งหมด
+  const counts = {}; // { name: { qty, revenue } }
+  allOrders
+    .filter(o => o.status === 'paid')
+    .forEach(o => {
+      const batches = o.batches || [o.items || []];
+      batches.flat().forEach(i => {
+        if (!i.name) return;
+        if (!counts[i.name]) counts[i.name] = { qty: 0, revenue: 0 };
+        counts[i.name].qty     += (i.qty || 1);
+        counts[i.name].revenue += (i.price || 0) * (i.qty || 1);
+      });
+    });
+
+  const sorted = Object.entries(counts)
+    .sort((a, b) => b[1].qty - a[1].qty)
+    .slice(0, 10);
+
+  let section = document.getElementById('bestSellersSection');
+  if (!section) {
+    section = document.createElement('section');
+    section.id = 'bestSellersSection';
+    section.className = 'best-sellers-section';
+    const liveChips = document.getElementById('liveSummaryChips');
+    if (liveChips) liveChips.insertAdjacentElement('afterend', section);
+  }
+
+  if (sorted.length === 0) {
+    section.innerHTML = '';
+    return;
+  }
+
+  const maxQty = sorted[0][1].qty || 1;
+
+  section.innerHTML = `
+    <div class="best-sellers-header">
+      <span class="best-sellers-title">🏆 เมนูขายดี</span>
+      <span class="best-sellers-sub">จากออเดอร์ที่จ่ายแล้วทั้งหมด</span>
+    </div>
+    <ol class="best-sellers-list">
+      ${sorted.map(([name, { qty, revenue }], idx) => `
+        <li class="bs-row">
+          <span class="bs-rank ${idx === 0 ? 'bs-rank--gold' : idx === 1 ? 'bs-rank--silver' : idx === 2 ? 'bs-rank--bronze' : ''}">${idx + 1}</span>
+          <span class="bs-name">${escapeHtml(name)}</span>
+          <div class="bs-bar-wrap">
+            <div class="bs-bar" style="width:${Math.round((qty / maxQty) * 100)}%"></div>
+          </div>
+          <span class="bs-qty">${qty} จาน</span>
+          <span class="bs-revenue">${formatMoney(revenue)}</span>
+        </li>
+      `).join('')}
+    </ol>
+  `;
 }
 
 // ==================== Render Orders (with batch display) ====================
@@ -895,23 +903,17 @@ function renderOrders() {
 
     // ─── Render batches ───
     const batches = order.batches || [order.items || []]; // รองรับ format เดิม
-      const batchesHtml = batches.map((batchItems, bIdx) => {
+    const batchesHtml = batches.map((batchItems, bIdx) => {
       const batchTotal = batchItems.reduce((s, i) => s + i.price * i.qty, 0);
       const batchLabel = batches.length > 1 ? `รอบที่ ${bIdx + 1}` : 'รายการ';
       return `
         <div class="batch-group">
           ${batches.length > 1 ? `<div class="batch-label">🍽 ${escapeHtml(batchLabel)}</div>` : ''}
           <ul class="order-items">
-            ${batchItems.map((i, iIdx) => `
-              <li class="order-item order-item--editable">
-                <span class="oi-name">${escapeHtml(i.name)}${i.option ? `<span class="order-item-option"> · ${escapeHtml(i.option)}</span>` : ''}</span>
-                <span class="oi-controls">
-                  <button type="button" class="oi-qty-btn btn-oi-minus" data-key="${order.firebaseKey}" data-bidx="${bIdx}" data-iidx="${iIdx}" title="ลดจำนวน">−</button>
-                  <span class="oi-qty">${i.qty}</span>
-                  <button type="button" class="oi-qty-btn btn-oi-plus" data-key="${order.firebaseKey}" data-bidx="${bIdx}" data-iidx="${iIdx}" title="เพิ่มจำนวน">+</button>
-                  <button type="button" class="oi-del-btn btn-oi-del" data-key="${order.firebaseKey}" data-bidx="${bIdx}" data-iidx="${iIdx}" title="ลบรายการ">🗑</button>
-                  <span class="oi-price">${formatMoney(i.price * i.qty)}</span>
-                </span>
+            ${batchItems.map((i) => `
+              <li class="order-item">
+                <span>${escapeHtml(i.name)}${i.option ? `<span class="order-item-option"> · ${escapeHtml(i.option)}</span>` : ''} × ${i.qty}</span>
+                <span>${formatMoney(i.price * i.qty)}</span>
               </li>`).join('')}
           </ul>
           ${batches.length > 1 ? `<div class="batch-subtotal">รอบนี้: ${formatMoney(batchTotal)}</div>` : ''}
@@ -975,16 +977,6 @@ function renderOrders() {
   });
   ordersList.querySelectorAll('.btn-delete').forEach((btn) => {
     btn.addEventListener('click', () => deleteOrder(btn.dataset.key, btn.dataset.num));
-  });
-
-  ordersList.querySelectorAll('.btn-oi-minus').forEach((btn) => {
-    btn.addEventListener('click', () => updateItemQty(btn.dataset.key, +btn.dataset.bidx, +btn.dataset.iidx, -1));
-  });
-  ordersList.querySelectorAll('.btn-oi-plus').forEach((btn) => {
-    btn.addEventListener('click', () => updateItemQty(btn.dataset.key, +btn.dataset.bidx, +btn.dataset.iidx, +1));
-  });
-  ordersList.querySelectorAll('.btn-oi-del').forEach((btn) => {
-    btn.addEventListener('click', () => removeItemFromOrder(btn.dataset.key, +btn.dataset.bidx, +btn.dataset.iidx));
   });
 }
 
