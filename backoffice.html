@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Back Office — ข้าวซอย 90</title>
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#3d2b1f">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
@@ -87,8 +85,6 @@ body {
   overflow-y: auto;
 }
 [data-theme="dark"] .bo-sidebar { background: #111113; }
-[data-theme="dark"] .bo-brand-name { color: #f4f4f5; }
-[data-theme="dark"] .bo-brand-sub  { color: var(--accent-light); }
 
 .bo-brand {
   padding: 1.4rem 1.2rem 1rem;
@@ -1071,7 +1067,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 
     <div class="bo-sidebar-footer">
       <button class="bo-nav-item" id="darkToggleBtn">
-        <span class="bo-nav-icon"></span><span id="darkToggleLabel">Dark Mode</span>
+        <span class="bo-nav-icon">🌙</span><span id="darkToggleLabel">Dark Mode</span>
       </button>
     </div>
   </aside>
@@ -2441,6 +2437,5 @@ document.getElementById('menuImgUrl').addEventListener('input', function() {
   }
 });
 </script>
-<script src="/register-sw.js"></script>
 </body>
 </html>
