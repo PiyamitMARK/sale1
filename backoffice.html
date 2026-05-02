@@ -235,6 +235,7 @@ body {
 .btn-green    { background: var(--green); color: #fff; }
 .btn-danger   { background: var(--red); color: #fff; }
 .btn-ghost    { background: var(--cream-mid); color: var(--brown-mid); border: none; }
+[data-theme="dark"] .btn-ghost { background: var(--cream-dark); color: var(--brown); }
 .btn-sm       { padding: .38rem .85rem; font-size: .8rem; }
 
 /* ============================================================
@@ -284,7 +285,8 @@ body {
   background: var(--cream);
 }
 .export-range-card:hover { border-color: var(--accent-light); }
-.export-range-card.selected { border-color: var(--accent); background: #fff8f0; }
+.export-range-card.selected { border-color: var(--accent); background: var(--cream-mid); }
+[data-theme="dark"] .export-range-card.selected { background: var(--cream-dark); }
 .export-range-icon { font-size: 1.5rem; flex-shrink: 0; }
 .export-range-label { font-weight: 700; font-size: .9rem; }
 .export-range-desc { font-size: .8rem; color: var(--brown-light); margin-top: .15rem; }
@@ -395,7 +397,7 @@ body {
   border-bottom: 1px solid var(--cream-dark);
   vertical-align: middle;
 }
-.topseller-table tbody tr:hover td { background: #fff8f0; }
+.topseller-table tbody tr:hover td { background: var(--cream-mid); }
 .topseller-table tbody tr:last-child td { border-bottom: none; }
 
 .rank-badge {
@@ -512,7 +514,7 @@ body {
   border-bottom: 1px solid var(--cream-dark);
   vertical-align: middle;
 }
-.history-table tbody tr:hover td { background: #fffaf5; }
+.history-table tbody tr:hover td { background: var(--cream-mid); }
 .history-table tbody tr:last-child td { border-bottom: none; }
 
 .order-num-chip {
@@ -555,7 +557,7 @@ body {
 .expand-row td { padding: 0 !important; border-bottom: 2px solid var(--accent) !important; }
 .expand-inner {
   padding: .9rem 1rem;
-  background: #fffaf4;
+  background: var(--cream-mid);
   font-size: .85rem;
 }
 .expand-inner table { width: 100%; border-collapse: collapse; }
@@ -703,7 +705,7 @@ body {
   border-bottom: 1px solid var(--cream-dark);
   vertical-align: middle;
 }
-.menu-table tbody tr:hover td { background: #fffaf5; }
+.menu-table tbody tr:hover td { background: var(--cream-mid); }
 .menu-table tbody tr:last-child td { border-bottom: none; }
 .menu-table tr.menu-disabled td { opacity: .45; }
 
@@ -717,7 +719,7 @@ body {
 }
 .drag-handle:hover { color: var(--accent); }
 tr.dragging { opacity: .35; outline: 2px dashed var(--accent); }
-tr.drag-over td { background: #fff3e0 !important; }
+tr.drag-over td { background: var(--cream-dark) !important; }
 
 /* toggle */
 .toggle-wrap { display: flex; align-items: center; }
@@ -800,7 +802,7 @@ tr.drag-over td { background: #fff3e0 !important; }
   color: var(--brown-light);
   transition: var(--ease);
 }
-.btn-icon:hover { border-color: var(--accent); color: var(--accent); background: #fff8f0; }
+.btn-icon:hover { border-color: var(--accent); color: var(--accent); background: var(--cream-mid); }
 .btn-icon.del:hover { border-color: var(--red); color: var(--red); background: #fff0f0; }
 
 .menu-count-badge {
@@ -915,7 +917,7 @@ tr.drag-over td { background: #fff3e0 !important; }
   background: var(--cream);
   text-align: center;
 }
-.img-upload-area:hover { border-color: var(--accent); background: #fff8f0; }
+.img-upload-area:hover { border-color: var(--accent); background: var(--cream-mid); }
 .img-upload-area.has-image { padding: .4rem; }
 .img-upload-area img { width: 100%; max-height: 160px; object-fit: cover; border-radius: 6px; display: block; }
 .img-upload-label { font-size: .82rem; color: var(--brown-light); }
@@ -1045,10 +1047,6 @@ tr.drag-over td { background: #fff3e0 !important; }
       </button>
 
       <hr class="bo-nav-divider">
-
-      <a href="admin.html" class="bo-nav-item">
-        <span class="bo-nav-icon">⬅</span>กลับแอดมิน
-      </a>
     </nav>
 
     <div class="bo-sidebar-footer">
@@ -1611,32 +1609,57 @@ signInAnonymously(auth).catch(e => console.error('Auth:', e));
 let LIVE_ORDERS = [];   // all orders from Firebase (converted to flat array)
 let LIVE_MENU   = {};   // menu keyed by id
 
-// Subscribe to orders — อ่านจาก 'orders' node เดียวกับ admin.js (real-time)
+// Subscribe to orders (completedOrders + tableOrders)
 function subscribeOrders(cb) {
-  onValue(ref(db, 'orders'), snap => {
-    const orders = [];
+  // completedOrders — จ่ายแล้ว
+  onValue(ref(db, 'completedOrders'), snap => {
+    const completed = [];
     snap.forEach(child => {
       const o = child.val();
-      // flatten batches เหมือน admin.js
+      // flatten batches like admin.js
       const items = [];
       if (Array.isArray(o.batches)) {
         o.batches.forEach(b => b.forEach(it => items.push(it)));
       } else if (Array.isArray(o.items)) {
         o.items.forEach(it => items.push(it));
       }
-      orders.push({
+      completed.push({
         id:            child.key,
         orderNumber:   o.orderNumber || o.id || child.key,
         table:         o.table || o.tableNumber || '—',
-        status:        o.status || 'pending',
+        status:        o.status || 'paid',
         total:         o.total || 0,
         items,
         createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
-        paymentMethod: o.paymentMethod || '',
+        paymentMethod: o.paymentMethod || 'cash',
       });
     });
-    LIVE_ORDERS = orders.sort((a, b) => b.createdAt - a.createdAt);
-    cb(LIVE_ORDERS);
+
+    // tableOrders — ยังไม่จ่าย
+    onValue(ref(db, 'tableOrders'), snap2 => {
+      const active = [];
+      snap2.forEach(tableChild => {
+        const o = tableChild.val();
+        const items = [];
+        if (Array.isArray(o.batches)) {
+          o.batches.forEach(b => b.forEach(it => items.push(it)));
+        } else if (Array.isArray(o.items)) {
+          o.items.forEach(it => items.push(it));
+        }
+        active.push({
+          id:            tableChild.key,
+          orderNumber:   o.orderNumber || tableChild.key,
+          table:         o.table || o.tableNumber || tableChild.key,
+          status:        o.status || 'pending',
+          total:         o.total || 0,
+          items,
+          createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
+          paymentMethod: o.paymentMethod || '',
+        });
+      });
+      LIVE_ORDERS = [...completed, ...active].sort((a, b) => b.createdAt - a.createdAt);
+      cb(LIVE_ORDERS);
+    }, { onlyOnce: true });
   });
 }
 
