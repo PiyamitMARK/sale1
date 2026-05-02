@@ -473,10 +473,10 @@ function openMenuFormModal(product) {
       <section class="mf-section">
         <div class="mf-section-header">
           <div class="mf-section-title">🏷️ ราคาพิเศษ / โปรโมชั่น</div>
-          <label class="menu-toggle" title="เปิด/ปิดโปรโมชั่น">
-            <input type="checkbox" id="mfPromoEnabled" ${promoEnabled ? 'checked' : ''}>
-            <span class="menu-toggle-slider"></span>
-          </label>
+          <button type="button" class="mf-promo-toggle-btn${promoEnabled ? ' active' : ''}" id="mfPromoToggleBtn">
+            ${promoEnabled ? '✅ เปิดอยู่' : 'เปิดใช้งาน'}
+          </button>
+          <input type="hidden" id="mfPromoEnabled" value="${promoEnabled ? '1' : '0'}">
         </div>
         <div class="mf-promo-body" id="mfPromoBody" style="${promoEnabled ? '' : 'display:none'}">
           <div class="menu-form-grid">
@@ -524,12 +524,14 @@ function openMenuFormModal(product) {
     </div><!-- /mf-scroll-body -->
 
     <p id="menuFormError" class="login-error" aria-live="polite"></p>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-outline" id="menuFormCancel">ยกเลิก</button>
-      ${isEdit ? `<button type="button" class="btn btn-outline" id="menuFormDuplicate">📋 Duplicate</button>` : ''}
-      <button type="button" class="btn btn-primary" id="menuFormSave">
-        ${isEdit ? '💾 บันทึก' : '＋ เพิ่มเมนู'}
-      </button>
+    <div class="mf-footer-actions">
+      <button type="button" class="btn btn-ghost-cancel" id="menuFormCancel">ยกเลิก</button>
+      <div class="mf-footer-right">
+        ${isEdit ? `<button type="button" class="btn btn-outline btn-sm" id="menuFormDuplicate">📋 Duplicate</button>` : ''}
+        <button type="button" class="btn btn-primary mf-save-btn" id="menuFormSave">
+          ${isEdit ? '💾 บันทึก' : '＋ เพิ่มเมนู'}
+        </button>
+      </div>
     </div>
   `;
 
@@ -561,8 +563,14 @@ function openMenuFormModal(product) {
   });
 
   // Promo toggle
-  document.getElementById('mfPromoEnabled')?.addEventListener('change', (e) => {
-    document.getElementById('mfPromoBody').style.display = e.target.checked ? '' : 'none';
+  document.getElementById('mfPromoToggleBtn')?.addEventListener('click', () => {
+    const hiddenInput = document.getElementById('mfPromoEnabled');
+    const btn = document.getElementById('mfPromoToggleBtn');
+    const isNowEnabled = hiddenInput.value === '1' ? false : true;
+    hiddenInput.value = isNowEnabled ? '1' : '0';
+    document.getElementById('mfPromoBody').style.display = isNowEnabled ? '' : 'none';
+    btn.textContent = isNowEnabled ? '✅ เปิดอยู่' : 'เปิดใช้งาน';
+    btn.classList.toggle('active', isNowEnabled);
   });
 
   // Options editor
@@ -607,7 +615,7 @@ function _collectFormData(existingProduct) {
   const imageUrl  = document.getElementById('mfImageUrl')?.value        || '';
   const optData   = document.getElementById('mfOptionsData')?.value;
 
-  const promoEnabled = document.getElementById('mfPromoEnabled')?.checked || false;
+  const promoEnabled = document.getElementById('mfPromoEnabled')?.value === '1';
   const promoPrice   = parseInt(document.getElementById('mfPromoPrice')?.value, 10);
   const promoLabel   = document.getElementById('mfPromoLabel')?.value.trim() || 'ลดราคา';
   const promoFrom    = document.getElementById('mfPromoFrom')?.value || '';
@@ -1055,6 +1063,69 @@ function _injectStyles() {
   font-size: 0.78rem; color: var(--brown-light);
   background: #fff8e1; border-radius: 6px;
   padding: 0.4rem 0.6rem; margin-top: 0.5rem;
+}
+
+/* Promo toggle button (replaces checkbox) */
+.mf-promo-toggle-btn {
+  border: 1.5px solid var(--cream-dark);
+  background: var(--white);
+  color: var(--brown-light);
+  border-radius: 999px;
+  font-family: var(--font-body, 'Sarabun', sans-serif);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.mf-promo-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mf-promo-toggle-btn.active {
+  background: #fff8e1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Footer actions */
+.mf-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.5rem;
+  border-top: 1.5px solid var(--cream-dark);
+  background: var(--white);
+  flex-shrink: 0;
+}
+.mf-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.btn-ghost-cancel {
+  background: none;
+  border: none;
+  color: var(--brown-light);
+  font-family: var(--font-body, 'Sarabun', sans-serif);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: 0.15s;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: transparent;
+}
+.btn-ghost-cancel:hover {
+  color: var(--brown);
+  text-decoration-color: var(--brown-light);
+}
+.mf-save-btn {
+  min-width: 130px;
+  justify-content: center;
 }
 
 /* Options Summary */
