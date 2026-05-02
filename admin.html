@@ -49,7 +49,6 @@
       </div>
       <div class="admin-header-right">
         <a href="qr.html" class="btn btn-green">📱 QR โต๊ะ</a>
-        <button type="button" class="btn btn-green" id="exportSheetBtn">Export Sheet</button>
         <div class="sound-control" id="soundControl">
           <button type="button" class="btn btn-sound" id="soundToggleBtn" title="เปิด/ปิดเสียง">🔔 เสียงเปิด</button>
           <div class="sound-mode-tabs" id="soundModeTabs" title="เลือกประเภทเสียง">
@@ -89,9 +88,8 @@
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="recent">รายการล่าสุด</button>
         <button class="tab-btn" data-tab="takeaway">📦 กลับบ้าน</button>
-        <button class="tab-btn" data-tab="history">ย้อนหลัง 1 เดือน</button>
         <button class="tab-btn" data-tab="calllog" id="callLogTab">🔔 เรียกพนักงาน <span class="call-log-badge hidden" id="callLogBadge">0</span></button>
-        <button class="tab-btn" data-tab="menu">🍽 จัดการเมนู</button>
+
       </nav>
 
       <!-- Tab: Recent -->
@@ -125,15 +123,6 @@
         </div>
       </div>
 
-      <!-- Tab: History -->
-      <div id="tabHistory" class="tab-panel hidden">
-        <div id="historyContent" class="history-list"></div>
-        <div id="historyEmpty" class="empty-state hidden">
-          <p class="empty-icon">📅</p>
-          <p>ไม่มีข้อมูลย้อนหลัง</p>
-        </div>
-      </div>
-
       <!-- Tab: Call Log -->
       <div id="tabCallLog" class="tab-panel hidden">
         <div class="call-log-toolbar">
@@ -147,58 +136,7 @@
         </div>
       </div>
 
-      <!-- Tab: Menu Management -->
-      <div id="tabMenu" class="tab-panel hidden">
-        <div id="menuTabContent"></div>
-      </div>
-
     </main>
-  </div>
-
-  <!-- =============== MODAL: Menu Add/Edit =============== -->
-  <div class="modal" id="menuFormModal" aria-hidden="true">
-    <div class="modal-box">
-      <!-- content rendered by admin.js -->
-    </div>
-  </div>
-
-  <!-- =============== MODAL: Export =============== -->
-  <div class="modal" id="exportModal" aria-hidden="true">
-    <div class="modal-box">
-      <h3 class="modal-title">📊 Export ไปยัง Google Sheet</h3>
-      <p class="modal-desc">เลือกช่วงวันที่ที่ต้องการ</p>
-      <div class="export-options">
-        <label class="export-option">
-          <input type="radio" name="exportRange" value="today" checked>
-          <span>วันนี้เท่านั้น</span>
-        </label>
-        <label class="export-option">
-          <input type="radio" name="exportRange" value="month">
-          <span>ย้อนหลัง 30 วัน</span>
-        </label>
-        <label class="export-option">
-          <input type="radio" name="exportRange" value="custom">
-          <span>เลือกช่วงวันเอง</span>
-        </label>
-      </div>
-      <div id="customDateRange" class="date-range hidden">
-        <div class="date-row">
-          <div class="date-field">
-            <label class="field-label" for="dateFrom">จาก</label>
-            <input type="date" id="dateFrom" class="field-input">
-          </div>
-          <div class="date-field">
-            <label class="field-label" for="dateTo">ถึง</label>
-            <input type="date" id="dateTo" class="field-input">
-          </div>
-        </div>
-      </div>
-      <p id="exportStatus" class="export-status" aria-live="polite"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="exportCancel">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" id="exportConfirm">📤 ส่งข้อมูล</button>
-      </div>
-    </div>
   </div>
 
   <!-- =============== MODAL: Clear Data =============== -->
