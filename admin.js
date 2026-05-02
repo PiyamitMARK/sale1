@@ -110,7 +110,15 @@ let tableFilter = '';   // ── Feature #4: กรองตามโต๊ะ 
 
 // ==================== Auth ====================
 function isLoggedIn()     { return localStorage.getItem(AUTH_KEY) === 'true'; }
-function setLoggedIn(val) { val ? localStorage.setItem(AUTH_KEY,'true') : localStorage.removeItem(AUTH_KEY); }
+function setLoggedIn(val) {
+  if (val) {
+    localStorage.setItem(AUTH_KEY, 'true');
+    sessionStorage.setItem(AUTH_KEY, 'true');  // สำหรับ index.html, backoffice.html, qr.html
+  } else {
+    localStorage.removeItem(AUTH_KEY);
+    sessionStorage.removeItem(AUTH_KEY);
+  }
+}
 
 function showScreen(screen) {
   loginScreen.classList.add('hidden');
@@ -1371,6 +1379,8 @@ function renderTakeawayOrders() {
 // ==================== Auth Events ====================
 function checkAuth() {
   if (isLoggedIn()) {
+    // sync sessionStorage ด้วย เผื่อ page reload ล้าง session
+    sessionStorage.setItem(AUTH_KEY, 'true');
     showScreen(dashboardScreen);
     startRealtimeListener();
     startCallStaffListener();
