@@ -48,7 +48,6 @@
         <span class="admin-user-chip" id="adminUserChip">Admin</span>
       </div>
       <div class="admin-header-right">
-        <a href="qr.html" class="btn btn-green">📱 QR โต๊ะ</a>
         <div class="sound-control" id="soundControl">
           <button type="button" class="btn btn-sound" id="soundToggleBtn" title="เปิด/ปิดเสียง">🔔 เสียงเปิด</button>
           <div class="sound-mode-tabs" id="soundModeTabs" title="เลือกประเภทเสียง">
@@ -165,6 +164,22 @@
       <p id="addItemToastMsg" class="add-item-toast"></p>
       <div class="modal-actions">
         <button type="button" class="btn btn-outline" id="addItemCancel">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- =============== MODAL: Edit Order =============== -->
+  <div class="modal" id="editOrderModal" aria-hidden="true">
+    <div class="modal-box" style="max-width:520px">
+      <h3 class="modal-title">✏️ แก้ไขออเดอร์</h3>
+      <p class="modal-desc" id="editOrderDesc"></p>
+      <div class="edit-order-batches" id="editOrderBatches"></div>
+      <div class="edit-order-grand-total" id="editOrderTotal"></div>
+      <p id="editOrderError" class="login-error" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="editOrderCancel">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" id="editOrderSave">💾 บันทึก</button>
       </div>
     </div>
   </div>
