@@ -12,6 +12,7 @@ import { initializeApp }      from "https://www.gstatic.com/firebasejs/10.12.0/f
 import { getDatabase, ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
+import { subscribeMenu } from './menu-manager.js';
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -35,10 +36,10 @@ initializeAppCheck(firebaseApp, {
 
 signInAnonymously(auth).catch(err => console.error('Auth:', err));
 
-// ==================== เมนู ====================
+// ==================== เมนู (โหลดจาก Firebase) ====================
 const IMG = (n) => 'images/img' + n + '.png';
 
-const PRODUCTS = {
+let PRODUCTS = {
   setkao: [
     { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:129, img:IMG(10021),   productType:'setkao' },
     { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:85, img:IMG(10012),   productType:'setkao' },
@@ -98,6 +99,18 @@ const PRODUCTS = {
     { id:'soda6', name:'บลูเบอร์รี่โซดา',   price:35, img:IMG(21), productType:'drink-ready' },
   ],
 };
+
+// ==================== Subscribe เมนูจาก Firebase (real-time) ====================
+// customer.js ใช้ key 'img' แต่ menu-manager ส่งมาเป็น 'image' → remap
+subscribeMenu(db, (freshProducts) => {
+  // remap image → img ให้ตรงกับ customer.js ที่ใช้ p.img
+  const remapped = {};
+  Object.entries(freshProducts).forEach(([cat, items]) => {
+    remapped[cat] = items.map(p => ({ ...p, img: p.image }));
+  });
+  PRODUCTS = remapped;
+  if (document.getElementById('productGrid')) renderProducts(); // re-render
+});
 
 // ==================== Option Configs แยกตาม productType ====================
 // productType: 'food' | 'drink-brew' | 'drink-ready' | 'simple'

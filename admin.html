@@ -90,6 +90,7 @@
         <button class="tab-btn" data-tab="takeaway">📦 กลับบ้าน</button>
         <button class="tab-btn" data-tab="history">ย้อนหลัง 1 เดือน</button>
         <button class="tab-btn" data-tab="calllog" id="callLogTab">🔔 เรียกพนักงาน <span class="call-log-badge hidden" id="callLogBadge">0</span></button>
+        <button class="tab-btn" data-tab="menu">🍽 จัดการเมนู</button>
       </nav>
 
       <!-- Tab: Recent -->
@@ -145,7 +146,19 @@
         </div>
       </div>
 
+      <!-- Tab: Menu Management -->
+      <div id="tabMenu" class="tab-panel hidden">
+        <div id="menuTabContent"></div>
+      </div>
+
     </main>
+  </div>
+
+  <!-- =============== MODAL: Menu Add/Edit =============== -->
+  <div class="modal" id="menuFormModal" aria-hidden="true">
+    <div class="modal-box">
+      <!-- content rendered by admin.js -->
+    </div>
   </div>
 
   <!-- =============== MODAL: Export =============== -->

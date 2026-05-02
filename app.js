@@ -14,6 +14,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
+import { subscribeMenu } from './menu-manager.js';
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -40,8 +41,8 @@ signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
 // ==================== รูปสินค้า ====================
 const IMG = (n) => 'images/img' + n + '.png';
 
-// ==================== เมนูสินค้า ====================
-const products = {
+// ==================== เมนูสินค้า (โหลดจาก Firebase) ====================
+let products = {
   setkao: [
     { id: 'setkao13', name: 'เซ็ตอิ่มคุ้มคู่❗',            price: 129, image: IMG(10021),   productType: 'setkao' },
     { id: 'setkao1', name: 'ข้าวซอยน่องไก่ + โค๊ก',      price: 85, image: IMG(10012),   productType: 'setkao' },
@@ -101,6 +102,12 @@ const products = {
     { id: 'soda6', name: 'บลูเบอร์รี่โซดา',   price: 35, image: IMG(21), productType: 'drink-ready' },
   ],
 };
+
+// ==================== Subscribe เมนูจาก Firebase (real-time) ====================
+subscribeMenu(db, (freshProducts) => {
+  products = freshProducts;
+  renderProducts();
+});
 
 // ==================== Option Configs แยกตาม productType ====================
 const OPTION_CONFIGS = {

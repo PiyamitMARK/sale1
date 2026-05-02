@@ -11,10 +11,14 @@
 import './darkmode.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getDatabase, ref, update, remove, onValue, get
+  getDatabase, ref, update, remove, onValue, get, set
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
+import {
+  subscribeAllMenuAdmin, saveMenuItem, toggleMenuItem, deleteMenuItem, generateMenuId,
+  CATEGORY_LABELS, PRODUCT_TYPES, DEFAULT_MENU,
+} from './menu-manager.js';
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -1016,6 +1020,7 @@ function renderHistory() {
 // ==================== Tabs ====================
 const tabTakeaway = document.getElementById('tabTakeaway');
 const tabCallLog  = document.getElementById('tabCallLog');
+const tabMenu     = document.getElementById('tabMenu');
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach((t) =>
@@ -1025,8 +1030,10 @@ function switchTab(tabId) {
   tabHistory.classList.toggle('hidden',   tabId !== 'history');
   tabTakeaway.classList.toggle('hidden',  tabId !== 'takeaway');
   tabCallLog.classList.toggle('hidden',   tabId !== 'calllog');
+  if (tabMenu) tabMenu.classList.toggle('hidden', tabId !== 'menu');
   if (tabId === 'takeaway') renderTakeawayQrPanel();
   if (tabId === 'calllog')  renderCallLog();
+  if (tabId === 'menu')     renderMenuTab();
 }
 
 // ==================== Takeaway QR Panel ====================
@@ -1334,6 +1341,7 @@ function checkAuth() {
     showScreen(dashboardScreen);
     startRealtimeListener();
     startCallStaffListener();
+    initMenuTab();
     switchTab('recent');
   } else {
     showScreen(loginScreen);
@@ -1365,10 +1373,11 @@ loginBtn.addEventListener('click', async () => {
     if (user === ADMIN_USER && hash === ADMIN_PASS_HASH) {
       resetAttempts();
       setLoggedIn(true);
-      unlockIOSSpeech(); // iOS: unlock speech ด้วย gesture ตอน login
+      unlockIOSSpeech();
       showScreen(dashboardScreen);
       startRealtimeListener();
       startCallStaffListener();
+      initMenuTab();
       switchTab('recent');
     } else {
       const attempts = incrementAttempts();
@@ -1636,6 +1645,275 @@ soundModeTabs.forEach(tab => {
   document.head.appendChild(style);
 })();
 
+// ==================== Menu Management ====================
+let allMenuData = {}; // { id: { id, name, price, category, productType, imageNum, enabled, sortOrder } }
+let menuTabCategory = 'all';
+let menuUnsubscribe = null;
+
+function initMenuTab() {
+  menuUnsubscribe = subscribeAllMenuAdmin(db, (data) => {
+    allMenuData = data || {};
+    if (!document.getElementById('tabMenu')?.classList.contains('hidden')) {
+      renderMenuTab();
+    }
+  });
+}
+
+function renderMenuTab() {
+  const container = document.getElementById('menuTabContent');
+  if (!container) return;
+
+  const categories = [
+    { id: 'all',    label: '🍽 ทั้งหมด' },
+    { id: 'setkao', label: '🍱 เซ็ตอาหาร' },
+    { id: 'kao',    label: '🍜 อาหาร' },
+    { id: 'nam',    label: '🥤 เครื่องดื่ม' },
+    { id: 'coffee', label: '☕ กาแฟ' },
+    { id: 'soda',   label: '🫧 โซดา' },
+  ];
+
+  const items = Object.values(allMenuData)
+    .filter(p => menuTabCategory === 'all' || p.category === menuTabCategory)
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
+
+  container.innerHTML = `
+    <!-- Toolbar -->
+    <div class="menu-mgr-toolbar">
+      <div class="menu-mgr-cats">
+        ${categories.map(c => `
+          <button type="button" class="menu-cat-btn${menuTabCategory === c.id ? ' active' : ''}" data-cat="${c.id}">${escapeHtml(c.label)}</button>
+        `).join('')}
+      </div>
+      <button type="button" class="btn btn-primary menu-add-btn" id="menuAddBtn">＋ เพิ่มเมนู</button>
+    </div>
+
+    <!-- Table -->
+    <div class="menu-mgr-table-wrap">
+      <table class="menu-mgr-table">
+        <thead>
+          <tr>
+            <th>สถานะ</th>
+            <th>ชื่อเมนู</th>
+            <th>หมวด</th>
+            <th>ประเภท</th>
+            <th class="th-price">ราคา (฿)</th>
+            <th>จัดการ</th>
+          </tr>
+        </thead>
+        <tbody id="menuTableBody">
+          ${items.length === 0 ? `<tr><td colspan="6" class="menu-empty">ไม่มีเมนูในหมวดนี้</td></tr>` :
+            items.map(p => renderMenuRow(p)).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // bind cat buttons
+  container.querySelectorAll('.menu-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      menuTabCategory = btn.dataset.cat;
+      renderMenuTab();
+    });
+  });
+
+  // bind add
+  document.getElementById('menuAddBtn')?.addEventListener('click', openMenuAddModal);
+
+  // bind table actions
+  bindMenuTableActions(container);
+}
+
+function renderMenuRow(p) {
+  const catLabel = CATEGORY_LABELS[p.category] || p.category;
+  const typeLabel = (PRODUCT_TYPES.find(t => t.value === p.productType) || {}).label || p.productType;
+  return `
+    <tr class="menu-row${p.enabled ? '' : ' menu-row--disabled'}" data-id="${escapeHtml(p.id)}">
+      <td>
+        <label class="menu-toggle" title="${p.enabled ? 'คลิกเพื่อซ่อน' : 'คลิกเพื่อเปิด'}">
+          <input type="checkbox" class="menu-toggle-input" data-id="${escapeHtml(p.id)}" ${p.enabled ? 'checked' : ''}>
+          <span class="menu-toggle-slider"></span>
+        </label>
+      </td>
+      <td>
+        <span class="menu-item-name" data-id="${escapeHtml(p.id)}">${escapeHtml(p.name)}</span>
+        <button type="button" class="menu-inline-edit-btn" data-field="name" data-id="${escapeHtml(p.id)}" title="แก้ชื่อ">✏️</button>
+      </td>
+      <td><span class="menu-cat-chip menu-cat-chip--${escapeHtml(p.category)}">${escapeHtml(catLabel)}</span></td>
+      <td><span class="menu-type-chip">${escapeHtml(typeLabel)}</span></td>
+      <td class="td-price">
+        <span class="menu-price-display" data-id="${escapeHtml(p.id)}">${p.price}</span>
+        <button type="button" class="menu-inline-edit-btn" data-field="price" data-id="${escapeHtml(p.id)}" title="แก้ราคา">✏️</button>
+      </td>
+      <td>
+        <div class="menu-action-btns">
+          <button type="button" class="btn-menu-edit" data-id="${escapeHtml(p.id)}">🖊 แก้ไข</button>
+          <button type="button" class="btn-menu-delete" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">🗑</button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function bindMenuTableActions(container) {
+  // toggle enable/disable
+  container.querySelectorAll('.menu-toggle-input').forEach(chk => {
+    chk.addEventListener('change', async () => {
+      await toggleMenuItem(db, chk.dataset.id, chk.checked);
+    });
+  });
+
+  // inline edit name/price
+  container.querySelectorAll('.menu-inline-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { field, id } = btn.dataset;
+      const p = allMenuData[id];
+      if (!p) return;
+      if (field === 'name') startInlineEdit(btn, id, 'name', p.name, 'text');
+      if (field === 'price') startInlineEdit(btn, id, 'price', p.price, 'number');
+    });
+  });
+
+  // full edit modal
+  container.querySelectorAll('.btn-menu-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = allMenuData[btn.dataset.id];
+      if (p) openMenuEditModal(p);
+    });
+  });
+
+  // delete
+  container.querySelectorAll('.btn-menu-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm(`ลบเมนู "${btn.dataset.name}" ออก?`)) return;
+      await deleteMenuItem(db, btn.dataset.id);
+    });
+  });
+}
+
+function startInlineEdit(btn, id, field, currentVal, inputType) {
+  const cell = btn.previousElementSibling; // span ข้างหน้า
+  const origText = cell.textContent;
+
+  const input = document.createElement('input');
+  input.type      = inputType;
+  input.value     = currentVal;
+  input.className = 'menu-inline-input';
+  if (inputType === 'number') { input.min = '0'; input.step = '1'; }
+
+  cell.style.display = 'none';
+  btn.style.display  = 'none';
+  cell.insertAdjacentElement('afterend', input);
+
+  const finish = async (save) => {
+    if (save) {
+      const val = inputType === 'number' ? parseInt(input.value, 10) : input.value.trim();
+      if (val === '' || (inputType === 'number' && isNaN(val))) {
+        input.classList.add('menu-inline-input--error');
+        return;
+      }
+      const p = { ...allMenuData[id], [field]: val };
+      await saveMenuItem(db, p);
+    }
+    input.remove();
+    cell.style.display = '';
+    btn.style.display  = '';
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); finish(true);  }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.focus();
+  input.select();
+}
+
+// ==================== Menu Add/Edit Modal ====================
+function openMenuAddModal() {
+  openMenuFormModal(null);
+}
+function openMenuEditModal(product) {
+  openMenuFormModal(product);
+}
+
+function openMenuFormModal(product) {
+  const isEdit = !!product;
+  const modal  = document.getElementById('menuFormModal');
+  if (!modal) return;
+
+  const catOptions = Object.entries(CATEGORY_LABELS)
+    .map(([v, l]) => `<option value="${v}"${product?.category === v ? ' selected' : ''}>${escapeHtml(l)}</option>`)
+    .join('');
+
+  const typeOptions = PRODUCT_TYPES
+    .map(t => `<option value="${t.value}"${product?.productType === t.value ? ' selected' : ''}>${escapeHtml(t.label)}</option>`)
+    .join('');
+
+  modal.querySelector('.modal-box').innerHTML = `
+    <h3 class="modal-title">${isEdit ? '🖊 แก้ไขเมนู' : '＋ เพิ่มเมนูใหม่'}</h3>
+
+    <div class="menu-form-grid">
+      <div class="field">
+        <label class="field-label">ชื่อเมนู</label>
+        <input type="text" id="mfName" class="field-input" value="${escapeHtml(product?.name || '')}" placeholder="เช่น ข้าวซอยน่องไก่" maxlength="60">
+      </div>
+      <div class="field">
+        <label class="field-label">ราคา (฿)</label>
+        <input type="number" id="mfPrice" class="field-input" value="${product?.price ?? ''}" placeholder="0" min="0" step="1">
+      </div>
+      <div class="field">
+        <label class="field-label">หมวดหมู่</label>
+        <select id="mfCategory" class="field-input">${catOptions}</select>
+      </div>
+      <div class="field">
+        <label class="field-label">ประเภท (options)</label>
+        <select id="mfType" class="field-input">${typeOptions}</select>
+      </div>
+      <div class="field">
+        <label class="field-label">เลขรูปภาพ</label>
+        <input type="number" id="mfImage" class="field-input" value="${product?.imageNum ?? ''}" placeholder="เช่น 111" min="0">
+      </div>
+    </div>
+
+    <p id="menuFormError" class="login-error" aria-live="polite"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-outline" id="menuFormCancel">ยกเลิก</button>
+      <button type="button" class="btn btn-primary" id="menuFormSave">${isEdit ? '💾 บันทึก' : '＋ เพิ่มเมนู'}</button>
+    </div>
+  `;
+
+  modal.setAttribute('aria-hidden', 'false');
+
+  document.getElementById('menuFormCancel').addEventListener('click', () => modal.setAttribute('aria-hidden', 'true'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.setAttribute('aria-hidden', 'true'); });
+
+  document.getElementById('menuFormSave').addEventListener('click', async () => {
+    const name     = document.getElementById('mfName').value.trim();
+    const price    = parseInt(document.getElementById('mfPrice').value, 10);
+    const category = document.getElementById('mfCategory').value;
+    const prodType = document.getElementById('mfType').value;
+    const imageNum = parseInt(document.getElementById('mfImage').value, 10) || 0;
+    const errEl    = document.getElementById('menuFormError');
+
+    if (!name)        { errEl.textContent = 'กรุณากรอกชื่อเมนู'; return; }
+    if (isNaN(price)) { errEl.textContent = 'กรุณากรอกราคา'; return; }
+    errEl.textContent = '';
+
+    const existing = isEdit ? allMenuData[product.id] : null;
+    const item = {
+      id:          isEdit ? product.id : generateMenuId(category),
+      name, price, category,
+      productType: prodType,
+      imageNum,
+      enabled:     existing?.enabled ?? true,
+      sortOrder:   existing?.sortOrder ?? (Object.keys(allMenuData).length + 1),
+    };
+
+    await saveMenuItem(db, item);
+    modal.setAttribute('aria-hidden', 'true');
+  });
+}
+
 // ==================== Init ====================
 checkAuth();
 // ==================== Print Receipt (admin) ====================
@@ -1831,6 +2109,128 @@ function printOrderReceipt(order) {
     .table-filter-input:focus { border-color: #c8853a; }
     .table-filter-clear { font-size: 0.82rem !important; }
     .table-filter-clear.hidden { display: none !important; }
+
+    /* ── Menu Management ── */
+    .menu-mgr-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.75rem;
+      padding: 1rem 1.5rem 0.75rem;
+    }
+    .menu-mgr-cats {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+    }
+    .menu-cat-btn {
+      border: 2px solid var(--cream-dark, #e2d8cb);
+      background: var(--white, #fff); color: var(--brown, #3d2b1f);
+      border-radius: 999px; padding: 0.35rem 0.9rem;
+      font-family: 'Mitr', sans-serif; font-size: 0.82rem; font-weight: 600;
+      cursor: pointer; transition: all 0.18s;
+    }
+    .menu-cat-btn:hover { border-color: var(--accent, #c8853a); }
+    .menu-cat-btn.active {
+      background: var(--accent, #c8853a);
+      border-color: var(--accent, #c8853a);
+      color: #fff;
+    }
+    .menu-add-btn { font-size: 0.9rem !important; }
+
+    .menu-mgr-table-wrap {
+      overflow-x: auto; padding: 0 1.5rem 2rem;
+    }
+    .menu-mgr-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 0.9rem; color: var(--brown, #3d2b1f);
+    }
+    .menu-mgr-table thead th {
+      background: var(--cream-mid, #f0e9de);
+      padding: 0.6rem 0.75rem; text-align: left;
+      font-family: 'Mitr', sans-serif; font-size: 0.8rem;
+      font-weight: 600; border-bottom: 2px solid var(--cream-dark, #e2d8cb);
+      white-space: nowrap;
+    }
+    .menu-mgr-table .th-price { text-align: right; }
+    .menu-mgr-table tbody tr { border-bottom: 1px solid var(--cream-dark, #e2d8cb); }
+    .menu-mgr-table tbody tr:hover { background: var(--cream, #faf6f0); }
+    .menu-mgr-table td { padding: 0.55rem 0.75rem; vertical-align: middle; }
+    .menu-mgr-table .td-price { text-align: right; white-space: nowrap; }
+    .menu-row--disabled td { opacity: 0.45; }
+    .menu-empty { text-align: center; padding: 2rem; color: #8b6655; font-style: italic; }
+
+    /* Toggle switch */
+    .menu-toggle { display: inline-flex; align-items: center; cursor: pointer; }
+    .menu-toggle-input { display: none; }
+    .menu-toggle-slider {
+      width: 36px; height: 20px; background: #ccc; border-radius: 999px;
+      position: relative; transition: background 0.2s;
+    }
+    .menu-toggle-slider::after {
+      content: ''; position: absolute;
+      width: 14px; height: 14px; background: #fff; border-radius: 50%;
+      top: 3px; left: 3px; transition: transform 0.2s;
+    }
+    .menu-toggle-input:checked + .menu-toggle-slider { background: #34c759; }
+    .menu-toggle-input:checked + .menu-toggle-slider::after { transform: translateX(16px); }
+
+    /* Inline edit */
+    .menu-inline-edit-btn {
+      background: none; border: none; cursor: pointer;
+      font-size: 0.8rem; padding: 0 0.2rem; opacity: 0.5;
+      transition: opacity 0.15s;
+    }
+    .menu-inline-edit-btn:hover { opacity: 1; }
+    .menu-inline-input {
+      border: 2px solid var(--accent, #c8853a); border-radius: 6px;
+      padding: 0.2rem 0.5rem; font-family: 'Sarabun', sans-serif;
+      font-size: 0.9rem; color: var(--brown, #3d2b1f);
+      background: var(--white, #fff); outline: none; max-width: 180px;
+    }
+    .menu-inline-input--error { border-color: #dc3545 !important; }
+
+    /* Category chips */
+    .menu-cat-chip {
+      font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+    }
+    .menu-cat-chip--setkao { background: #fff0e6; color: #c8853a; }
+    .menu-cat-chip--kao    { background: #fff3cd; color: #856404; }
+    .menu-cat-chip--nam    { background: #e0f2fe; color: #0369a1; }
+    .menu-cat-chip--coffee { background: #fdf2e9; color: #784212; }
+    .menu-cat-chip--soda   { background: #f0fdf4; color: #166534; }
+
+    .menu-type-chip {
+      font-size: 0.75rem; color: #8b6655;
+      padding: 0.1rem 0.4rem; border-radius: 4px;
+      background: var(--cream-mid, #f0e9de);
+    }
+
+    /* Action buttons in table */
+    .menu-action-btns { display: flex; gap: 0.4rem; align-items: center; }
+    .btn-menu-edit {
+      font-size: 0.78rem; padding: 0.28rem 0.7rem;
+      border-radius: 999px; border: 1.5px solid var(--accent, #c8853a);
+      background: transparent; color: var(--accent, #c8853a);
+      font-family: 'Mitr', sans-serif; font-weight: 600; cursor: pointer;
+      transition: all 0.18s; white-space: nowrap;
+    }
+    .btn-menu-edit:hover { background: var(--accent, #c8853a); color: #fff; }
+    .btn-menu-delete {
+      font-size: 0.82rem; padding: 0.28rem 0.5rem;
+      border-radius: 999px; border: 1.5px solid #dc3545;
+      background: transparent; color: #dc3545;
+      font-family: 'Mitr', sans-serif; font-weight: 600; cursor: pointer;
+      transition: all 0.18s;
+    }
+    .btn-menu-delete:hover { background: #dc3545; color: #fff; }
+
+    /* Menu form modal */
+    .menu-form-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0.85rem 1rem; margin: 1rem 0;
+    }
+    @media (max-width: 520px) { .menu-form-grid { grid-template-columns: 1fr; } }
+
+    /* Price display */
+    .menu-price-display { font-weight: 600; color: var(--accent, #c8853a); }
   `;
   document.head.appendChild(style);
 })();
