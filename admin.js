@@ -15,9 +15,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 import {
   subscribeAllMenuAdmin, saveMenuItem, toggleMenuItem, deleteMenuItem, generateMenuId,
   CATEGORY_LABELS, PRODUCT_TYPES, DEFAULT_MENU,
+  initMenuFormHelper, openMenuAddModal, openMenuEditModal,
+  enableMenuDragSort, duplicateMenuItem, updateSortOrders,
 } from './menu-manager.js';
 
 // ==================== Firebase Config ====================
@@ -32,8 +35,9 @@ const firebaseConfig = {
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db   = getDatabase(firebaseApp);
-const auth = getAuth(firebaseApp);
+const db      = getDatabase(firebaseApp);
+const storage = getStorage(firebaseApp);
+const auth    = getAuth(firebaseApp);
 
 initializeAppCheck(firebaseApp, {
   provider: new ReCaptchaV3Provider('6LdcccksAAAAAIU2DAOVbhc0yao-zcNxHWyApA17'),
@@ -1598,6 +1602,7 @@ let menuUnsubscribe = null;
 function initMenuTab() {
   menuUnsubscribe = subscribeAllMenuAdmin(db, (data) => {
     allMenuData = data || {};
+    initMenuFormHelper(db, storage, allMenuData, () => {});
     if (!document.getElementById('tabMenu')?.classList.contains('hidden')) {
       renderMenuTab();
     }
@@ -1622,7 +1627,6 @@ function renderMenuTab() {
     .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 
   container.innerHTML = `
-    <!-- Toolbar -->
     <div class="menu-mgr-toolbar">
       <div class="menu-mgr-cats">
         ${categories.map(c => `
@@ -1632,11 +1636,13 @@ function renderMenuTab() {
       <button type="button" class="btn btn-primary menu-add-btn" id="menuAddBtn">＋ เพิ่มเมนู</button>
     </div>
 
-    <!-- Table -->
+    <p class="menu-drag-hint">⠿ ลากแถวเพื่อเรียงลำดับเมนูใหม่</p>
+
     <div class="menu-mgr-table-wrap">
       <table class="menu-mgr-table">
         <thead>
           <tr>
+            <th style="width:32px"></th>
             <th>สถานะ</th>
             <th>ชื่อเมนู</th>
             <th>หมวด</th>
@@ -1646,14 +1652,14 @@ function renderMenuTab() {
           </tr>
         </thead>
         <tbody id="menuTableBody">
-          ${items.length === 0 ? `<tr><td colspan="6" class="menu-empty">ไม่มีเมนูในหมวดนี้</td></tr>` :
-            items.map(p => renderMenuRow(p)).join('')}
+          ${items.length === 0
+            ? `<tr><td colspan="7" class="menu-empty">ไม่มีเมนูในหมวดนี้</td></tr>`
+            : items.map(p => renderMenuRow(p)).join('')}
         </tbody>
       </table>
     </div>
   `;
 
-  // bind cat buttons
   container.querySelectorAll('.menu-cat-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       menuTabCategory = btn.dataset.cat;
@@ -1661,18 +1667,21 @@ function renderMenuTab() {
     });
   });
 
-  // bind add
   document.getElementById('menuAddBtn')?.addEventListener('click', openMenuAddModal);
-
-  // bind table actions
   bindMenuTableActions(container);
 }
 
 function renderMenuRow(p) {
-  const catLabel = CATEGORY_LABELS[p.category] || p.category;
+  const catLabel  = CATEGORY_LABELS[p.category] || p.category;
   const typeLabel = (PRODUCT_TYPES.find(t => t.value === p.productType) || {}).label || p.productType;
+  const hasPromo  = p.promo?.enabled;
+  const effectivePrice = hasPromo ? (p.promo.promoPrice ?? p.price) : p.price;
+
   return `
-    <tr class="menu-row${p.enabled ? '' : ' menu-row--disabled'}" data-id="${escapeHtml(p.id)}">
+    <tr class="menu-row${p.enabled ? '' : ' menu-row--disabled'}" data-id="${escapeHtml(p.id)}" draggable="true">
+      <td style="width:32px; text-align:center">
+        <span class="menu-drag-handle" title="ลากเพื่อเรียงลำดับ">⠿</span>
+      </td>
       <td>
         <label class="menu-toggle" title="${p.enabled ? 'คลิกเพื่อซ่อน' : 'คลิกเพื่อเปิด'}">
           <input type="checkbox" class="menu-toggle-input" data-id="${escapeHtml(p.id)}" ${p.enabled ? 'checked' : ''}>
@@ -1681,17 +1690,22 @@ function renderMenuRow(p) {
       </td>
       <td>
         <span class="menu-item-name" data-id="${escapeHtml(p.id)}">${escapeHtml(p.name)}</span>
+        ${hasPromo ? `<span class="menu-promo-badge">${escapeHtml(p.promo.label || 'โปร')}</span>` : ''}
         <button type="button" class="menu-inline-edit-btn" data-field="name" data-id="${escapeHtml(p.id)}" title="แก้ชื่อ">✏️</button>
       </td>
       <td><span class="menu-cat-chip menu-cat-chip--${escapeHtml(p.category)}">${escapeHtml(catLabel)}</span></td>
       <td><span class="menu-type-chip">${escapeHtml(typeLabel)}</span></td>
       <td class="td-price">
-        <span class="menu-price-display" data-id="${escapeHtml(p.id)}">${p.price}</span>
+        ${hasPromo
+          ? `<span class="menu-promo-orig">${p.price}</span><span class="menu-promo-price">${effectivePrice}</span>`
+          : `<span class="menu-price-display" data-id="${escapeHtml(p.id)}">${p.price}</span>`
+        }
         <button type="button" class="menu-inline-edit-btn" data-field="price" data-id="${escapeHtml(p.id)}" title="แก้ราคา">✏️</button>
       </td>
       <td>
         <div class="menu-action-btns">
           <button type="button" class="btn-menu-edit" data-id="${escapeHtml(p.id)}">🖊 แก้ไข</button>
+          <button type="button" class="btn-menu-dup" data-id="${escapeHtml(p.id)}" title="Duplicate">📋</button>
           <button type="button" class="btn-menu-delete" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}">🗑</button>
         </div>
       </td>
@@ -1707,25 +1721,42 @@ function bindMenuTableActions(container) {
     });
   });
 
-  // inline edit name/price
+  // inline edit
   container.querySelectorAll('.menu-inline-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const { field, id } = btn.dataset;
       const p = allMenuData[id];
       if (!p) return;
-      // หา span ก่อนหน้าใน cell เดียวกัน (previousElementSibling อาจเป็น span หรือ input)
       const cell = btn.parentElement;
       const span = cell.querySelector(field === 'price' ? '.menu-price-display' : '.menu-item-name');
-      if (field === 'name')  startInlineEdit(span, btn, id, 'name',  p.name,  'text');
-      if (field === 'price') startInlineEdit(span, btn, id, 'price', p.price, 'number');
+      if (span) {
+        if (field === 'name')  startInlineEdit(span, btn, id, 'name',  p.name,  'text');
+        if (field === 'price') startInlineEdit(span, btn, id, 'price', p.price, 'number');
+      }
     });
   });
 
-  // full edit modal
+  // full edit modal (using new modal from menu-manager.js)
   container.querySelectorAll('.btn-menu-edit').forEach(btn => {
     btn.addEventListener('click', () => {
       const p = allMenuData[btn.dataset.id];
       if (p) openMenuEditModal(p);
+    });
+  });
+
+  // duplicate
+  container.querySelectorAll('.btn-menu-dup').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const p = allMenuData[btn.dataset.id];
+      if (!p) return;
+      btn.disabled = true;
+      try {
+        await duplicateMenuItem(db, p);
+      } catch (err) {
+        alert('Duplicate ไม่สำเร็จ: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
     });
   });
 
@@ -1736,6 +1767,14 @@ function bindMenuTableActions(container) {
       await deleteMenuItem(db, btn.dataset.id);
     });
   });
+
+  // drag & drop sort
+  const tbody = container.querySelector('#menuTableBody');
+  if (tbody) {
+    enableMenuDragSort(tbody, async (orderedIds) => {
+      await updateSortOrders(db, orderedIds);
+    });
+  }
 }
 
 function startInlineEdit(cell, btn, id, field, currentVal, inputType) {
@@ -1773,92 +1812,6 @@ function startInlineEdit(cell, btn, id, field, currentVal, inputType) {
   input.addEventListener('blur', () => finish(true));
   input.focus();
   input.select();
-}
-
-// ==================== Menu Add/Edit Modal ====================
-function openMenuAddModal() {
-  openMenuFormModal(null);
-}
-function openMenuEditModal(product) {
-  openMenuFormModal(product);
-}
-
-function openMenuFormModal(product) {
-  const isEdit = !!product;
-  const modal  = document.getElementById('menuFormModal');
-  if (!modal) return;
-
-  const catOptions = Object.entries(CATEGORY_LABELS)
-    .map(([v, l]) => `<option value="${v}"${product?.category === v ? ' selected' : ''}>${escapeHtml(l)}</option>`)
-    .join('');
-
-  const typeOptions = PRODUCT_TYPES
-    .map(t => `<option value="${t.value}"${product?.productType === t.value ? ' selected' : ''}>${escapeHtml(t.label)}</option>`)
-    .join('');
-
-  modal.querySelector('.modal-box').innerHTML = `
-    <h3 class="modal-title">${isEdit ? '🖊 แก้ไขเมนู' : '＋ เพิ่มเมนูใหม่'}</h3>
-
-    <div class="menu-form-grid">
-      <div class="field">
-        <label class="field-label">ชื่อเมนู</label>
-        <input type="text" id="mfName" class="field-input" value="${escapeHtml(product?.name || '')}" placeholder="เช่น ข้าวซอยน่องไก่" maxlength="60">
-      </div>
-      <div class="field">
-        <label class="field-label">ราคา (฿)</label>
-        <input type="number" id="mfPrice" class="field-input" value="${product?.price ?? ''}" placeholder="0" min="0" step="1">
-      </div>
-      <div class="field">
-        <label class="field-label">หมวดหมู่</label>
-        <select id="mfCategory" class="field-input">${catOptions}</select>
-      </div>
-      <div class="field">
-        <label class="field-label">ประเภท (options)</label>
-        <select id="mfType" class="field-input">${typeOptions}</select>
-      </div>
-      <div class="field">
-        <label class="field-label">เลขรูปภาพ</label>
-        <input type="number" id="mfImage" class="field-input" value="${product?.imageNum ?? ''}" placeholder="เช่น 111" min="0">
-      </div>
-    </div>
-
-    <p id="menuFormError" class="login-error" aria-live="polite"></p>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-outline" id="menuFormCancel">ยกเลิก</button>
-      <button type="button" class="btn btn-primary" id="menuFormSave">${isEdit ? '💾 บันทึก' : '＋ เพิ่มเมนู'}</button>
-    </div>
-  `;
-
-  modal.setAttribute('aria-hidden', 'false');
-
-  document.getElementById('menuFormCancel').addEventListener('click', () => modal.setAttribute('aria-hidden', 'true'));
-  modal.addEventListener('click', (e) => { if (e.target === modal) modal.setAttribute('aria-hidden', 'true'); });
-
-  document.getElementById('menuFormSave').addEventListener('click', async () => {
-    const name     = document.getElementById('mfName').value.trim();
-    const price    = parseInt(document.getElementById('mfPrice').value, 10);
-    const category = document.getElementById('mfCategory').value;
-    const prodType = document.getElementById('mfType').value;
-    const imageNum = parseInt(document.getElementById('mfImage').value, 10) || 0;
-    const errEl    = document.getElementById('menuFormError');
-
-    if (!name)        { errEl.textContent = 'กรุณากรอกชื่อเมนู'; return; }
-    if (isNaN(price)) { errEl.textContent = 'กรุณากรอกราคา'; return; }
-    errEl.textContent = '';
-
-    const existing = isEdit ? allMenuData[product.id] : null;
-    const item = {
-      id:          isEdit ? product.id : generateMenuId(category),
-      name, price, category,
-      productType: prodType,
-      imageNum,
-      enabled:     existing?.enabled ?? true,
-      sortOrder:   existing?.sortOrder ?? (Object.keys(allMenuData).length + 1),
-    };
-
-    await saveMenuItem(db, item);
-    modal.setAttribute('aria-hidden', 'true');
-  });
 }
 
 // ==================== Init ====================
