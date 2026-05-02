@@ -367,6 +367,16 @@
   // auto print หลัง QR render เสร็จ
   setTimeout(() => window.print(), 900);
 <\/script>
+</body></html>`);
+    win.document.close();
+  };
+
+  generateBtn.addEventListener('click', generateQRs);
+
+  // auto-generate on load
+  generateQRs();
+})();
+</script>
 <script>
 (function() {
   function getTheme() { return localStorage.getItem('theme') || 'light'; }
@@ -385,16 +395,6 @@
     });
     applyTheme(getTheme());
   });
-})();
-<\/script>
-</body></html>`);
-    win.document.close();
-  };
-
-  generateBtn.addEventListener('click', generateQRs);
-
-  // auto-generate on load
-  generateQRs();
 })();
 </script>
 </body>
