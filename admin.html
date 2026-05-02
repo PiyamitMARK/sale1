@@ -154,33 +154,38 @@
       </div>
     </div>
   </div>
-
-  <!-- =============== MODAL: Add Item to Order =============== -->
-  <div class="modal" id="addItemModal" aria-hidden="true">
-    <div class="modal-box">
-      <h3 class="modal-title">🍽 เพิ่มเมนูในออเดอร์</h3>
-      <p class="modal-desc">เลือกเมนูที่ต้องการเพิ่ม</p>
-      <div id="addItemProductList" class="add-item-product-list"></div>
-      <p id="addItemToastMsg" class="add-item-toast"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="addItemCancel">ปิด</button>
-      </div>
-    </div>
   </div>
 
 
   <!-- =============== MODAL: Edit Order =============== -->
   <div class="modal" id="editOrderModal" aria-hidden="true">
-    <div class="modal-box" style="max-width:520px">
-      <h3 class="modal-title">✏️ แก้ไขออเดอร์</h3>
-      <p class="modal-desc" id="editOrderDesc"></p>
-      <div class="edit-order-batches" id="editOrderBatches"></div>
-      <div class="edit-order-grand-total" id="editOrderTotal"></div>
-      <p id="editOrderError" class="login-error" aria-live="polite"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="editOrderCancel">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" id="editOrderSave">💾 บันทึก</button>
+    <div class="modal-box" style="max-width:560px">
+
+      <!-- View: แก้ไขรายการ -->
+      <div id="editOrderView">
+        <h3 class="modal-title">✏️ แก้ไขออเดอร์</h3>
+        <p class="modal-desc" id="editOrderDesc"></p>
+        <div class="edit-order-batches" id="editOrderBatches"></div>
+        <div class="edit-order-grand-total" id="editOrderTotal"></div>
+        <p id="editOrderError" class="login-error" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="editOrderCancel">ยกเลิก</button>
+          <button type="button" class="btn btn-outline" id="editOpenAddView">＋ เพิ่มเมนู</button>
+          <button type="button" class="btn btn-primary" id="editOrderSave">💾 บันทึก</button>
+        </div>
       </div>
+
+      <!-- View: เพิ่มเมนู (inside edit modal) -->
+      <div id="editAddItemView" class="hidden">
+        <h3 class="modal-title">🍽 เพิ่มเมนูในออเดอร์</h3>
+        <p class="modal-desc" id="editAddItemDesc"></p>
+        <div id="editAddItemProductList" class="add-item-product-list"></div>
+        <p id="editAddItemToastMsg" class="add-item-toast"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="editBackToOrder">← กลับแก้ไข</button>
+        </div>
+      </div>
+
     </div>
   </div>
 

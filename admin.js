@@ -623,7 +623,6 @@ let allMenuData = {};
 onValue(ref(db, 'menu'), snap => { allMenuData = snap.val() || {}; });
 
 // ==================== Products (admin add-item) ====================
-// ใช้ allMenuData จาก Firebase แทน hardcode (ดูที่ renderAddItemList)
 
 const ADD_ITEM_CATEGORIES = [
   { id: 'all',    label: '🍽 ทั้งหมด' },
@@ -636,37 +635,29 @@ const ADD_ITEM_CATEGORIES = [
 let addItemActiveCategory = 'all';
 
 // ==================== Add Item Modal ====================
-let addItemTargetKey   = null;
-let addItemTargetOrder = null;
-let addItemToastTimer  = null;
+// ==================== Edit-modal inline Add Item ====================
+function renderEditAddItemList() {
+  const container = document.getElementById('editAddItemProductList');
+  if (!container) return;
 
-const addItemModal       = document.getElementById('addItemModal');
-const addItemProductList = document.getElementById('addItemProductList');
-const addItemCancel      = document.getElementById('addItemCancel');
-
-function openAddItemModal(firebaseKey, order) {
-  addItemTargetKey   = firebaseKey;
-  addItemTargetOrder = JSON.parse(JSON.stringify(order));
-  renderAddItemList();
-  addItemModal.setAttribute('aria-hidden', 'false');
-}
-
-function renderAddItemList() {
-  const allItems = getAllItems(addItemTargetOrder);
-
-  // ดึงจาก allMenuData (Firebase) แทน hardcode ALL_PRODUCTS
   const liveProducts = Object.values(allMenuData).filter(p => p.enabled !== false);
-  const filtered = addItemActiveCategory === 'all'
-    ? liveProducts
-    : liveProducts.filter(p => p.category === addItemActiveCategory);
+  const cats = [
+    { id: 'all',    label: '🍽 ทั้งหมด' },
+    { id: 'setkao', label: '🍱 เซ็ต' },
+    { id: 'kao',    label: '🍜 อาหาร' },
+    { id: 'nam',    label: '🥤 เครื่องดื่ม' },
+    { id: 'coffee', label: '☕ กาแฟ' },
+    { id: 'soda',   label: '🫧 โซดา' },
+  ];
+  const activeCat = container.dataset.cat || 'all';
+  const filtered  = activeCat === 'all' ? liveProducts : liveProducts.filter(p => p.category === activeCat);
+  const allItems  = (editOrderBatches || []).flat();
 
   const tabsHtml = `<div class="add-item-cat-tabs">${
-    ADD_ITEM_CATEGORIES.map(cat =>
-      `<button type="button" class="add-item-cat-btn${addItemActiveCategory === cat.id ? ' active' : ''}" data-cat="${cat.id}">${escapeHtml(cat.label)}</button>`
-    ).join('')
+    cats.map(c => `<button type="button" class="add-item-cat-btn${activeCat === c.id ? ' active' : ''}" data-cat="${c.id}">${escapeHtml(c.label)}</button>`).join('')
   }</div>`;
 
-  const productsHtml = `<div class="add-item-product-grid">${
+  const gridHtml = `<div class="add-item-product-grid">${
     filtered.map(p => {
       const existing = allItems.find(i => i.name === p.name);
       const qty      = existing ? existing.qty : 0;
@@ -678,69 +669,42 @@ function renderAddItemList() {
     }).join('')
   }</div>`;
 
-  addItemProductList.innerHTML = tabsHtml + productsHtml;
+  container.innerHTML = tabsHtml + gridHtml;
 
-  addItemProductList.querySelectorAll('.add-item-cat-btn').forEach(btn => {
+  container.querySelectorAll('.add-item-cat-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      addItemActiveCategory = btn.dataset.cat;
-      renderAddItemList();
+      container.dataset.cat = btn.dataset.cat;
+      renderEditAddItemList();
     });
   });
-  addItemProductList.querySelectorAll('.add-item-product-btn').forEach(btn => {
-    btn.addEventListener('click', () => addItemToOrder(btn.dataset));
+
+  container.querySelectorAll('.add-item-product-btn').forEach(btn => {
+    btn.addEventListener('click', () => addItemToEditOrder(btn.dataset));
   });
 }
 
-function closeAddItemModal() {
-  addItemModal.setAttribute('aria-hidden', 'true');
-  addItemTargetKey      = null;
-  addItemTargetOrder    = null;
-  addItemActiveCategory = 'all';
-  if (addItemToastTimer) { clearTimeout(addItemToastTimer); addItemToastTimer = null; }
-  const toast = document.getElementById('addItemToastMsg');
-  if (toast) { toast.textContent = ''; toast.classList.remove('show'); }
-}
+function addItemToEditOrder({ name, price }) {
+  if (!editOrderBatches) return;
 
-async function addItemToOrder({ name, price }) {
-  if (!addItemTargetKey || !addItemTargetOrder) return;
-
-  // Admin เพิ่มของเข้า batch สุดท้าย (หรือสร้าง batch ใหม่)
-  const batches = addItemTargetOrder.batches
-    ? JSON.parse(JSON.stringify(addItemTargetOrder.batches))
-    : [JSON.parse(JSON.stringify(addItemTargetOrder.items || []))];
-
-  const lastBatch = batches[batches.length - 1] || [];
-  const existing  = lastBatch.find(i => i.name === name);
+  const lastBatch  = editOrderBatches[editOrderBatches.length - 1] || [];
+  const existing   = lastBatch.find(i => i.name === name);
   if (existing) {
     existing.qty += 1;
   } else {
     lastBatch.push({ name, price: parseFloat(price), qty: 1 });
   }
-  batches[batches.length - 1] = lastBatch;
+  editOrderBatches[editOrderBatches.length - 1] = lastBatch;
 
-  const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
-  addItemTargetOrder.batches = batches;
-  addItemTargetOrder.total   = newTotal;
-
-  try {
-    await update(ref(db, `orders/${addItemTargetKey}`), {
-      batches,
-      total: newTotal,
-    });
-  } catch (err) {
-    console.error('addItemToOrder error:', err);
-    return;
-  }
-
-  const toast = document.getElementById('addItemToastMsg');
+  // toast
+  const toast = document.getElementById('editAddItemToastMsg');
   if (toast) {
-    toast.textContent = `✅ เพิ่ม "${escapeHtml(name)}" แล้ว`;
+    toast.textContent = `✅ เพิ่ม "${name}" แล้ว`;
     toast.className   = 'add-item-toast show';
-    if (addItemToastTimer) clearTimeout(addItemToastTimer);
-    addItemToastTimer = setTimeout(() => { toast.className = 'add-item-toast'; }, 2000);
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => { toast.className = 'add-item-toast'; }, 2000);
   }
 
-  renderAddItemList();
+  renderEditAddItemList();   // refresh badge
 }
 
 // ==================== Edit Order Modal ====================
@@ -760,8 +724,12 @@ function openEditOrderModal(firebaseKey, order) {
   editOrderBatches = JSON.parse(JSON.stringify(
     order.batches || [order.items || []]
   ));
-  editOrderDesc.textContent = `ออเดอร์ #${order.orderNumber} — โต๊ะ ${order.table || '-'}`;
+  const label = `ออเดอร์ #${order.orderNumber} — โต๊ะ ${order.table || '-'}`;
+  editOrderDesc.textContent = label;
+  const editAddItemDesc = document.getElementById('editAddItemDesc');
+  if (editAddItemDesc) editAddItemDesc.textContent = label;
   editOrderError.textContent = '';
+  showEditView('order');
   renderEditOrderBatches();
   editOrderModal.setAttribute('aria-hidden', 'false');
 }
@@ -770,6 +738,20 @@ function closeEditOrderModal() {
   editOrderModal.setAttribute('aria-hidden', 'true');
   editOrderKey     = null;
   editOrderBatches = null;
+}
+
+function showEditView(view) {
+  const orderView   = document.getElementById('editOrderView');
+  const addItemView = document.getElementById('editAddItemView');
+  if (!orderView || !addItemView) return;
+  if (view === 'order') {
+    orderView.classList.remove('hidden');
+    addItemView.classList.add('hidden');
+  } else {
+    orderView.classList.add('hidden');
+    addItemView.classList.remove('hidden');
+    renderEditAddItemList();
+  }
 }
 
 function calcEditTotal() {
@@ -881,10 +863,11 @@ editOrderSave?.addEventListener('click', async () => {
 editOrderCancel?.addEventListener('click', closeEditOrderModal);
 editOrderModal?.addEventListener('click', (e) => { if (e.target === editOrderModal) closeEditOrderModal(); });
 
+document.getElementById('editOpenAddView')?.addEventListener('click', () => showEditView('add'));
+document.getElementById('editBackToOrder')?.addEventListener('click', () => showEditView('order'));
+
 // ──────────────────────────────────────────────────────────────────────────────
 
-if (addItemCancel) addItemCancel.addEventListener('click', closeAddItemModal);
-if (addItemModal)  addItemModal.addEventListener('click', (e) => { if (e.target === addItemModal) closeAddItemModal(); });
 
 // ==================== Render Summary ====================
 function renderDailySummary() {
@@ -1013,7 +996,6 @@ function renderOrders() {
             <span class="order-card-date">${formatDate(order.date)}</span>
             <div class="order-actions">
               ${actionBtns}
-              <button type="button" class="btn-add-item" data-key="${order.firebaseKey}">+ เพิ่มเมนู</button>
               <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
               <button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>
               <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
@@ -1039,11 +1021,6 @@ function renderOrders() {
   ordersList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
   });
-  ordersList.querySelectorAll('.btn-add-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
-      if (order) openAddItemModal(btn.dataset.key, order);
-    });
   });
   ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1341,7 +1318,7 @@ function renderTakeawayOrders() {
             <span class="order-card-date">${formatDate(order.date)}</span>
             <div class="order-actions">
               ${actionBtns}
-              <button type="button" class="btn-add-item" data-key="${order.firebaseKey}">+ เพิ่มเมนู</button>
+              <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
               <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
             </div>
           </div>
@@ -1365,11 +1342,10 @@ function renderTakeawayOrders() {
   taList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
   });
-  taList.querySelectorAll('.btn-add-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
-      if (order) openAddItemModal(btn.dataset.key, order);
-    });
+  });
+  taList.querySelectorAll('.btn-edit-order').forEach((btn) => {
+    const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+    btn.addEventListener('click', () => { if (order) openEditOrderModal(btn.dataset.key, order); });
   });
   taList.querySelectorAll('.btn-delete').forEach((btn) => {
     btn.addEventListener('click', () => deleteOrder(btn.dataset.key, btn.dataset.num));
