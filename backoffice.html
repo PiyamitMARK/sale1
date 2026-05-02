@@ -71,6 +71,7 @@ body {
 .bo-shell {
   display: flex;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* ---- Sidebar ---- */
@@ -178,7 +179,7 @@ body {
    PANELS (each feature = .bo-panel)
    ============================================================ */
 .bo-panel { display: none; flex-direction: column; gap: 1.25rem; }
-.bo-panel.active { display: flex; animation: panelIn .25s ease both; }
+.bo-panel.active { display: flex !important; animation: panelIn .25s ease both; }
 @keyframes panelIn {
   from { opacity:0; transform:translateY(8px); }
   to   { opacity:1; transform:translateY(0); }
@@ -1532,7 +1533,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       <!-- =========================================================
            PANEL: QR โต๊ะ
            ========================================================= -->
-      <div class="bo-panel" id="panelQr" style="display:none">
+      <div class="bo-panel" id="panelQr">
         <div class="bo-panel-heading">
           <div>
             <div class="bo-panel-title">📱 QR Code โต๊ะ</div>
@@ -1715,11 +1716,11 @@ let activePanelId = 'export';
 function switchPanel(id) {
   document.querySelectorAll('.bo-panel').forEach(p => {
     p.classList.remove('active');
-    p.style.display = 'none';
+    p.style.display = '';
   });
   document.querySelectorAll('.bo-nav-item[data-panel]').forEach(b => b.classList.remove('active'));
   const panel = document.getElementById('panel' + id.charAt(0).toUpperCase() + id.slice(1));
-  if (panel) { panel.style.display = 'flex'; panel.classList.add('active'); }
+  if (panel) { panel.style.display = ''; panel.classList.add('active'); }
   document.querySelector(`.bo-nav-item[data-panel="${id}"]`)?.classList.add('active');
   document.getElementById('topbarTitle').textContent = PANEL_TITLES[id] || id;
   activePanelId = id;
