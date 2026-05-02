@@ -998,6 +998,39 @@ body {
   transform: scale(0.95);
 }
 
+/* ================================================ PAYMENT METHOD */
+.payment-method-section {
+  margin: 0.75rem 0 0.5rem;
+  border-top: 1.5px solid var(--cream-dark);
+  padding-top: 0.75rem;
+}
+.payment-method-label {
+  font-size: 0.82rem; font-weight: 700; color: var(--brown-light);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 0.55rem;
+}
+.payment-method-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.payment-option { cursor: pointer; }
+.payment-option input[type="radio"] { display: none; }
+.payment-option-card {
+  display: flex; align-items: center; gap: 0.45rem;
+  border: 2px solid var(--cream-dark); border-radius: 10px;
+  padding: 0.5rem 0.7rem; background: var(--white);
+  transition: border-color 0.2s, background 0.2s;
+  user-select: none;
+}
+.payment-option-icon { font-size: 1.1rem; }
+.payment-option-text { font-size: 0.82rem; font-weight: 600; color: var(--brown-mid); }
+.payment-option input[type="radio"]:checked + .payment-option-card {
+  border-color: var(--accent); background: #fff8f0;
+}
+.payment-option input[type="radio"]:checked + .payment-option-card .payment-option-text {
+  color: var(--accent);
+}
+
 /* ================================================ DARK MODE */
 [data-theme="dark"] {
   --cream:        #1a1310;
@@ -1020,14 +1053,11 @@ body {
 [data-theme="dark"] .product-card { background: #2a1f18; }
 [data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
 [data-theme="dark"] .receipt { background: #231a15; color: var(--brown); }
-
-/* Dark Mode Toggle Button */
+[data-theme="dark"] .payment-option-card { background: #2a1f18; }
 .dark-toggle {
   font-size: 1.1rem; padding: 0.3rem 0.6rem;
   border-radius: var(--radius-pill);
   background: var(--cream-mid); border: 1.5px solid var(--cream-dark);
-  cursor: pointer; transition: background 0.2s;
-  color: var(--brown);
+  cursor: pointer; transition: background 0.2s; color: var(--brown);
 }
 .dark-toggle:hover { background: var(--cream-dark); }
-[data-theme="dark"] .dark-toggle { background: var(--cream-dark); }

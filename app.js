@@ -607,7 +607,7 @@ async function loadOrderNumber() {
 
 // ==================== Firebase: Save Order (batch-aware) ====================
 // คืนค่า { allBatches, grandTotal } เพื่อให้ receipt แสดงยอดรวมทั้ง order
-async function saveOrder() {
+async function saveOrder(paymentMethod = 'cash') {
   const today = new Date().toISOString().slice(0, 10);
   const batchItems = cart.map((i) => ({
     name: i.name,
@@ -654,6 +654,7 @@ async function saveOrder() {
       batches: [batchItems],
       total,
       status: 'pending',
+      paymentMethod,
     };
 
     const newRef = await push(ref(db, 'orders'), order);
@@ -800,10 +801,11 @@ receiptModal.addEventListener('click', (e) => {
 
 confirmOrderOk.addEventListener('click', async () => {
   confirmOrderOk.disabled = true;
+  const selectedPayment = document.querySelector('input[name="paymentMethod"]:checked')?.value || 'cash';
   closeConfirmOrderModal();
   let receiptData;
   try {
-    receiptData = await saveOrder();
+    receiptData = await saveOrder(selectedPayment);
   } catch (err) {
     console.error('saveOrder error:', err);
     alert('เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาตรวจสอบการเชื่อมต่อ');

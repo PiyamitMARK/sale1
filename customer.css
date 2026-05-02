@@ -440,6 +440,59 @@ body {
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+
+/* ================================================ STATUS TIMELINE */
+.cust-kitchen-bar {
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.cust-kitchen-top-row {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; gap: 0.75rem;
+}
+.cust-status-timeline {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; gap: 0;
+  padding: 0.1rem 0 0.25rem;
+}
+.cust-status-step {
+  display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
+  flex-shrink: 0;
+}
+.cust-step-dot {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--cream-dark); border: 2.5px solid var(--cream-dark);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.35s, border-color 0.35s, transform 0.25s;
+}
+.cust-step-icon { font-size: 1rem; line-height: 1; }
+.cust-step-label {
+  font-size: 0.68rem; font-weight: 600; color: #a8917f;
+  white-space: nowrap; transition: color 0.3s;
+}
+.cust-step-line {
+  flex: 1; height: 3px; background: var(--cream-dark);
+  border-radius: 2px; margin: 0 3px; margin-bottom: 18px;
+  transition: background 0.4s;
+}
+.cust-step-line.filled { background: #66bb6a; }
+.cust-status-step.done .cust-step-dot {
+  background: #c8e6c9; border-color: #66bb6a;
+}
+.cust-status-step.done .cust-step-label { color: #388e3c; }
+.cust-status-step.active .cust-step-dot {
+  background: var(--accent); border-color: var(--accent);
+  transform: scale(1.18);
+  box-shadow: 0 0 0 4px rgba(200,133,58,0.2);
+  animation: stepPulse 1.6s ease-in-out infinite;
+}
+.cust-status-step.active .cust-step-label {
+  color: var(--accent); font-weight: 700;
+}
+@keyframes stepPulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(200,133,58,0.2); }
+  50%       { box-shadow: 0 0 0 8px rgba(200,133,58,0.08); }
+}
 /* ================================================ HISTORY BTN (header) */
 .cust-header-right-row {
   display: flex; align-items: center; gap: 0.55rem;
@@ -599,8 +652,6 @@ body {
 [data-theme="dark"] .cust-kitchen-bar.status-served  { background: #10201a; }
 [data-theme="dark"] .cust-step-dot { background: #3a2a20; border-color: #3a2a20; }
 [data-theme="dark"] .field-input { background: #1a1310; color: var(--brown); border-color: var(--cream-dark); }
-
-/* Dark Mode Toggle Button */
 .cust-dark-btn {
   background: none; border: 1.5px solid var(--cream-dark);
   border-radius: var(--radius-pill); font-size: 1rem;
@@ -608,4 +659,3 @@ body {
   color: var(--brown); transition: background 0.2s;
 }
 .cust-dark-btn:hover { background: var(--cream-dark); }
-[data-theme="dark"] .cust-dark-btn { border-color: var(--cream-dark); }

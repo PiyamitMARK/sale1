@@ -352,7 +352,14 @@ function startCallStaffListener() {
   knownCallKeys = new Set();
 
   callStaffUnsubscribe = onValue(ref(db, 'callStaff'), snap => {
-    if (!snap.exists()) { knownCallKeys = new Set(); return; }
+    if (!snap.exists()) { knownCallKeys = new Set(); callLogEntries = []; updateCallLogBadge(); return; }
+    // rebuild log entries
+    callLogEntries = [];
+    snap.forEach(child => {
+      callLogEntries.push({ tableKey: child.key, ...child.val() });
+    });
+    updateCallLogBadge();
+    // toast เฉพาะ pending ที่ยังไม่เคยเห็น
     snap.forEach(child => {
       const key  = child.key;
       const data = child.val();
@@ -362,6 +369,7 @@ function startCallStaffListener() {
         playCallAlert();
       }
     });
+    if (!document.getElementById('tabCallLog')?.classList.contains('hidden')) renderCallLog();
   });
 }
 
@@ -388,10 +396,85 @@ function showCallStaffToast(data, tableKey) {
   document.body.appendChild(toast);
   closeBtn.addEventListener('click', () => toast.remove());
   ackBtn.addEventListener('click', async () => {
-    try { await update(ref(db, `callStaff/${tableKey}`), { done: true }); } catch(e) {}
+    try {
+      await update(ref(db, `callStaff/${tableKey}`), { done: true });
+      const entry = callLogEntries.find(e => e.tableKey === tableKey);
+      if (entry) entry.done = true;
+      updateCallLogBadge();
+      if (!document.getElementById('tabCallLog')?.classList.contains('hidden')) renderCallLog();
+    } catch(e) {}
     toast.remove();
   });
 }
+
+
+// ==================== Call Log ====================
+let callLogEntries = [];
+
+function updateCallLogBadge() {
+  const badge = document.getElementById('callLogBadge');
+  if (!badge) return;
+  const pending = callLogEntries.filter(e => !e.done).length;
+  badge.textContent = pending;
+  badge.classList.toggle('hidden', pending === 0);
+}
+
+function renderCallLog() {
+  const list  = document.getElementById('callLogList');
+  const empty = document.getElementById('callLogEmpty');
+  if (!list) return;
+  const todayStr = new Date().toDateString();
+  const todayEntries = callLogEntries
+    .filter(e => new Date(e.time).toDateString() === todayStr)
+    .sort((a, b) => new Date(b.time) - new Date(a.time));
+  if (todayEntries.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  list.innerHTML = todayEntries.map(e => {
+    const timeStr = new Date(e.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const cls   = e.done ? 'call-log-item done' : 'call-log-item pending';
+    const badge = e.done
+      ? '<span class="call-log-status done">✓ รับทราบแล้ว</span>'
+      : '<span class="call-log-status pending">🔔 รอรับทราบ</span>';
+    return `
+      <div class="${cls}">
+        <div class="call-log-item-left">
+          <span class="call-log-table">โต๊ะ ${sanitizeNum(e.table)}</span>
+          ${e.orderNumber ? `<span class="call-log-order">#${sanitizeNum(e.orderNumber)}</span>` : ''}
+        </div>
+        <div class="call-log-item-right">
+          ${badge}
+          <span class="call-log-time">${timeStr}</span>
+          ${!e.done ? `<button class="call-log-ack-btn" data-key="${e.tableKey}">✓ รับทราบ</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+  list.querySelectorAll('.call-log-ack-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        await update(ref(db, `callStaff/${btn.dataset.key}`), { done: true });
+        const entry = callLogEntries.find(e => e.tableKey === btn.dataset.key);
+        if (entry) entry.done = true;
+        renderCallLog();
+        updateCallLogBadge();
+      } catch(err) { console.error(err); }
+    });
+  });
+}
+
+document.getElementById('clearCallLogBtn')?.addEventListener('click', async () => {
+  if (!confirm('ล้างประวัติการเรียกพนักงานทั้งหมด?')) return;
+  try {
+    await set(ref(db, 'callStaff'), null);
+    callLogEntries = [];
+    knownCallKeys  = new Set();
+    renderCallLog();
+    updateCallLogBadge();
+  } catch(err) { console.error(err); }
+});
 
 function startRealtimeListener() {
   if (unsubscribeListener) unsubscribeListener();
@@ -832,6 +915,7 @@ function renderOrders() {
               ${order.table ? `<span class="order-table-chip">โต๊ะ ${escapeHtml(String(order.table))}</span>` : ''}
               ${batches.length > 1 ? `<span class="order-batch-chip">${batches.length} รอบ</span>` : ''}
               ${fromQR ? `<span class="order-qr-badge">📱 QR</span>` : ''}
+              ${order.paymentMethod ? `<span class="order-payment-badge">${{ cash:'💵 เงินสด', qr:'📱 QR', credit:'💳 บัตร', transfer:'🏦 โอน' }[order.paymentMethod] || order.paymentMethod}</span>` : ''}
             </h3>
             <span class="status-badge ${statusCls}">${statusLabel}</span>
           </div>
@@ -931,6 +1015,7 @@ function renderHistory() {
 
 // ==================== Tabs ====================
 const tabTakeaway = document.getElementById('tabTakeaway');
+const tabCallLog  = document.getElementById('tabCallLog');
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach((t) =>
@@ -939,7 +1024,9 @@ function switchTab(tabId) {
   tabRecent.classList.toggle('hidden',    tabId !== 'recent');
   tabHistory.classList.toggle('hidden',   tabId !== 'history');
   tabTakeaway.classList.toggle('hidden',  tabId !== 'takeaway');
+  tabCallLog.classList.toggle('hidden',   tabId !== 'calllog');
   if (tabId === 'takeaway') renderTakeawayQrPanel();
+  if (tabId === 'calllog')  renderCallLog();
 }
 
 // ==================== Takeaway QR Panel ====================

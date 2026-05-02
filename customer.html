@@ -43,11 +43,35 @@
 
     <!-- Kitchen status bar (real-time) -->
     <div class="cust-kitchen-bar hidden" id="kitchenBar">
-      <div class="cust-kitchen-left">
-        <span class="cust-kitchen-icon" id="kitchenIcon">⏳</span>
-        <span class="cust-kitchen-msg" id="kitchenMsg">รอดำเนินการ</span>
+      <div class="cust-kitchen-top-row">
+        <div class="cust-kitchen-left">
+          <span class="cust-kitchen-icon" id="kitchenIcon">⏳</span>
+          <span class="cust-kitchen-msg" id="kitchenMsg">รอดำเนินการ</span>
+        </div>
+        <button class="cust-call-btn" id="callStaffBtn">🔔 เรียกพนักงาน</button>
       </div>
-      <button class="cust-call-btn" id="callStaffBtn">🔔 เรียกพนักงาน</button>
+      <!-- Order Status Timeline -->
+      <div class="cust-status-timeline" id="statusTimeline">
+        <div class="cust-status-step" data-step="pending">
+          <div class="cust-step-dot"><span class="cust-step-icon">⏳</span></div>
+          <div class="cust-step-label">รอรับ</div>
+        </div>
+        <div class="cust-step-line" id="stepLine1"></div>
+        <div class="cust-status-step" data-step="cooking">
+          <div class="cust-step-dot"><span class="cust-step-icon">👨‍🍳</span></div>
+          <div class="cust-step-label">กำลังทำ</div>
+        </div>
+        <div class="cust-step-line" id="stepLine2"></div>
+        <div class="cust-status-step" data-step="served">
+          <div class="cust-step-dot"><span class="cust-step-icon">🍽</span></div>
+          <div class="cust-step-label">เสิร์ฟแล้ว</div>
+        </div>
+        <div class="cust-step-line" id="stepLine3"></div>
+        <div class="cust-status-step" data-step="paid">
+          <div class="cust-step-dot"><span class="cust-step-icon">✅</span></div>
+          <div class="cust-step-label">ชำระแล้ว</div>
+        </div>
+      </div>
     </div>
     <div class="cust-call-toast hidden" id="callToast">✅ แจ้งพนักงานแล้ว กรุณารอสักครู่</div>
 

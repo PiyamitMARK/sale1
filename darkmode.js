@@ -1,7 +1,4 @@
-// ==================== Dark Mode ====================
-// ใช้ร่วมกันทั้ง index.html, customer.html, admin.html
-// จำ preference ใน localStorage key 'theme'
-
+// ==================== Dark Mode (shared) ====================
 const STORAGE_KEY = 'theme';
 
 function getTheme() {
@@ -20,14 +17,11 @@ function toggleTheme() {
   applyTheme(next);
 }
 
-// apply ทันทีก่อน render เพื่อป้องกัน flash of light mode
 applyTheme(getTheme());
 
-// bind ปุ่มหลังจาก DOM ready
 document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('darkToggleBtn');
   if (btn) btn.addEventListener('click', toggleTheme);
-  // apply อีกรอบ เพื่อให้ icon ถูกต้อง
   applyTheme(getTheme());
 });
 

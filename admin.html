@@ -89,6 +89,7 @@
         <button class="tab-btn active" data-tab="recent">รายการล่าสุด</button>
         <button class="tab-btn" data-tab="takeaway">📦 กลับบ้าน</button>
         <button class="tab-btn" data-tab="history">ย้อนหลัง 1 เดือน</button>
+        <button class="tab-btn" data-tab="calllog" id="callLogTab">🔔 เรียกพนักงาน <span class="call-log-badge hidden" id="callLogBadge">0</span></button>
       </nav>
 
       <!-- Tab: Recent -->
@@ -128,6 +129,19 @@
         <div id="historyEmpty" class="empty-state hidden">
           <p class="empty-icon">📅</p>
           <p>ไม่มีข้อมูลย้อนหลัง</p>
+        </div>
+      </div>
+
+      <!-- Tab: Call Log -->
+      <div id="tabCallLog" class="tab-panel hidden">
+        <div class="call-log-toolbar">
+          <span class="call-log-toolbar-title">📋 ประวัติการเรียกพนักงานวันนี้</span>
+          <button type="button" class="btn btn-outline btn-sm" id="clearCallLogBtn">🗑 ล้างประวัติ</button>
+        </div>
+        <div id="callLogList" class="call-log-list"></div>
+        <div id="callLogEmpty" class="empty-state hidden">
+          <p class="empty-icon">🔔</p>
+          <p>ยังไม่มีการเรียกพนักงาน</p>
         </div>
       </div>
 

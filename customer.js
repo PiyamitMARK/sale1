@@ -409,6 +409,8 @@ function startKitchenStatusWatcher(orderKey) {
   });
 }
 
+const STATUS_ORDER = ['pending', 'cooking', 'served', 'paid'];
+
 function updateKitchenBar(status) {
   const bar  = document.getElementById('kitchenBar');
   const icon = document.getElementById('kitchenIcon');
@@ -419,6 +421,18 @@ function updateKitchenBar(status) {
   msg.textContent  = info.msg;
   bar.className    = 'cust-kitchen-bar' + (info.cls ? ' ' + info.cls : '');
   bar.classList.remove('hidden');
+
+  // อัปเดต timeline steps
+  const currentIdx = STATUS_ORDER.indexOf(status);
+  document.querySelectorAll('.cust-status-step').forEach((step, i) => {
+    step.classList.remove('active', 'done');
+    if (i < currentIdx)        step.classList.add('done');
+    else if (i === currentIdx) step.classList.add('active');
+  });
+  ['stepLine1', 'stepLine2', 'stepLine3'].forEach((id, i) => {
+    const line = document.getElementById(id);
+    if (line) line.classList.toggle('filled', i < currentIdx);
+  });
 }
 
 function hideKitchenBar() {
@@ -461,10 +475,19 @@ document.getElementById('callStaffBtn').addEventListener('click', async () => {
     console.error('callStaff error:', err);
   }
 
-  // cooldown 30 วิ ป้องกันกดซ้ำ
+  // cooldown 30 วิ ป้องกันกดซ้ำ + countdown
+  let remaining = 30;
+  const btn2 = document.getElementById('callStaffBtn');
+  const origText = btn2 ? btn2.textContent : '🔔 เรียกพนักงาน';
+  const countdownInterval = setInterval(() => {
+    remaining--;
+    if (btn2) btn2.textContent = `⏳ ${remaining}s`;
+    if (remaining <= 0) clearInterval(countdownInterval);
+  }, 1000);
   setTimeout(() => {
     callCooldown = false;
-    btn.disabled = false;
+    if (btn2) { btn2.disabled = false; btn2.textContent = origText; }
+    clearInterval(countdownInterval);
   }, 30000);
 });
 

@@ -23,7 +23,7 @@
           <span id="currentDate" class="date-text"></span>
           <span class="order-chip">ออเดอร์ #<span id="orderNumber">1001</span><span id="tableChip"></span></span>
         </div>
-        <button type="button" class="btn btn-ghost dark-toggle" id="darkToggleBtn" title="เปิด/ปิด Dark Mode">🌙</button>
+        <button type="button" class="btn btn-ghost dark-toggle" id="darkToggleBtn" title="Dark Mode">🌙</button>
         <a href="admin.html" class="admin-btn" title="หน้าแอดมิน">⚙️</a>
       </div>
     </header>
@@ -107,6 +107,42 @@
         <p id="confirmTableLabel" class="confirm-table-label"></p>
         <div class="confirm-order-list" id="confirmOrderList"></div>
         <div class="confirm-total" id="confirmTotal"></div>
+
+        <!-- Payment Method -->
+        <div class="payment-method-section">
+          <p class="payment-method-label">💳 วิธีชำระเงิน</p>
+          <div class="payment-method-grid">
+            <label class="payment-option">
+              <input type="radio" name="paymentMethod" value="cash" checked>
+              <span class="payment-option-card">
+                <span class="payment-option-icon">💵</span>
+                <span class="payment-option-text">เงินสด</span>
+              </span>
+            </label>
+            <label class="payment-option">
+              <input type="radio" name="paymentMethod" value="qr">
+              <span class="payment-option-card">
+                <span class="payment-option-icon">📱</span>
+                <span class="payment-option-text">QR / PromptPay</span>
+              </span>
+            </label>
+            <label class="payment-option">
+              <input type="radio" name="paymentMethod" value="credit">
+              <span class="payment-option-card">
+                <span class="payment-option-icon">💳</span>
+                <span class="payment-option-text">บัตรเครดิต</span>
+              </span>
+            </label>
+            <label class="payment-option">
+              <input type="radio" name="paymentMethod" value="transfer">
+              <span class="payment-option-card">
+                <span class="payment-option-icon">🏦</span>
+                <span class="payment-option-text">โอนธนาคาร</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" id="confirmOrderCancel">ยกเลิก</button>
           <button type="button" class="btn btn-primary" id="confirmOrderOk">✓ ยืนยัน</button>
