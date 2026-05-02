@@ -735,6 +735,146 @@ async function addItemToOrder({ name, price }) {
   renderAddItemList();
 }
 
+// ==================== Edit Order Modal ====================
+let editOrderKey     = null;
+let editOrderBatches = null; // deep copy ที่ user กำลังแก้
+
+const editOrderModal  = document.getElementById('editOrderModal');
+const editOrderDesc   = document.getElementById('editOrderDesc');
+const editBatchesEl   = document.getElementById('editOrderBatches');
+const editOrderTotEl  = document.getElementById('editOrderTotal');
+const editOrderError  = document.getElementById('editOrderError');
+const editOrderCancel = document.getElementById('editOrderCancel');
+const editOrderSave   = document.getElementById('editOrderSave');
+
+function openEditOrderModal(firebaseKey, order) {
+  editOrderKey     = firebaseKey;
+  editOrderBatches = JSON.parse(JSON.stringify(
+    order.batches || [order.items || []]
+  ));
+  editOrderDesc.textContent = `ออเดอร์ #${order.orderNumber} — โต๊ะ ${order.table || '-'}`;
+  editOrderError.textContent = '';
+  renderEditOrderBatches();
+  editOrderModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeEditOrderModal() {
+  editOrderModal.setAttribute('aria-hidden', 'true');
+  editOrderKey     = null;
+  editOrderBatches = null;
+}
+
+function calcEditTotal() {
+  return (editOrderBatches || []).flat().reduce((s, i) => s + i.price * i.qty, 0);
+}
+
+function renderEditOrderBatches() {
+  if (!editBatchesEl) return;
+
+  editBatchesEl.innerHTML = editOrderBatches.map((batch, bIdx) => {
+    const batchLabel = editOrderBatches.length > 1 ? `รอบที่ ${bIdx + 1}` : 'รายการ';
+    const rowsHtml = batch.map((item, iIdx) => `
+      <div class="edit-item-row" data-batch="${bIdx}" data-item="${iIdx}">
+        <div class="edit-item-name">
+          ${escapeHtml(item.name)}
+          ${item.option ? `<span class="edit-item-option"> · ${escapeHtml(item.option)}</span>` : ''}
+        </div>
+        <div class="edit-item-controls">
+          <button type="button" class="edit-qty-btn edit-qty-dec" data-batch="${bIdx}" data-item="${iIdx}" title="ลด">−</button>
+          <span class="edit-qty-num">${item.qty}</span>
+          <button type="button" class="edit-qty-btn edit-qty-inc" data-batch="${bIdx}" data-item="${iIdx}" title="เพิ่ม">+</button>
+          <span class="edit-item-price">${formatMoney(item.price * item.qty)}</span>
+          <button type="button" class="edit-del-btn" data-batch="${bIdx}" data-item="${iIdx}" title="ลบรายการนี้">🗑</button>
+        </div>
+      </div>
+    `).join('');
+
+    const batchTotal = batch.reduce((s, i) => s + i.price * i.qty, 0);
+    return `
+      <div class="edit-batch-group">
+        ${editOrderBatches.length > 1
+          ? `<div class="edit-batch-label">🍽 ${escapeHtml(batchLabel)}</div>`
+          : ''}
+        <div class="edit-batch-items">
+          ${batch.length === 0
+            ? `<p class="edit-batch-empty">— ลบหมดแล้ว (บันทึกเพื่อยืนยัน) —</p>`
+            : rowsHtml}
+        </div>
+        ${editOrderBatches.length > 1 && batch.length > 0
+          ? `<div class="edit-batch-subtotal">รอบนี้: ${formatMoney(batchTotal)}</div>`
+          : ''}
+      </div>`;
+  }).join('');
+
+  // grand total
+  editOrderTotEl.innerHTML =
+    `<span>รวมทั้งหมด</span><span class="edit-total-amt">${formatMoney(calcEditTotal())}</span>`;
+
+  // bind buttons
+  editBatchesEl.querySelectorAll('.edit-qty-dec').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const b = +btn.dataset.batch, i = +btn.dataset.item;
+      if (editOrderBatches[b][i].qty > 1) {
+        editOrderBatches[b][i].qty -= 1;
+      } else {
+        // qty เป็น 0 → ลบออก
+        editOrderBatches[b].splice(i, 1);
+      }
+      renderEditOrderBatches();
+    });
+  });
+  editBatchesEl.querySelectorAll('.edit-qty-inc').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const b = +btn.dataset.batch, i = +btn.dataset.item;
+      editOrderBatches[b][i].qty += 1;
+      renderEditOrderBatches();
+    });
+  });
+  editBatchesEl.querySelectorAll('.edit-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const b = +btn.dataset.batch, i = +btn.dataset.item;
+      if (!confirm(`ลบ "${editOrderBatches[b][i].name}" ออกจากออเดอร์?`)) return;
+      editOrderBatches[b].splice(i, 1);
+      renderEditOrderBatches();
+    });
+  });
+}
+
+editOrderSave?.addEventListener('click', async () => {
+  if (!editOrderKey) return;
+
+  // ตรวจ: ต้องมีอย่างน้อย 1 รายการ
+  const totalItems = editOrderBatches.flat().length;
+  if (totalItems === 0) {
+    editOrderError.textContent = '⚠️ ต้องมีอย่างน้อย 1 รายการ — ใช้ปุ่ม "ลบออเดอร์" แทน';
+    return;
+  }
+
+  editOrderError.textContent = '';
+  editOrderSave.disabled = true;
+  editOrderSave.textContent = 'กำลังบันทึก...';
+
+  try {
+    const newTotal = calcEditTotal();
+    await update(ref(db, `orders/${editOrderKey}`), {
+      batches: editOrderBatches,
+      total:   newTotal,
+    });
+    closeEditOrderModal();
+  } catch (err) {
+    console.error('editOrderSave error:', err);
+    editOrderError.textContent = '❌ บันทึกไม่สำเร็จ: ' + err.message;
+  } finally {
+    editOrderSave.disabled = false;
+    editOrderSave.textContent = '💾 บันทึก';
+  }
+});
+
+editOrderCancel?.addEventListener('click', closeEditOrderModal);
+editOrderModal?.addEventListener('click', (e) => { if (e.target === editOrderModal) closeEditOrderModal(); });
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 if (addItemCancel) addItemCancel.addEventListener('click', closeAddItemModal);
 if (addItemModal)  addItemModal.addEventListener('click', (e) => { if (e.target === addItemModal) closeAddItemModal(); });
 
@@ -866,6 +1006,7 @@ function renderOrders() {
             <div class="order-actions">
               ${actionBtns}
               <button type="button" class="btn-add-item" data-key="${order.firebaseKey}">+ เพิ่มเมนู</button>
+              <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
               <button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>
               <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
             </div>
@@ -894,6 +1035,12 @@ function renderOrders() {
     btn.addEventListener('click', () => {
       const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
       if (order) openAddItemModal(btn.dataset.key, order);
+    });
+  });
+  ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      if (order) openEditOrderModal(btn.dataset.key, order);
     });
   });
   ordersList.querySelectorAll('.btn-print-receipt').forEach((btn) => {

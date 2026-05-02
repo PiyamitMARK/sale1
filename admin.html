@@ -156,6 +156,21 @@
     </div>
   </div>
 
+  <!-- =============== MODAL: Edit Order Items =============== -->
+  <div class="modal" id="editOrderModal" aria-hidden="true">
+    <div class="modal-box modal-box--wide">
+      <h3 class="modal-title">✏️ แก้ไขรายการออเดอร์</h3>
+      <p class="modal-desc" id="editOrderDesc"></p>
+      <div id="editOrderBatches" class="edit-order-batches"></div>
+      <p id="editOrderTotal" class="edit-order-grand-total"></p>
+      <p id="editOrderError" class="login-error" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" id="editOrderCancel">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" id="editOrderSave">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <!-- =============== MODAL: Add Item to Order =============== -->
   <div class="modal" id="addItemModal" aria-hidden="true">
     <div class="modal-box">

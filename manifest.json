@@ -1,0 +1,27 @@
+{
+  "name": "ข้าวซอย 90",
+  "short_name": "ข้าวซอย 90",
+  "description": "ระบบสั่งอาหาร ข้าวซอย 90",
+  "start_url": "/customer.html",
+  "display": "standalone",
+  "background_color": "#faf6f0",
+  "theme_color": "#3d2b1f",
+  "orientation": "portrait-primary",
+  "lang": "th",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%233d2b1f'/><text y='72' x='50' text-anchor='middle' font-size='60'>🍛</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "lifestyle"],
+  "shortcuts": [
+    {
+      "name": "สั่งอาหาร",
+      "url": "/customer.html",
+      "description": "เปิดหน้าสั่งอาหาร"
+    }
+  ]
+}

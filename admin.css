@@ -2104,3 +2104,172 @@ tr[draggable="true"]:active {
 
 [data-theme="dark"] .bs-bar { background: var(--accent); }
 [data-theme="dark"] .bs-bar-wrap { background: rgba(255,255,255,0.1); }
+/* ==================== Edit Order Modal ==================== */
+.modal-box--wide { max-width: 560px; }
+
+.edit-order-batches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin: 0.75rem 0;
+  padding-right: 0.25rem;
+}
+
+.edit-batch-group {
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.edit-batch-label {
+  background: var(--cream-mid);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--brown-mid);
+  font-family: 'Mitr', sans-serif;
+}
+
+.edit-batch-items { padding: 0.25rem 0; }
+
+.edit-batch-empty {
+  text-align: center;
+  color: var(--brown-light);
+  font-size: 0.82rem;
+  padding: 0.75rem;
+  font-style: italic;
+}
+
+.edit-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--cream-dark);
+  transition: background 0.15s;
+}
+.edit-item-row:last-child { border-bottom: none; }
+.edit-item-row:hover { background: var(--cream-mid); }
+
+.edit-item-name {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--brown);
+  min-width: 0;
+  word-break: break-word;
+}
+.edit-item-option {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 400;
+}
+
+.edit-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.edit-qty-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--cream-dark);
+  background: var(--white);
+  color: var(--brown);
+  font-size: 1rem; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.edit-qty-btn:hover { background: var(--cream-mid); border-color: var(--accent); }
+.edit-qty-dec:hover { border-color: var(--red); color: var(--red); }
+.edit-qty-inc:hover { border-color: var(--accent); color: var(--accent); }
+
+.edit-qty-num {
+  min-width: 1.6rem;
+  text-align: center;
+  font-family: 'Mitr', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--brown);
+}
+
+.edit-item-price {
+  min-width: 4rem;
+  text-align: right;
+  font-family: 'Mitr', sans-serif;
+  font-size: 0.85rem;
+  color: var(--brown-light);
+}
+
+.edit-del-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.2rem;
+  border-radius: 4px;
+  color: var(--brown-light);
+  transition: color 0.15s, background 0.15s;
+}
+.edit-del-btn:hover { color: var(--red); background: #fce4e4; }
+
+.edit-batch-subtotal {
+  text-align: right;
+  font-size: 0.78rem;
+  color: var(--brown-light);
+  padding: 0.3rem 0.75rem;
+  background: var(--cream-mid);
+  font-weight: 600;
+}
+
+.edit-order-grand-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-top: 2px solid var(--cream-dark);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--brown);
+}
+.edit-total-amt {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.15rem;
+  color: var(--accent);
+}
+
+/* ปุ่ม แก้ไข ใน order card */
+.btn-edit-order {
+  background: none;
+  border: 1.5px solid var(--cream-dark);
+  color: var(--brown-mid);
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font-family: 'Mitr', sans-serif;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn-edit-order:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #fff8f0;
+}
+
+/* Dark mode */
+[data-theme="dark"] .edit-item-row:hover { background: #2e2218; }
+[data-theme="dark"] .edit-qty-btn { background: #2a1f18; border-color: var(--cream-dark); color: var(--brown); }
+[data-theme="dark"] .edit-qty-btn:hover { background: #3a2a20; }
+[data-theme="dark"] .edit-batch-label { background: #231a15; }
+[data-theme="dark"] .edit-batch-subtotal { background: #231a15; }
+[data-theme="dark"] .edit-del-btn:hover { background: #3a1a1a; }
+[data-theme="dark"] .btn-edit-order { border-color: var(--cream-dark); color: var(--brown-mid); }
+[data-theme="dark"] .btn-edit-order:hover { border-color: var(--accent); color: var(--accent); background: #2a1f10; }
