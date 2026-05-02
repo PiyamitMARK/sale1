@@ -126,8 +126,8 @@ let unsubscribeListener = null;
 let tableFilter = '';   // ── Feature #4: กรองตามโต๊ะ ──
 
 // ==================== Auth ====================
-function isLoggedIn()     { return sessionStorage.getItem(AUTH_KEY) === 'true'; }
-function setLoggedIn(val) { val ? sessionStorage.setItem(AUTH_KEY,'true') : sessionStorage.removeItem(AUTH_KEY); }
+function isLoggedIn()     { return localStorage.getItem(AUTH_KEY) === 'true'; }
+function setLoggedIn(val) { val ? localStorage.setItem(AUTH_KEY,'true') : localStorage.removeItem(AUTH_KEY); }
 
 function showScreen(screen) {
   loginScreen.classList.add('hidden');
@@ -775,65 +775,6 @@ function renderDailySummary() {
   if (cookingCount > 0) chips.push(`<span class="live-chip live-chip--cooking">👨‍🍳 กำลังทำ ${cookingCount} รายการ</span>`);
   if (chips.length === 0) chips.push(`<span class="live-chip live-chip--ok">✅ ไม่มีออเดอร์ค้าง</span>`);
   liveChips.innerHTML = chips.join('');
-
-  renderBestSellers();
-}
-
-// ==================== Best Sellers ====================
-function renderBestSellers() {
-  // นับจาก paid orders ทั้งหมด
-  const counts = {}; // { name: { qty, revenue } }
-  allOrders
-    .filter(o => o.status === 'paid')
-    .forEach(o => {
-      const batches = o.batches || [o.items || []];
-      batches.flat().forEach(i => {
-        if (!i.name) return;
-        if (!counts[i.name]) counts[i.name] = { qty: 0, revenue: 0 };
-        counts[i.name].qty     += (i.qty || 1);
-        counts[i.name].revenue += (i.price || 0) * (i.qty || 1);
-      });
-    });
-
-  const sorted = Object.entries(counts)
-    .sort((a, b) => b[1].qty - a[1].qty)
-    .slice(0, 10);
-
-  let section = document.getElementById('bestSellersSection');
-  if (!section) {
-    section = document.createElement('section');
-    section.id = 'bestSellersSection';
-    section.className = 'best-sellers-section';
-    const liveChips = document.getElementById('liveSummaryChips');
-    if (liveChips) liveChips.insertAdjacentElement('afterend', section);
-  }
-
-  if (sorted.length === 0) {
-    section.innerHTML = '';
-    return;
-  }
-
-  const maxQty = sorted[0][1].qty || 1;
-
-  section.innerHTML = `
-    <div class="best-sellers-header">
-      <span class="best-sellers-title">🏆 เมนูขายดี</span>
-      <span class="best-sellers-sub">จากออเดอร์ที่จ่ายแล้วทั้งหมด</span>
-    </div>
-    <ol class="best-sellers-list">
-      ${sorted.map(([name, { qty, revenue }], idx) => `
-        <li class="bs-row">
-          <span class="bs-rank ${idx === 0 ? 'bs-rank--gold' : idx === 1 ? 'bs-rank--silver' : idx === 2 ? 'bs-rank--bronze' : ''}">${idx + 1}</span>
-          <span class="bs-name">${escapeHtml(name)}</span>
-          <div class="bs-bar-wrap">
-            <div class="bs-bar" style="width:${Math.round((qty / maxQty) * 100)}%"></div>
-          </div>
-          <span class="bs-qty">${qty} จาน</span>
-          <span class="bs-revenue">${formatMoney(revenue)}</span>
-        </li>
-      `).join('')}
-    </ol>
-  `;
 }
 
 // ==================== Render Orders (with batch display) ====================
