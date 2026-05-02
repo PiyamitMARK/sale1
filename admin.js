@@ -1021,7 +1021,6 @@ function renderOrders() {
   ordersList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
   });
-  });
   ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     btn.addEventListener('click', () => {
       const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
