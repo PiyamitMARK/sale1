@@ -9,6 +9,7 @@
  */
 
 import './darkmode.js';
+import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getDatabase, ref, update, remove, onValue, get, set
@@ -570,9 +571,11 @@ function showBatchToast(order, batchNum) {
 }
 
 // ==================== Firebase: Actions ====================
-async function markOrderAsPaid(firebaseKey) {
+async function markOrderAsPaid(firebaseKey, paymentMethod) {
   const order = allOrders.find(o => o.firebaseKey === firebaseKey);
-  await update(ref(db, `orders/${firebaseKey}`), { status: 'paid' });
+  const updateData = { status: 'paid' };
+  if (paymentMethod) updateData.paymentMethod = paymentMethod;
+  await update(ref(db, `orders/${firebaseKey}`), updateData);
   // ลบ tableOrders เพื่อให้โต๊ะนั้นได้ order number ใหม่ครั้งต่อไป
   if (order && order.table) {
     try {
@@ -1037,6 +1040,8 @@ function renderOrders() {
   ordersList.querySelectorAll('.btn-delete').forEach((btn) => {
     btn.addEventListener('click', () => deleteOrder(btn.dataset.key, btn.dataset.num));
   });
+  bindBillButtons(ordersList);
+  injectMergeBillBtn();
 }
 
 // ==================== Tabs ====================
@@ -1551,6 +1556,14 @@ soundModeTabs.forEach(tab => {
 
 // ==================== Init ====================
 checkAuth();
+initBillFeature({
+  getOrders:        () => allOrders,
+  db,
+  markOrderAsPaid,
+  printOrderReceipt,
+  formatMoney,
+  escapeHtml,
+});
 // ==================== Print Receipt (admin) ====================
 /**
  * เปิดหน้าต่างใหม่ พิมพ์ใบเสร็จ 58mm พร้อม QR ธนาคาร
