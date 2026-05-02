@@ -1611,57 +1611,32 @@ signInAnonymously(auth).catch(e => console.error('Auth:', e));
 let LIVE_ORDERS = [];   // all orders from Firebase (converted to flat array)
 let LIVE_MENU   = {};   // menu keyed by id
 
-// Subscribe to orders (completedOrders + tableOrders)
+// Subscribe to orders — อ่านจาก 'orders' node เดียวกับ admin.js (real-time)
 function subscribeOrders(cb) {
-  // completedOrders — จ่ายแล้ว
-  onValue(ref(db, 'completedOrders'), snap => {
-    const completed = [];
+  onValue(ref(db, 'orders'), snap => {
+    const orders = [];
     snap.forEach(child => {
       const o = child.val();
-      // flatten batches like admin.js
+      // flatten batches เหมือน admin.js
       const items = [];
       if (Array.isArray(o.batches)) {
         o.batches.forEach(b => b.forEach(it => items.push(it)));
       } else if (Array.isArray(o.items)) {
         o.items.forEach(it => items.push(it));
       }
-      completed.push({
+      orders.push({
         id:            child.key,
         orderNumber:   o.orderNumber || o.id || child.key,
         table:         o.table || o.tableNumber || '—',
-        status:        o.status || 'paid',
+        status:        o.status || 'pending',
         total:         o.total || 0,
         items,
         createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
-        paymentMethod: o.paymentMethod || 'cash',
+        paymentMethod: o.paymentMethod || '',
       });
     });
-
-    // tableOrders — ยังไม่จ่าย
-    onValue(ref(db, 'tableOrders'), snap2 => {
-      const active = [];
-      snap2.forEach(tableChild => {
-        const o = tableChild.val();
-        const items = [];
-        if (Array.isArray(o.batches)) {
-          o.batches.forEach(b => b.forEach(it => items.push(it)));
-        } else if (Array.isArray(o.items)) {
-          o.items.forEach(it => items.push(it));
-        }
-        active.push({
-          id:            tableChild.key,
-          orderNumber:   o.orderNumber || tableChild.key,
-          table:         o.table || o.tableNumber || tableChild.key,
-          status:        o.status || 'pending',
-          total:         o.total || 0,
-          items,
-          createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
-          paymentMethod: o.paymentMethod || '',
-        });
-      });
-      LIVE_ORDERS = [...completed, ...active].sort((a, b) => b.createdAt - a.createdAt);
-      cb(LIVE_ORDERS);
-    }, { onlyOnce: true });
+    LIVE_ORDERS = orders.sort((a, b) => b.createdAt - a.createdAt);
+    cb(LIVE_ORDERS);
   });
 }
 
