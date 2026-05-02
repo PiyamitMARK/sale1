@@ -1085,6 +1085,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
         <span class="bo-topbar-title" id="topbarTitle">Export Sheet</span>
       </div>
       <div class="bo-topbar-right">
+        <button class="btn btn-danger btn-sm" id="clearDataBtn">🗑 ล้างข้อมูล</button>
         <a href="admin.html" class="btn btn-ghost btn-sm">⬅ แอดมิน</a>
       </div>
     </div>
@@ -1519,8 +1520,56 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 </div>
 
 <!-- =========================================================
-     SCRIPTS
+     MODAL: Clear Data
      ========================================================= -->
+<div class="bo-modal" id="clearDataModal">
+  <div class="bo-modal-box" style="max-width:420px">
+    <div class="bo-modal-header">
+      <span class="bo-modal-title">🗑 ล้างรายการสั่งซื้อทั้งหมด</span>
+      <button class="bo-modal-close" data-close="clearDataModal">✕</button>
+    </div>
+    <div class="bo-modal-body">
+      <p style="font-size:.88rem;color:var(--brown-light)">กรอกรหัสผ่านแอดมินเพื่อยืนยันการล้างข้อมูลและรีเซ็ตหมายเลขออเดอร์</p>
+      <div class="field">
+        <label class="field-label">รหัสยืนยัน</label>
+        <input type="password" id="clearDataCode" class="field-input" placeholder="••••••" autocomplete="off">
+      </div>
+      <p id="clearDataError" style="color:var(--red);font-size:.85rem;min-height:1.2em" aria-live="polite"></p>
+    </div>
+    <div class="bo-modal-footer">
+      <button class="btn btn-outline" data-close="clearDataModal">ยกเลิก</button>
+      <button class="btn btn-danger" id="clearDataConfirm">ล้างข้อมูล</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- Clear Data (Backoffice) ----
+document.getElementById('clearDataBtn').addEventListener('click', () => {
+  document.getElementById('clearDataCode').value = '';
+  document.getElementById('clearDataError').textContent = '';
+  document.getElementById('clearDataModal').classList.add('open');
+});
+document.getElementById('clearDataConfirm').addEventListener('click', async () => {
+  const ADMIN_USERS = { admin: 'admin123', owner: 'owner888' };
+  const code = document.getElementById('clearDataCode').value;
+  const errEl = document.getElementById('clearDataError');
+  if (!Object.values(ADMIN_USERS).includes(code)) {
+    errEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง';
+    return;
+  }
+  errEl.textContent = '';
+  try {
+    const { remove, ref: dbRef } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+    await remove(dbRef(db, 'orders'));
+    document.getElementById('clearDataModal').classList.remove('open');
+    alert('✅ ล้างข้อมูลเรียบร้อย');
+  } catch (e) {
+    errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
+  }
+});
+</script>
+
 <script type="module">
 // ============================================================
 //  IMPORTS — must be at top of module
