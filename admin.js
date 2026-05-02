@@ -625,62 +625,7 @@ async function clearAllOrders() {
 }
 
 // ==================== Products (admin add-item) ====================
-// *** ต้องตรงกับ products ใน app.js เสมอ ***
-const ALL_PRODUCTS = [
-  // เซ็ตอาหาร
-  { id: 'setkao13', name: 'เซ็ตอิ่มคุ้มคู่❗',            price: 129, category: 'setkao' },
-  { id: 'setkao1',  name: 'ข้าวซอยน่องไก่ + โค๊ก',        price: 85,  category: 'setkao' },
-  { id: 'setkao2',  name: 'ข้าวซอยน่องไก่ + ชาไทย',       price: 110, category: 'setkao' },
-  { id: 'setkao3',  name: 'ข้าวซอยน่องไก่ + มะพร้าวปั่น', price: 115, category: 'setkao' },
-  { id: 'setkao4',  name: 'ข้าวซอยหมูทอด + โค๊ก',         price: 85,  category: 'setkao' },
-  { id: 'setkao5',  name: 'ข้าวซอยหมูทอด + ชาไทย',        price: 110, category: 'setkao' },
-  { id: 'setkao6',  name: 'ข้าวซอยหมูทอด + มะพร้าวปั่น',  price: 115, category: 'setkao' },
-  { id: 'setkao7',  name: 'น้ำเงี้ยว + โค๊ก',             price: 75,  category: 'setkao' },
-  { id: 'setkao8',  name: 'น้ำเงี้ยว + ชาไทย',            price: 100, category: 'setkao' },
-  { id: 'setkao9',  name: 'น้ำเงี้ยว + มะพร้าวปั่น',      price: 105, category: 'setkao' },
-  { id: 'setkao10', name: 'ข้าวหมูทอด + โค๊ก',            price: 65,  category: 'setkao' },
-  { id: 'setkao11', name: 'ข้าวหมูทอด + ชาไทย',           price: 90,  category: 'setkao' },
-  { id: 'setkao12', name: 'ข้าวหมูทอด + มะพร้าวปั่น',     price: 95,  category: 'setkao' },
-  // อาหาร
-  { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, category: 'kao' },
-  { id: 'kao2', name: 'ข้าวซอยหมูทอด', price: 70, category: 'kao' },
-  { id: 'kao3', name: 'น้ำเงี้ยว',      price: 60, category: 'kao' },
-  { id: 'kao4', name: 'ข้าวหมูทอด',    price: 50, category: 'kao' },
-  { id: 'kao5', name: 'แคบหมู',         price: 15, category: 'kao' },
-  { id: 'kao7', name: 'ลาบเหนือ',       price: 60, category: 'kao' },
-  { id: 'kao8', name: 'ข้าวเหนียว',     price: 10, category: 'kao' },
-  { id: 'kao9', name: 'ข้าวสวย',        price: 10, category: 'kao' },
-  { id: 'kao6', name: 'ไข่ต้ม',         price: 10, category: 'kao' },
-  // เครื่องดื่ม
-  { id: 'nam1',  name: 'น้ำเปล่า',      price: 10, category: 'nam' },
-  { id: 'nam2',  name: 'โค๊ก',          price: 15, category: 'nam' },
-  { id: 'nam3',  name: 'สไปร์ท',        price: 15, category: 'nam' },
-  { id: 'nam4',  name: 'มะพร้าวปั่น',   price: 45, category: 'nam' },
-  { id: 'nam5',  name: 'ชาไทย',         price: 40, category: 'nam' },
-  { id: 'nam6',  name: 'ชาดำเย็น',      price: 40, category: 'nam' },
-  { id: 'nam7',  name: 'ชามะนาว',       price: 40, category: 'nam' },
-  { id: 'nam8',  name: 'นมชมพู',        price: 40, category: 'nam' },
-  { id: 'nam9',  name: 'โกโก้',         price: 40, category: 'nam' },
-  { id: 'nam10', name: 'มัทฉะมะพร้าว',  price: 60, category: 'nam' },
-  { id: 'nam11', name: 'มัทฉะลาเต้',    price: 60, category: 'nam' },
-  { id: 'nam12', name: 'เพียวมัทฉะ',    price: 55, category: 'nam' },
-  // กาแฟ
-  { id: 'coffee1', name: 'เอสเปรสโซ่',        price: 55, category: 'coffee' },
-  { id: 'coffee2', name: 'คาปูชิโน่',          price: 55, category: 'coffee' },
-  { id: 'coffee3', name: 'ลาเต้',              price: 55, category: 'coffee' },
-  { id: 'coffee4', name: 'มอคค่า',             price: 55, category: 'coffee' },
-  { id: 'coffee5', name: 'อเมริกาโน่',          price: 45, category: 'coffee' },
-  { id: 'coffee6', name: 'อเมริกาโน่มะพร้าว',  price: 60, category: 'coffee' },
-  { id: 'coffee7', name: 'อเมริกาโน่น้ำผึ้ง',  price: 60, category: 'coffee' },
-  { id: 'coffee8', name: 'อเมริกาโน่ส้ม',      price: 60, category: 'coffee' },
-  // โซดา
-  { id: 'soda1', name: 'แดงมะนาวโซดา',      price: 35, category: 'soda' },
-  { id: 'soda2', name: 'บลูฮาวายมะนาวโซดา', price: 35, category: 'soda' },
-  { id: 'soda3', name: 'แอปเปิ้ลโซดา',      price: 35, category: 'soda' },
-  { id: 'soda4', name: 'ส้มโซดา',           price: 35, category: 'soda' },
-  { id: 'soda5', name: 'สตรอเบอร์รี่โซดา',  price: 35, category: 'soda' },
-  { id: 'soda6', name: 'บลูเบอร์รี่โซดา',   price: 35, category: 'soda' },
-];
+// ใช้ allMenuData จาก Firebase แทน hardcode (ดูที่ renderAddItemList)
 
 const ADD_ITEM_CATEGORIES = [
   { id: 'all',    label: '🍽 ทั้งหมด' },
@@ -710,9 +655,12 @@ function openAddItemModal(firebaseKey, order) {
 
 function renderAddItemList() {
   const allItems = getAllItems(addItemTargetOrder);
+
+  // ดึงจาก allMenuData (Firebase) แทน hardcode ALL_PRODUCTS
+  const liveProducts = Object.values(allMenuData).filter(p => p.enabled !== false);
   const filtered = addItemActiveCategory === 'all'
-    ? ALL_PRODUCTS
-    : ALL_PRODUCTS.filter(p => p.category === addItemActiveCategory);
+    ? liveProducts
+    : liveProducts.filter(p => p.category === addItemActiveCategory);
 
   const tabsHtml = `<div class="add-item-cat-tabs">${
     ADD_ITEM_CATEGORIES.map(cat =>
@@ -1613,7 +1561,7 @@ soundModeTabs.forEach(tab => {
   });
 });
 
-// ==================== Inject batch CSS ====================
+// ==================== Inject batch CSS (ส่วนที่ยังคงใน JS เพราะใช้ร่วมกับ receipt popup) ====================
 (function injectBatchStyle() {
   const style = document.createElement('style');
   style.textContent = `
@@ -1621,10 +1569,8 @@ soundModeTabs.forEach(tab => {
     .batch-label {
       font-size: 0.78rem; font-weight: 700;
       color: var(--accent, #c8853a);
-      margin-bottom: 0.25rem;
-      padding: 0.2rem 0.5rem;
-      background: #fff8e1;
-      border-radius: 4px;
+      margin-bottom: 0.25rem; padding: 0.2rem 0.5rem;
+      background: #fff8e1; border-radius: 4px;
       display: inline-block;
     }
     .batch-subtotal {
@@ -1638,8 +1584,7 @@ soundModeTabs.forEach(tab => {
       background: #fff3cd; color: #856404;
       font-size: 0.72rem; font-weight: 700;
       padding: 0.1rem 0.5rem; border-radius: 999px;
-      margin-left: 0.35rem;
-      vertical-align: middle;
+      margin-left: 0.35rem; vertical-align: middle;
     }
   `;
   document.head.appendChild(style);
@@ -1768,8 +1713,11 @@ function bindMenuTableActions(container) {
       const { field, id } = btn.dataset;
       const p = allMenuData[id];
       if (!p) return;
-      if (field === 'name') startInlineEdit(btn, id, 'name', p.name, 'text');
-      if (field === 'price') startInlineEdit(btn, id, 'price', p.price, 'number');
+      // หา span ก่อนหน้าใน cell เดียวกัน (previousElementSibling อาจเป็น span หรือ input)
+      const cell = btn.parentElement;
+      const span = cell.querySelector(field === 'price' ? '.menu-price-display' : '.menu-item-name');
+      if (field === 'name')  startInlineEdit(span, btn, id, 'name',  p.name,  'text');
+      if (field === 'price') startInlineEdit(span, btn, id, 'price', p.price, 'number');
     });
   });
 
@@ -1790,8 +1738,7 @@ function bindMenuTableActions(container) {
   });
 }
 
-function startInlineEdit(btn, id, field, currentVal, inputType) {
-  const cell = btn.previousElementSibling; // span ข้างหน้า
+function startInlineEdit(cell, btn, id, field, currentVal, inputType) {
   const origText = cell.textContent;
 
   const input = document.createElement('input');
@@ -2078,159 +2025,4 @@ function printOrderReceipt(order) {
 </body></html>`);
   win.document.close();
 }
-// ==================== Inject CSS (new features) ====================
-(function injectNewFeatureStyles() {
-  const style = document.createElement('style');
-  style.textContent = `
-    /* ── Feature #5: Live status chips ── */
-    .live-summary-chips {
-      display: flex; gap: 0.5rem; flex-wrap: wrap;
-      padding: 0.5rem 1.5rem 0;
-    }
-    .live-chip {
-      font-family: 'Mitr', sans-serif; font-size: 0.8rem; font-weight: 600;
-      padding: 0.3rem 0.85rem; border-radius: 999px;
-    }
-    .live-chip--pending { background: #fff3cd; color: #856404; }
-    .live-chip--cooking { background: #fff0e6; color: #c8853a; }
-    .live-chip--ok      { background: #d1fae5; color: #065f46; }
-
-    /* ── Feature #4: Table filter bar ── */
-    .table-filter-bar {
-      display: flex; gap: 0.5rem; align-items: center;
-      padding: 0.6rem 0 0.75rem; flex-wrap: wrap;
-    }
-    .table-filter-input {
-      border: 2px solid #e2d8cb; border-radius: 999px;
-      padding: 0.4rem 0.9rem; font-family: 'Sarabun', sans-serif;
-      font-size: 0.9rem; color: #3d2b1f; outline: none;
-      transition: border-color 0.2s; width: 200px;
-    }
-    .table-filter-input:focus { border-color: #c8853a; }
-    .table-filter-clear { font-size: 0.82rem !important; }
-    .table-filter-clear.hidden { display: none !important; }
-
-    /* ── Menu Management ── */
-    .menu-mgr-toolbar {
-      display: flex; align-items: center; justify-content: space-between;
-      flex-wrap: wrap; gap: 0.75rem;
-      padding: 1rem 1.5rem 0.75rem;
-    }
-    .menu-mgr-cats {
-      display: flex; gap: 0.4rem; flex-wrap: wrap;
-    }
-    .menu-cat-btn {
-      border: 2px solid var(--cream-dark, #e2d8cb);
-      background: var(--white, #fff); color: var(--brown, #3d2b1f);
-      border-radius: 999px; padding: 0.35rem 0.9rem;
-      font-family: 'Mitr', sans-serif; font-size: 0.82rem; font-weight: 600;
-      cursor: pointer; transition: all 0.18s;
-    }
-    .menu-cat-btn:hover { border-color: var(--accent, #c8853a); }
-    .menu-cat-btn.active {
-      background: var(--accent, #c8853a);
-      border-color: var(--accent, #c8853a);
-      color: #fff;
-    }
-    .menu-add-btn { font-size: 0.9rem !important; }
-
-    .menu-mgr-table-wrap {
-      overflow-x: auto; padding: 0 1.5rem 2rem;
-    }
-    .menu-mgr-table {
-      width: 100%; border-collapse: collapse;
-      font-size: 0.9rem; color: var(--brown, #3d2b1f);
-    }
-    .menu-mgr-table thead th {
-      background: var(--cream-mid, #f0e9de);
-      padding: 0.6rem 0.75rem; text-align: left;
-      font-family: 'Mitr', sans-serif; font-size: 0.8rem;
-      font-weight: 600; border-bottom: 2px solid var(--cream-dark, #e2d8cb);
-      white-space: nowrap;
-    }
-    .menu-mgr-table .th-price { text-align: right; }
-    .menu-mgr-table tbody tr { border-bottom: 1px solid var(--cream-dark, #e2d8cb); }
-    .menu-mgr-table tbody tr:hover { background: var(--cream, #faf6f0); }
-    .menu-mgr-table td { padding: 0.55rem 0.75rem; vertical-align: middle; }
-    .menu-mgr-table .td-price { text-align: right; white-space: nowrap; }
-    .menu-row--disabled td { opacity: 0.45; }
-    .menu-empty { text-align: center; padding: 2rem; color: #8b6655; font-style: italic; }
-
-    /* Toggle switch */
-    .menu-toggle { display: inline-flex; align-items: center; cursor: pointer; }
-    .menu-toggle-input { display: none; }
-    .menu-toggle-slider {
-      width: 36px; height: 20px; background: #ccc; border-radius: 999px;
-      position: relative; transition: background 0.2s;
-    }
-    .menu-toggle-slider::after {
-      content: ''; position: absolute;
-      width: 14px; height: 14px; background: #fff; border-radius: 50%;
-      top: 3px; left: 3px; transition: transform 0.2s;
-    }
-    .menu-toggle-input:checked + .menu-toggle-slider { background: #34c759; }
-    .menu-toggle-input:checked + .menu-toggle-slider::after { transform: translateX(16px); }
-
-    /* Inline edit */
-    .menu-inline-edit-btn {
-      background: none; border: none; cursor: pointer;
-      font-size: 0.8rem; padding: 0 0.2rem; opacity: 0.5;
-      transition: opacity 0.15s;
-    }
-    .menu-inline-edit-btn:hover { opacity: 1; }
-    .menu-inline-input {
-      border: 2px solid var(--accent, #c8853a); border-radius: 6px;
-      padding: 0.2rem 0.5rem; font-family: 'Sarabun', sans-serif;
-      font-size: 0.9rem; color: var(--brown, #3d2b1f);
-      background: var(--white, #fff); outline: none; max-width: 180px;
-    }
-    .menu-inline-input--error { border-color: #dc3545 !important; }
-
-    /* Category chips */
-    .menu-cat-chip {
-      font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.55rem;
-      border-radius: 999px;
-    }
-    .menu-cat-chip--setkao { background: #fff0e6; color: #c8853a; }
-    .menu-cat-chip--kao    { background: #fff3cd; color: #856404; }
-    .menu-cat-chip--nam    { background: #e0f2fe; color: #0369a1; }
-    .menu-cat-chip--coffee { background: #fdf2e9; color: #784212; }
-    .menu-cat-chip--soda   { background: #f0fdf4; color: #166534; }
-
-    .menu-type-chip {
-      font-size: 0.75rem; color: #8b6655;
-      padding: 0.1rem 0.4rem; border-radius: 4px;
-      background: var(--cream-mid, #f0e9de);
-    }
-
-    /* Action buttons in table */
-    .menu-action-btns { display: flex; gap: 0.4rem; align-items: center; }
-    .btn-menu-edit {
-      font-size: 0.78rem; padding: 0.28rem 0.7rem;
-      border-radius: 999px; border: 1.5px solid var(--accent, #c8853a);
-      background: transparent; color: var(--accent, #c8853a);
-      font-family: 'Mitr', sans-serif; font-weight: 600; cursor: pointer;
-      transition: all 0.18s; white-space: nowrap;
-    }
-    .btn-menu-edit:hover { background: var(--accent, #c8853a); color: #fff; }
-    .btn-menu-delete {
-      font-size: 0.82rem; padding: 0.28rem 0.5rem;
-      border-radius: 999px; border: 1.5px solid #dc3545;
-      background: transparent; color: #dc3545;
-      font-family: 'Mitr', sans-serif; font-weight: 600; cursor: pointer;
-      transition: all 0.18s;
-    }
-    .btn-menu-delete:hover { background: #dc3545; color: #fff; }
-
-    /* Menu form modal */
-    .menu-form-grid {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 0.85rem 1rem; margin: 1rem 0;
-    }
-    @media (max-width: 520px) { .menu-form-grid { grid-template-columns: 1fr; } }
-
-    /* Price display */
-    .menu-price-display { font-weight: 600; color: var(--accent, #c8853a); }
-  `;
-  document.head.appendChild(style);
-})();
+// (CSS ย้ายไป admin.css แล้ว)
