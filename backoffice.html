@@ -2405,6 +2405,7 @@ subscribeMenu(menuObj => {
 document.getElementById('exportDateFrom').value = daysAgo(7);
 document.getElementById('exportDateTo').value = todayStr();
 
+document.getElementById('menuImgInput').addEventListener('change', function() {
   const file = this.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
