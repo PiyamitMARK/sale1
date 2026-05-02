@@ -1341,7 +1341,6 @@ function renderTakeawayOrders() {
   taList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
   });
-  });
   taList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
     btn.addEventListener('click', () => { if (order) openEditOrderModal(btn.dataset.key, order); });
