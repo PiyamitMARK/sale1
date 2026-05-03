@@ -899,7 +899,7 @@ function renderDailySummary() {
 }
 
 // ==================== Render Orders (with batch display) ====================
-const TAKEAWAY_IDS_ADMIN = ['takeaway1','takeaway2','takeaway3'];
+function getTakeawayIdsAdmin() { return getTakeawaySlots(); }
 
 function renderOrders() {
   // ── Feature #4: inject filter bar (ครั้งแรก) ──
@@ -927,7 +927,7 @@ function renderOrders() {
     });
   }
 
-  const baseOrders = allOrders.filter(o => !TAKEAWAY_IDS_ADMIN.includes(String(o.table)) && !o.takeaway);
+  const baseOrders = allOrders.filter(o => !getTakeawayIdsAdmin().includes(String(o.table)) && !o.takeaway);
   const nonTaOrders = tableFilter
     ? baseOrders.filter(o => String(o.table).includes(tableFilter))
     : baseOrders;
@@ -1060,9 +1060,24 @@ function switchTab(tabId) {
 }
 
 // ==================== Takeaway QR Panel ====================
-const TAKEAWAY_SLOTS = ['takeaway1', 'takeaway2', 'takeaway3'];
-const TAKEAWAY_LABELS = { takeaway1: 'ลิงก์ที่ 1', takeaway2: 'ลิงก์ที่ 2', takeaway3: 'ลิงก์ที่ 3' };
-const TA_STORAGE_KEY = 'ta-base-url';
+const TA_STORAGE_KEY  = 'ta-base-url';
+const TA_COUNT_KEY    = 'ta-slot-count';
+const TA_MIN_SLOTS    = 1;
+const TA_MAX_SLOTS    = 20;
+
+function getTaCount() {
+  return Math.max(TA_MIN_SLOTS, Math.min(TA_MAX_SLOTS, parseInt(localStorage.getItem(TA_COUNT_KEY) || '3', 10)));
+}
+function setTaCount(n) {
+  localStorage.setItem(TA_COUNT_KEY, String(Math.max(TA_MIN_SLOTS, Math.min(TA_MAX_SLOTS, n))));
+}
+function getTakeawaySlots() {
+  return Array.from({ length: getTaCount() }, (_, i) => 'takeaway' + (i + 1));
+}
+function getTakeawayLabel(slotId) {
+  const n = slotId.replace('takeaway', '');
+  return 'ลิงก์ที่ ' + n;
+}
 
 function getTakeawayUrl(slotId) {
   let base = localStorage.getItem(TA_STORAGE_KEY) || (location.origin + '/');
@@ -1090,10 +1105,34 @@ function renderTakeawayQrPanel() {
         <button type="button" class="btn btn-primary ta-url-apply-btn" id="taApplyBtn">🔄 อัปเดต QR</button>
       </div>
     </div>
+    <div class="ta-slot-count-row">
+      <span class="ta-slot-count-label">📦 จำนวนลิงก์กลับบ้าน</span>
+      <div class="ta-slot-count-ctrl">
+        <button type="button" class="ta-count-btn" id="taCountMinus">−</button>
+        <span class="ta-count-num" id="taCountNum">${getTaCount()}</span>
+        <button type="button" class="ta-count-btn" id="taCountPlus">＋</button>
+      </div>
+    </div>
     <div class="ta-slots-grid" id="taSlotsGrid"></div>
   `;
 
   renderTaSlots();
+
+  // ปุ่ม − เพิ่ม/ลดจำนวน slot
+  document.getElementById('taCountMinus').addEventListener('click', () => {
+    const cur = getTaCount();
+    if (cur <= TA_MIN_SLOTS) return;
+    setTaCount(cur - 1);
+    document.getElementById('taCountNum').textContent = getTaCount();
+    renderTaSlots();
+  });
+  document.getElementById('taCountPlus').addEventListener('click', () => {
+    const cur = getTaCount();
+    if (cur >= TA_MAX_SLOTS) return;
+    setTaCount(cur + 1);
+    document.getElementById('taCountNum').textContent = getTaCount();
+    renderTaSlots();
+  });
 
   document.getElementById('taApplyBtn').addEventListener('click', () => {
     const val = document.getElementById('taBaseUrl').value.trim();
@@ -1101,7 +1140,7 @@ function renderTakeawayQrPanel() {
     localStorage.setItem(TA_STORAGE_KEY, val);
 
     // อัปเดต QR แต่ละ slot ใน-place (ไม่ rebuild DOM ทั้งหมด)
-    TAKEAWAY_SLOTS.forEach((slotId) => {
+    getTakeawaySlots().forEach((slotId) => {
       const url   = getTakeawayUrl(slotId);
       const boxEl = document.getElementById(`taQrBox_${slotId}`);
       const urlEl = boxEl?.parentElement?.querySelector('.ta-qr-url');
@@ -1199,9 +1238,9 @@ function renderTaSlots() {
   grid.innerHTML = '';
   qrInstances = {};
 
-  TAKEAWAY_SLOTS.forEach((slotId, idx) => {
+  getTakeawaySlots().forEach((slotId, idx) => {
     const url    = getTakeawayUrl(slotId);
-    const label  = TAKEAWAY_LABELS[slotId];
+    const label  = getTakeawayLabel(slotId);
     const boxId  = `taQrBox_${slotId}`;
 
     const card = document.createElement('div');
@@ -1256,8 +1295,7 @@ function renderTakeawayOrders() {
   const taEmpty = document.getElementById('takeawayOrdersEmpty');
   if (!taList || !taEmpty) return;
 
-  const TAKEAWAY_IDS = ['takeaway1','takeaway2','takeaway3'];
-  const taOrders = allOrders.filter(o => TAKEAWAY_IDS.includes(String(o.table)) || o.takeaway === true);
+  const taOrders = allOrders.filter(o => getTakeawaySlots().includes(String(o.table)) || o.takeaway === true);
 
   if (taOrders.length === 0) {
     taList.innerHTML = '';
@@ -1485,8 +1523,7 @@ clearDataConfirm.addEventListener('click', async () => {
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
-const soundDropdown  = document.getElementById('soundDropdown');
-const soundModeTabs  = document.querySelectorAll('.sound-dropdown-item');
+const soundModeTabs  = document.querySelectorAll('.sound-mode-tab');
 
 // ตั้งค่า mode tabs ตาม localStorage
 function applySoundMode(mode) {
@@ -1498,55 +1535,18 @@ function applySoundMode(mode) {
 }
 applySoundMode(soundMode);
 
-// ปิด dropdown เมื่อคลิกนอก
-document.addEventListener('click', (e) => {
-  if (!soundControl?.contains(e.target)) {
-    soundDropdown?.classList.remove('open');
-  }
-});
-
 if (soundToggleBtn) {
-  let pressTimer = null;
-
-  // click = toggle เปิด/ปิดเสียง
-  soundToggleBtn.addEventListener('click', (e) => {
-    if (pressTimer) return; // long press จัดการแล้ว
-    // ถ้า dropdown เปิดอยู่ ให้ปิดก่อน
-    if (soundDropdown?.classList.contains('open')) {
-      soundDropdown.classList.remove('open');
-      return;
-    }
-    unlockIOSSpeech();
+  soundToggleBtn.addEventListener('click', () => {
+    unlockIOSSpeech(); // iOS: unlock ด้วย user gesture
     soundEnabled = !soundEnabled;
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
-    soundToggleBtn.textContent = soundEnabled ? '🔔' : '🔕';
+    soundToggleBtn.textContent = soundEnabled ? '🔔 เสียงเปิด' : '🔕 เสียงปิด';
     soundControl?.classList.toggle('muted', !soundEnabled);
+    // ทดสอบเสียงทันทีหลังเปิด (เพื่อให้ iOS unlock สำเร็จ)
     if (soundEnabled) {
       if (soundMode === 'beep') playBeep([880, 1047], 0.18);
       else speak('เสียงเปิดแล้วจ้า');
     }
-  });
-
-  // long press = เปิด dropdown เลือก mode
-  soundToggleBtn.addEventListener('pointerdown', () => {
-    pressTimer = setTimeout(() => {
-      soundDropdown?.classList.toggle('open');
-      pressTimer = null;
-    }, 400);
-  });
-  soundToggleBtn.addEventListener('pointerup', () => {
-    clearTimeout(pressTimer);
-    pressTimer = null;
-  });
-  soundToggleBtn.addEventListener('pointerleave', () => {
-    clearTimeout(pressTimer);
-    pressTimer = null;
-  });
-
-  // คลิกขวา = เปิด dropdown
-  soundToggleBtn.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    soundDropdown?.classList.toggle('open');
   });
 }
 
@@ -1555,13 +1555,12 @@ soundModeTabs.forEach(tab => {
     unlockIOSSpeech();
     const mode = tab.dataset.mode;
     applySoundMode(mode);
-    soundDropdown?.classList.remove('open');
+    // ทดสอบเสียงให้ฟังทันที
     if (soundEnabled) {
       if (mode === 'beep') playBeep([880, 1047, 1319], 0.18);
       else speak('เสียงคนพูดจ้า');
     }
   });
-
 });
 
 // ==================== Inject batch CSS (ส่วนที่ยังคงใน JS เพราะใช้ร่วมกับ receipt popup) ====================
