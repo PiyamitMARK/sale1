@@ -1944,18 +1944,18 @@ async function deleteCategoryLocal(id) {
 }
 
 async function saveCategoryOrder(orderedIds) {
-  // บันทึก sortOrder ลง Firebase ทีเดียว (multi-path update)
   const updates = {};
-  orderedIds.forEach((id, idx) => {
-    updates[`categories_sort/${id}`] = idx;
-  });
+  orderedIds.forEach((id, idx) => { updates[`categories_sort/${id}`] = idx; });
   await update(ref(db), updates);
-  // sync LS
   try {
     const sort = JSON.parse(localStorage.getItem('ks90-categories-sort') || '{}');
     orderedIds.forEach((id, idx) => { sort[id] = idx; });
     localStorage.setItem('ks90-categories-sort', JSON.stringify(sort));
   } catch(_) {}
+}
+
+async function saveDefaultCatLocal(catId) {
+  await update(ref(db, 'meta'), { defaultCat: catId });
 }
 
 function _notifyCatsLocal(cats) {
@@ -2023,6 +2023,7 @@ let LIVE_CATEGORIES = {
   setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
   nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
 };
+let LIVE_DEFAULT_CAT = null; // id ของหมวดที่จะแสดงก่อนใน customer/POS
 
 // ── productTypes — stored in Firebase 'productTypes/' ──
 const DEFAULT_PRODUCT_TYPES = [
@@ -2985,7 +2986,8 @@ function openCategoryModal() {
 
   function renderModal() {
     const cats = LIVE_CATEGORIES;
-    const catEntries = Object.entries(cats); // already sorted by _applyCatSort
+    const catEntries = Object.entries(cats);
+    const defaultId = LIVE_DEFAULT_CAT || catEntries[0]?.[0] || '';
 
     modal.innerHTML = `
       <div class="bo-modal-box" style="max-width:500px">
@@ -2995,25 +2997,33 @@ function openCategoryModal() {
         </div>
         <div class="bo-modal-body">
           <p style="font-size:.85rem;color:var(--brown-light);margin-top:-.25rem;margin-bottom:.75rem">
-            เพิ่ม แก้ชื่อ หรือลบหมวดหมู่เมนู — ลากแถว <strong>⠿</strong> เพื่อเรียงลำดับ
+            ลากแถว <strong>⠿</strong> เพื่อเรียงลำดับ — กด <strong>⭐</strong> เพื่อตั้งหมวดเริ่มต้น
           </p>
 
           <div id="catSortList" style="display:flex;flex-direction:column;gap:.45rem">
-            ${catEntries.map(([id, label]) => `
-              <div class="cat-sort-row" data-id="${id}"
-                draggable="true"
+            ${catEntries.map(([id, label]) => {
+              const isDefault = id === defaultId;
+              return `
+              <div class="cat-sort-row" data-id="${id}" draggable="true"
                 style="display:flex;align-items:center;gap:.5rem;background:var(--white);
-                       border:1.5px solid var(--cream-dark);border-radius:8px;padding:.35rem .5rem;
-                       cursor:default;transition:box-shadow .15s">
-                <span class="cat-drag-handle" title="ลากเพื่อเรียง"
-                  style="font-size:1.1rem;color:var(--brown-light);cursor:grab;
-                         padding:0 .25rem;user-select:none;flex-shrink:0">⠿</span>
+                       border:1.5px solid ${isDefault ? 'var(--accent)' : 'var(--cream-dark)'};
+                       border-radius:8px;padding:.35rem .5rem;transition:box-shadow .15s">
+                <span style="font-size:1.1rem;color:var(--brown-light);cursor:grab;
+                             padding:0 .25rem;user-select:none;flex-shrink:0" title="ลากเพื่อเรียง">⠿</span>
                 <input type="text" class="field-input cat-label-input" data-id="${id}"
                   value="${escHtml(label)}" style="flex:1;min-width:0">
-                <button type="button" class="btn btn-outline btn-sm cat-rename-btn" data-id="${id}" title="บันทึก">💾</button>
+                <button type="button" class="btn btn-sm cat-default-btn" data-id="${id}"
+                  title="${isDefault ? 'หมวดเริ่มต้นอยู่แล้ว' : 'ตั้งเป็นหมวดเริ่มต้น'}"
+                  style="background:${isDefault ? 'var(--accent)' : 'none'};
+                         color:${isDefault ? '#fff' : 'var(--brown-light)'};
+                         border:1.5px solid ${isDefault ? 'var(--accent)' : 'var(--cream-dark)'};
+                         border-radius:var(--pill);font-size:.8rem;padding:.25rem .55rem;
+                         cursor:${isDefault ? 'default' : 'pointer'}"
+                  ${isDefault ? 'disabled' : ''}>⭐</button>
+                <button type="button" class="btn btn-outline btn-sm cat-rename-btn" data-id="${id}" title="บันทึกชื่อ">💾</button>
                 <button type="button" class="btn btn-danger btn-sm cat-delete-btn" data-id="${id}" title="ลบหมวด">🗑</button>
-              </div>
-            `).join('')}
+              </div>`;
+            }).join('')}
           </div>
 
           <div id="catOrderSaveRow" style="display:none;margin-top:.6rem">
@@ -3063,7 +3073,6 @@ function openCategoryModal() {
       });
       row.addEventListener('dragover', e => {
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
         if (row !== dragSrc) row.style.boxShadow = '0 0 0 2px var(--accent)';
       });
       row.addEventListener('dragleave', () => { row.style.boxShadow = ''; });
@@ -3071,13 +3080,11 @@ function openCategoryModal() {
         e.preventDefault();
         row.style.boxShadow = '';
         if (!dragSrc || dragSrc === row) return;
-        // insert dragSrc before row, or after if dragging down
         const rows = [...list.querySelectorAll('.cat-sort-row')];
         const srcIdx = rows.indexOf(dragSrc);
         const tgtIdx = rows.indexOf(row);
         if (srcIdx < tgtIdx) row.after(dragSrc);
         else row.before(dragSrc);
-        // show save button
         saveRow.style.display = 'block';
         saveMsg.textContent = '';
       });
@@ -3091,11 +3098,7 @@ function openCategoryModal() {
         await saveCategoryOrder(orderedIds);
         saveMsg.textContent = '✅ บันทึกลำดับแล้ว!';
         saveMsg.style.color = 'var(--green)';
-        setTimeout(() => {
-          saveRow.style.display = 'none';
-          saveMsg.textContent = '';
-          btn.disabled = false;
-        }, 1500);
+        setTimeout(() => { saveRow.style.display = 'none'; saveMsg.textContent = ''; btn.disabled = false; }, 1500);
       } catch(e) {
         saveMsg.textContent = '❌ ' + e.message;
         saveMsg.style.color = 'var(--red)';
@@ -3103,7 +3106,19 @@ function openCategoryModal() {
       }
     };
 
-    // บันทึกชื่อ
+    // ---- ตั้งหมวดเริ่มต้น ----
+    modal.querySelectorAll('.cat-default-btn').forEach(btn => {
+      btn.onclick = async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+          await saveDefaultCatLocal(btn.dataset.id);
+          // LIVE_DEFAULT_CAT จะถูก update จาก onValue subscribe แล้ว re-render เอง
+        } catch(e) { alert('ตั้งไม่ได้: ' + e.message); btn.disabled = false; }
+      };
+    });
+
+    // ---- บันทึกชื่อ ----
     modal.querySelectorAll('.cat-rename-btn').forEach(btn => {
       btn.onclick = async () => {
         const id = btn.dataset.id;
@@ -3118,7 +3133,7 @@ function openCategoryModal() {
       };
     });
 
-    // ลบหมวด
+    // ---- ลบหมวด ----
     modal.querySelectorAll('.cat-delete-btn').forEach(btn => {
       btn.onclick = async () => {
         const id = btn.dataset.id;
@@ -3131,7 +3146,7 @@ function openCategoryModal() {
       };
     });
 
-    // เพิ่มหมวดใหม่
+    // ---- เพิ่มหมวดใหม่ ----
     modal.querySelector('#addCatBtn').onclick = async () => {
       const idInput = modal.querySelector('#newCatId');
       const labelInput = modal.querySelector('#newCatLabel');
@@ -3151,7 +3166,6 @@ function openCategoryModal() {
 
   renderModal();
 
-  // re-render modal เมื่อ categories เปลี่ยน (จาก subscribeCategories)
   window._catModalRerender = () => {
     if (modal.classList.contains('open')) renderModal();
   };
@@ -3530,6 +3544,12 @@ subscribeMenu(menuObj => {
 });
 subscribeCategories();
 subscribeProductTypes();
+
+// subscribe defaultCat จาก Firebase
+onValue(ref(db, 'meta/defaultCat'), snap => {
+  LIVE_DEFAULT_CAT = snap.exists() ? snap.val() : null;
+  if (window._catModalRerender) window._catModalRerender();
+});
 
 // ============================================================
 //  ===== PANEL: QR โต๊ะ =====

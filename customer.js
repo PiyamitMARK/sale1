@@ -10,7 +10,7 @@
 import './darkmode.js';
 import { db } from './firebase-config.js';
 import { ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { parseMenuFromRaw, subscribeCategoriesAndSync } from './menu-manager.js';
+import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
 // LS fallback ใช้ตอน Firebase ยังไม่ตอบ
 function _loadMenuFromLS() {
@@ -247,6 +247,11 @@ const OPTION_CONFIGS = {
 // ==================== State ====================
 let tableNum      = null;
 let currentCat    = 'setkao';
+
+// subscribe defaultCat จาก Firebase — set เป็นค่าเริ่มต้นก่อน categories โหลด
+subscribeDefaultCat(db, catId => {
+  if (catId) currentCat = catId;
+});
 let searchQuery   = '';         // ข้อความค้นหาเมนู
 let cart          = [];
 let pendingProduct = null;

@@ -12,7 +12,7 @@ import { db } from './firebase-config.js';
 import {
   ref, push, update, get, remove, runTransaction, onValue
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { parseMenuFromRaw, subscribeCategoriesAndSync } from './menu-manager.js';
+import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
 // LS fallback ใช้ตอน Firebase ยังไม่ตอบ
 function _loadMenuFromLS() {
@@ -237,6 +237,11 @@ const OPTION_CONFIGS = {
 let cart = [];
 let orderNumber = 1001;
 let currentCategory = 'setkao';
+
+// subscribe defaultCat จาก Firebase — set เป็นค่าเริ่มต้นก่อน categories โหลด
+subscribeDefaultCat(db, catId => {
+  if (catId) currentCategory = catId;
+});
 let selectedTable = null;
 
 // สถานะ order ปัจจุบันของโต๊ะที่เลือก

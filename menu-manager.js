@@ -178,6 +178,18 @@ function _syncCatsToLS(catsObj) {
   } catch (_) {}
 }
 
+/** บันทึก defaultCat ลง Firebase meta/defaultCat */
+export async function saveDefaultCat(db, catId) {
+  await update(ref(db, 'meta'), { defaultCat: catId });
+}
+
+/** Subscribe defaultCat จาก Firebase — cb(catId: string|null) */
+export function subscribeDefaultCat(db, cb) {
+  onValue(ref(db, 'meta/defaultCat'), snap => {
+    cb(snap.exists() ? snap.val() : null);
+  });
+}
+
 export function subscribeCategoriesAndSync(db, cb) {
   let _rawCats = null;
   let _sortMap  = {};
