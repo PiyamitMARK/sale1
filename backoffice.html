@@ -2697,11 +2697,16 @@ document.getElementById('clearDataBtn').addEventListener('click', () => {
   document.getElementById('clearDataModal').classList.add('open');
 });
 document.getElementById('clearDataConfirm').addEventListener('click', async () => {
-  const VALID_PASSWORDS = ['admin123', 'owner888'];
+  const ADMIN_PASS_HASH = 'bfa474b7bef2a64f28c6d8ec0c668174f381bdfc7ad5e0736fb0a9fadf681be0';
   const code = document.getElementById('clearDataCode').value;
   const errEl = document.getElementById('clearDataError');
-  if (!VALID_PASSWORDS.includes(code)) {
+  // hash ด้วย SHA-256 เหมือน admin.js
+  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
+  const hash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  if (hash !== ADMIN_PASS_HASH) {
     errEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง';
+    document.getElementById('clearDataCode').value = '';
+    document.getElementById('clearDataCode').focus();
     return;
   }
   errEl.textContent = '';
