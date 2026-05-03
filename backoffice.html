@@ -1662,20 +1662,13 @@ tr.drag-over td { background: var(--cream-dark) !important; }
           <label class="field-label">ชื่อเมนู *</label>
           <input type="text" class="field-input" id="menuName" placeholder="เช่น ข้าวซอยไก่">
         </div>
-        <div class="field">
+        <div class="field span2">
           <label class="field-label">หมวด *</label>
           <select class="field-input" id="menuCategory">
             <option value="setkao">🍱 เซ็ตอาหาร</option>
           </select>
         </div>
-        <div class="field">
-          <label class="field-label">ประเภท</label>
-          <select class="field-input" id="menuProductType">
-            <option value="food">อาหาร</option>
-            <option value="drink">เครื่องดื่ม</option>
-            <option value="set">เซ็ต</option>
-          </select>
-        </div>
+
         <div class="field">
           <label class="field-label">ราคา (฿) *</label>
           <input type="number" class="field-input" id="menuPrice" placeholder="0" min="0" step="0.5">
@@ -2492,7 +2485,7 @@ function clearMenuModal() {
   ['menuName','menuDesc','menuImgUrl'].forEach(id => document.getElementById(id).value = '');
   ['menuPrice','menuSortOrder','menuPromoPrice'].forEach(id => document.getElementById(id).value = '');
   rebuildCategorySelect(Object.keys(LIVE_CATEGORIES)[0] || 'setkao');
-  document.getElementById('menuProductType').value = 'food';
+  // productType อนุมานอัตโนมัติจาก optionGroups
   document.getElementById('menuPromoEnabled').checked = false;
   document.getElementById('menuPromoFields').style.display = 'none';
   document.getElementById('menuPromoLabel').value = '';
@@ -2516,7 +2509,7 @@ function openMenuModal(id = null) {
     document.getElementById('menuPrice').value     = m.price;
     document.getElementById('menuSortOrder').value = m.sortOrder || '';
     rebuildCategorySelect(m.category);
-    document.getElementById('menuProductType').value = m.productType || 'food';
+    // productType อนุมานอัตโนมัติ
     if (m.imageUrl) {
       document.getElementById('menuImgUrl').value = m.imageUrl;
       document.getElementById('imgUploadArea').innerHTML = `<img src="${escHtml(m.imageUrl)}" alt="">`;
@@ -2559,7 +2552,7 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
     name,
     desc: document.getElementById('menuDesc').value.trim(),
     category: document.getElementById('menuCategory').value,
-    productType: document.getElementById('menuProductType').value,
+    productType: (optionGroups && optionGroups.length > 0) ? 'custom' : 'simple',
     price,
     sortOrder: parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
     enabled: editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
