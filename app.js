@@ -381,12 +381,16 @@ document.querySelectorAll('.table-btn').forEach(btn => {
 
 // ==================== Products ====================
 function renderProducts() {
-  productsGrid.innerHTML = (products[currentCategory] || []).map((p) => `
+  productsGrid.innerHTML = (products[currentCategory] || []).map((p, idx) => `
     <button type="button" class="product-card"
       data-id="${p.id}" data-name="${escapeAttr(p.name)}"
       data-price="${p.price}" data-image="${escapeAttr(p.image)}">
-      <img class="product-img" src="${p.image}" alt="${escapeAttr(p.name)}" loading="lazy"
-           onerror="this.style.display='none'">
+      <div class="product-img-wrap pos-img-skeleton">
+        <img class="product-img" src="${p.image}" alt="${escapeAttr(p.name)}"
+             loading="${idx < 6 ? 'eager' : 'lazy'}" decoding="async"
+             onload="this.parentNode.classList.remove('pos-img-skeleton')"
+             onerror="this.parentNode.classList.remove('pos-img-skeleton');this.style.display='none'">
+      </div>
       <p class="product-name">${escapeHtml(p.name)}</p>
       <p class="product-price">${formatMoney(p.price)}</p>
     </button>
@@ -1013,6 +1017,23 @@ window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0
       color: #5c3d2e;
     }
     .table-order-banner strong { color: var(--accent, #c8853a); }
+
+    /* ── Skeleton loader รูปภาพ POS ── */
+    .product-img-wrap {
+      width: 100%; aspect-ratio: 1; overflow: hidden;
+      border-radius: 8px 8px 0 0;
+    }
+    @keyframes pos-shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position:  400px 0; }
+    }
+    .pos-img-skeleton {
+      background: linear-gradient(90deg, #ede8e0 25%, #f5f2ec 50%, #ede8e0 75%);
+      background-size: 800px 100%;
+      animation: pos-shimmer 1.4s infinite linear;
+    }
+    .pos-img-skeleton img { opacity: 0; transition: opacity 0.2s; }
+    .product-img-wrap:not(.pos-img-skeleton) img { opacity: 1; }
   `;
   document.head.appendChild(style);
 })();

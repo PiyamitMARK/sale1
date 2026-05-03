@@ -578,21 +578,25 @@ function renderProducts() {
     : (PRODUCTS[currentCat] || []);
   const list = allList;
   const QUICKADD_TYPES = ['simple', 'drink-ready'];
-  grid.innerHTML = list.map(p => {
+  grid.innerHTML = list.map((p, idx) => {
     const isDisabled = p.enabled === false;
     // quick-add ถ้า productType เป็น simple/drink-ready และไม่มี custom options
     const hasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
     const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType) && !hasOptions;
     const isPopular  = !isDisabled && popularItems.includes(p.name);
+    // รูป 6 ใบแรกใน viewport โหลดทันที, ที่เหลือ lazy
+    const loadAttr   = idx < 6 ? 'eager' : 'lazy';
     return `
     <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}${isDisabled ? ' cust-product-card--disabled' : ''}"
       data-id="${p.id}" type="button" ${isDisabled ? 'disabled aria-disabled="true"' : ''}>
       ${isDisabled ? '<span class="cust-soldout-badge">หมดชั่วคราว</span>' : ''}
-      ${isPopular ? '<span class="cust-popular-badge">🔥 ยอดนิยม</span>' : ''}
+      ${isPopular ? '<span class="cust-popular-badge">\U0001f525 ยอดนิยม</span>' : ''}
       ${isQuick && !isPopular ? '<span class="cust-quick-badge">+</span>' : ''}
-      <div class="cust-product-img-wrap">
-        <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}" loading="lazy"
-             onerror="this.parentNode.innerHTML='<span class=cust-product-img-fallback>🍽</span>'">
+      <div class="cust-product-img-wrap cust-img-skeleton">
+        <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}"
+             loading="${loadAttr}" decoding="async"
+             onload="this.parentNode.classList.remove('cust-img-skeleton')"
+             onerror="this.parentNode.classList.remove('cust-img-skeleton');this.parentNode.innerHTML='<span class=cust-product-img-fallback>\U0001f37d</span>'">
       </div>
       <div class="cust-product-info">
         <div class="cust-product-name">${esc(p.name)}</div>
@@ -1252,6 +1256,19 @@ init();
 (function injectFeatureStyles() {
   const style = document.createElement('style');
   style.textContent = `
+    /* ── Skeleton loader สำหรับรูปภาพ ── */
+    @keyframes cust-shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position:  400px 0; }
+    }
+    .cust-img-skeleton {
+      background: linear-gradient(90deg, #ede8e0 25%, #f5f2ec 50%, #ede8e0 75%);
+      background-size: 800px 100%;
+      animation: cust-shimmer 1.4s infinite linear;
+    }
+    .cust-img-skeleton img { opacity: 0; transition: opacity 0.2s; }
+    .cust-product-img-wrap:not(.cust-img-skeleton) img { opacity: 1; }
+
     /* ── Search Bar ── */
     #menuSearchBar { padding: 0.5rem 1rem 0; background: var(--cream, #faf6f0); }
     .cust-search-wrap {
