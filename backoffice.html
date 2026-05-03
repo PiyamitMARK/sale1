@@ -1797,7 +1797,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 // ============================================================
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getDatabase, ref, onValue, update, remove, push, set } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 // AppCheck removed — not needed for backoffice
 
 // ============================================================
@@ -1970,8 +1970,9 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db  = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
+//try {
   // AppCheck disabled
-signInAnonymously(auth).catch(e => console.error('Auth:', e));
+// signInAnonymously removed
 
 // ---- Live data from Firebase ----
 let LIVE_ORDERS = [];   // all orders from Firebase (converted to flat array)
@@ -3753,6 +3754,9 @@ document.getElementById('menuImgUrl').addEventListener('input', function() {
   if (this.value) {
     document.getElementById('imgUploadArea').innerHTML = `<img src="${escHtml(this.value)}" alt="" onerror="this.style.display='none'">`;
     document.getElementById('imgUploadArea').classList.add('has-image');
+  } else {
+    document.getElementById('imgUploadArea').innerHTML = '';
+    document.getElementById('imgUploadArea').classList.remove('has-image');
   }
 });
 </script>
