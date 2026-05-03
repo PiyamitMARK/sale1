@@ -2781,10 +2781,50 @@ function openMenuModal(id = null) {
     renderOptionGroups();
   }
   openModal('menuModal');
-}
+  // Pre-fill toppings from productType defaults when adding new menu
+  if (!id) {
+    const ptVal = document.getElementById('menuProductType').value;
+    const defaults = LIVE_PT_TOPPINGS[ptVal];
+    if (defaults && Array.isArray(defaults) && defaults.length > 0) {
+      optionGroups = defaults.map(g => ({
+        id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
+        name:    g.label || '',
+        label:   g.label || '',
+        type:    g.type || 'single',
+        choices: (g.choices || []).map(c =>
+          typeof c === 'string'
+            ? { value: c, label: c, price: 0 }
+            : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
+        ),
+      }));
+      renderOptionGroups();
+    }
+  }
 
 document.getElementById('menuPromoEnabled').addEventListener('change', function() {
   document.getElementById('menuPromoFields').style.display = this.checked ? 'grid' : 'none';
+});
+
+document.getElementById('menuProductType').addEventListener('change', function() {
+  // pre-fill toppings only when adding NEW menu (not editing)
+  if (editingMenuId) return;
+  const ptVal = this.value;
+  const defaults = LIVE_PT_TOPPINGS[ptVal];
+  if (!defaults || !Array.isArray(defaults) || defaults.length === 0) return;
+  // only pre-fill if no groups set yet
+  if (optionGroups.length > 0) return;
+  optionGroups = defaults.map(g => ({
+    id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
+    name:    g.label || '',
+    label:   g.label || '',
+    type:    g.type || 'single',
+    choices: (g.choices || []).map(c =>
+      typeof c === 'string'
+        ? { value: c, label: c, price: 0 }
+        : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
+    ),
+  }));
+  renderOptionGroups();
 });
 
 document.getElementById('menuAddBtn').addEventListener('click', () => openMenuModal());
@@ -3037,7 +3077,355 @@ function openCategoryModal() {
 }
 
 // ==================== ProductType Manager Modal ====================
+
+// Live cache ของ topping defaults จาก Firebase
+let LIVE_PT_TOPPINGS = {}; // { [ptValue]: [ {id,label,type,choices:[{value,label,price}]} ] }
+
+function subscribePtToppings() {
+  onValue(ref(db, 'productTypeToppings'), snap => {
+    LIVE_PT_TOPPINGS = snap.exists() ? snap.val() : {};
+    if (window._ptModalRerender) window._ptModalRerender();
+  });
+}
+
+async function savePtToppings(ptValue, groups) {
+  if (!groups || groups.length === 0) {
+    await remove(ref(db, `productTypeToppings/${ptValue}`));
+  } else {
+    await set(ref(db, `productTypeToppings/${ptValue}`), groups);
+  }
+}
+
+// ─── Topping editor state (per open modal) ───
+let _ptToppingEditors = {}; // { [ptValue]: [ groupObj ] }
+
+function _initPtToppingEditor(ptValue) {
+  const raw = LIVE_PT_TOPPINGS[ptValue];
+  if (Array.isArray(raw)) {
+    _ptToppingEditors[ptValue] = raw.map(g => ({
+      id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
+      label:   g.label || g.name || '',
+      type:    g.type || 'single',
+      choices: (g.choices || []).map(c =>
+        typeof c === 'string'
+          ? { value: c, label: c, price: 0 }
+          : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
+      ),
+    }));
+  } else {
+    _ptToppingEditors[ptValue] = [];
+  }
+}
+
+function _renderPtToppingEditor(container, ptValue) {
+  const groups = _ptToppingEditors[ptValue] || [];
+  container.innerHTML = '';
+
+  if (groups.length === 0) {
+    container.innerHTML = `<p style="font-size:.78rem;color:var(--brown-light);padding:.4rem 0">ยังไม่มีตัวเลือก — กด <strong>＋ เพิ่มกลุ่ม</strong> เพื่อเพิ่ม</p>`;
+    return;
+  }
+
+  groups.forEach((g, gi) => {
+    const gDiv = document.createElement('div');
+    gDiv.className = 'opts-group';
+    gDiv.style.cssText = 'background:var(--cream);border:1.5px solid var(--cream-dark);border-radius:8px;padding:.6rem;display:flex;flex-direction:column;gap:.4rem;';
+    gDiv.innerHTML = `
+      <div style="display:flex;gap:.4rem;align-items:flex-start;flex-wrap:wrap">
+        <input type="text" class="field-input pt-grp-name" placeholder="ชื่อกลุ่ม เช่น ระดับความเผ็ด"
+          value="${escHtml(g.label)}" style="flex:1;min-width:100px;font-size:.83rem;padding:.32rem .55rem">
+        <select class="field-input pt-grp-type" style="flex:0 0 88px;font-size:.8rem;padding:.32rem .45rem">
+          <option value="single" ${g.type==='single'?'selected':''}>เลือก 1</option>
+          <option value="multi"  ${g.type==='multi' ?'selected':''}>หลายอย่าง</option>
+        </select>
+        <button type="button" class="btn-icon del pt-grp-del" title="ลบกลุ่ม" style="flex-shrink:0">🗑</button>
+      </div>
+      <div class="pt-choices-wrap" style="display:flex;flex-direction:column;gap:.28rem;padding-left:.2rem">
+        ${g.choices.map((c, ci) => `
+          <div style="display:flex;gap:.35rem;align-items:center">
+            <input type="text" class="field-input pt-ch-label" data-ci="${ci}"
+              placeholder="เช่น ไม่เผ็ด" value="${escHtml(c.label||c.value||'')}"
+              style="flex:1;font-size:.82rem;padding:.28rem .5rem">
+            <input type="number" class="field-input pt-ch-price" data-ci="${ci}"
+              placeholder="±ราคา" value="${c.price != null && c.price !== 0 ? c.price : ''}"
+              style="width:70px;font-size:.82rem;padding:.28rem .45rem">
+            <button type="button" class="opts-rm pt-ch-del" data-ci="${ci}">✕</button>
+          </div>`).join('')}
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm pt-add-choice" style="align-self:flex-start;font-size:.78rem;padding:.28rem .65rem;margin-top:.1rem">＋ เพิ่มตัวเลือก</button>
+    `;
+
+    gDiv.querySelector('.pt-grp-name').addEventListener('input', e => {
+      _ptToppingEditors[ptValue][gi].label = e.target.value;
+    });
+    gDiv.querySelector('.pt-grp-type').addEventListener('change', e => {
+      _ptToppingEditors[ptValue][gi].type = e.target.value;
+    });
+    gDiv.querySelector('.pt-grp-del').addEventListener('click', () => {
+      _ptToppingEditors[ptValue].splice(gi, 1);
+      _renderPtToppingEditor(container, ptValue);
+    });
+    gDiv.querySelectorAll('.pt-ch-label').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const ci = parseInt(inp.dataset.ci);
+        _ptToppingEditors[ptValue][gi].choices[ci].label = inp.value;
+        _ptToppingEditors[ptValue][gi].choices[ci].value = inp.value;
+      });
+    });
+    gDiv.querySelectorAll('.pt-ch-price').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const ci = parseInt(inp.dataset.ci);
+        const p = parseFloat(inp.value);
+        _ptToppingEditors[ptValue][gi].choices[ci].price = isNaN(p) ? 0 : p;
+      });
+    });
+    gDiv.querySelectorAll('.pt-ch-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ci = parseInt(btn.dataset.ci);
+        _ptToppingEditors[ptValue][gi].choices.splice(ci, 1);
+        _renderPtToppingEditor(container, ptValue);
+      });
+    });
+    gDiv.querySelector('.pt-add-choice').addEventListener('click', () => {
+      _ptToppingEditors[ptValue][gi].choices.push({ value: '', label: '', price: 0 });
+      _renderPtToppingEditor(container, ptValue);
+    });
+
+    container.appendChild(gDiv);
+  });
+}
+
 function openProductTypeModal() {
+  let modal = document.getElementById('productTypeManagerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'productTypeManagerModal';
+    modal.className = 'bo-modal';
+    document.body.appendChild(modal);
+  }
+
+  function getUsageCount(value) {
+    return Object.values(LIVE_MENU).filter(m => m.productType === value).length;
+  }
+
+  function renderModal() {
+    const pts = LIVE_PRODUCT_TYPES;
+    pts.forEach(pt => { if (!_ptToppingEditors[pt.value]) _initPtToppingEditor(pt.value); });
+
+    modal.innerHTML = `
+      <div class="bo-modal-box" style="max-width:680px">
+        <div class="bo-modal-header">
+          <span class="bo-modal-title">🏷 จัดการประเภทเมนู (productType)</span>
+          <button class="bo-modal-close" id="ptModalClose">✕</button>
+        </div>
+        <div class="bo-modal-body" style="gap:.75rem">
+          <p style="font-size:.82rem;color:var(--brown-light);margin-top:-.25rem">
+            กำหนดชื่อ คำอธิบาย และ <strong>Topping/ตัวเลือกเริ่มต้น</strong> สำหรับแต่ละประเภท — เมนูใหม่ที่เลือกประเภทนี้จะได้รับ Topping นี้โดยอัตโนมัติ
+          </p>
+
+          <div style="display:flex;flex-direction:column;gap:.55rem" id="ptList">
+            ${pts.map(pt => {
+              const usage = getUsageCount(pt.value);
+              const safeVal = escHtml(pt.value);
+              const safeLabel = escHtml(pt.label);
+              const safeDesc  = escHtml(pt.desc || '');
+              const toppingCount = Array.isArray(LIVE_PT_TOPPINGS[pt.value]) ? LIVE_PT_TOPPINGS[pt.value].length : 0;
+              return `
+              <div class="pt-row" data-ptvalue="${safeVal}" style="flex-direction:column;align-items:stretch;gap:.55rem;padding:.7rem .75rem">
+                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+                  <div style="flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0">
+                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                      <input type="text" class="field-input pt-label-input" data-id="${safeVal}"
+                        value="${safeLabel}" placeholder="ชื่อประเภท"
+                        style="flex:1;min-width:110px;font-size:.85rem;padding:.35rem .55rem">
+                      <input type="text" class="field-input pt-desc-input" data-id="${safeVal}"
+                        value="${safeDesc}" placeholder="คำอธิบาย (ไม่บังคับ)"
+                        style="flex:2;min-width:140px;font-size:.82rem;padding:.35rem .55rem;color:var(--brown-light)">
+                    </div>
+                    <div class="pt-row-id">id: <strong>${safeVal}</strong></div>
+                  </div>
+                  <span class="pt-usage-badge${usage > 0 ? ' has-usage' : ''}" title="จำนวนเมนูที่ใช้ประเภทนี้">${usage} เมนู</span>
+                  <button type="button" class="btn btn-outline btn-sm pt-save-btn" data-id="${safeVal}">💾 บันทึก</button>
+                  <button type="button" class="btn btn-danger btn-sm pt-delete-btn" data-id="${safeVal}" data-usage="${usage}">🗑</button>
+                </div>
+
+                <div style="border-top:1px dashed var(--cream-dark);padding-top:.55rem">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem;gap:.4rem;flex-wrap:wrap">
+                    <div style="display:flex;align-items:center;gap:.35rem">
+                      <span style="font-size:.75rem;font-weight:700;color:var(--brown-light);text-transform:uppercase;letter-spacing:.04em">🍢 Topping / ตัวเลือกเริ่มต้น</span>
+                      ${toppingCount > 0
+                        ? `<span style="background:#e8f5e9;color:#2e7d32;font-size:.7rem;font-weight:700;padding:.1rem .4rem;border-radius:999px">${toppingCount} กลุ่ม</span>`
+                        : `<span style="background:var(--cream-dark);color:var(--brown-light);font-size:.7rem;padding:.1rem .4rem;border-radius:999px">ยังไม่มี</span>`}
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm pt-topping-toggle" data-ptval="${safeVal}"
+                      style="font-size:.78rem;padding:.28rem .6rem">
+                      ${toppingCount > 0 ? '✏️ แก้ไข Topping' : '＋ เพิ่ม Topping'}
+                    </button>
+                  </div>
+                  <div class="pt-topping-editor" data-ptval="${safeVal}" style="display:none;flex-direction:column;gap:.4rem">
+                    <div class="pt-topping-groups" data-ptval="${safeVal}"></div>
+                    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.1rem">
+                      <button type="button" class="btn btn-ghost btn-sm pt-add-group" data-ptval="${safeVal}"
+                        style="font-size:.78rem;padding:.28rem .65rem">＋ เพิ่มกลุ่มตัวเลือก</button>
+                      <button type="button" class="btn btn-primary btn-sm pt-save-topping" data-ptval="${safeVal}"
+                        style="font-size:.78rem;padding:.28rem .75rem">💾 บันทึก Topping</button>
+                      <span class="pt-topping-msg" data-ptval="${safeVal}" style="font-size:.78rem;color:var(--green)"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+
+          <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.1rem">
+            <p style="font-size:.82rem;font-weight:700;color:var(--brown-light);margin-bottom:.6rem">＋ เพิ่มประเภทใหม่</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr;gap:.45rem">
+              <input type="text" class="field-input" id="newPtId" placeholder="id เช่น hotpot" style="font-size:.82rem">
+              <input type="text" class="field-input" id="newPtLabel" placeholder="ชื่อ เช่น 🍲 หม้อไฟ" style="font-size:.82rem">
+              <input type="text" class="field-input" id="newPtDesc" placeholder="คำอธิบาย (ไม่บังคับ)" style="font-size:.82rem">
+            </div>
+            <p id="ptModalError" style="color:var(--red);font-size:.82rem;min-height:1.2rem;margin-top:.3rem"></p>
+            <button type="button" class="btn btn-primary btn-sm" id="addPtBtn" style="margin-top:.25rem">＋ เพิ่มประเภท</button>
+          </div>
+        </div>
+        <div class="bo-modal-footer">
+          <p style="font-size:.75rem;color:var(--brown-light);flex:1">
+            💡 Topping ที่บันทึกไว้จะถูก pre-fill อัตโนมัติเมื่อสร้างเมนูใหม่ที่ใช้ประเภทนี้
+          </p>
+          <button type="button" class="btn btn-outline" id="ptModalCloseFooter">ปิด</button>
+        </div>
+      </div>
+    `;
+    modal.classList.add('open');
+
+    const closeAll = () => { modal.classList.remove('open'); _ptToppingEditors = {}; };
+    modal.querySelector('#ptModalClose').onclick = closeAll;
+    modal.querySelector('#ptModalCloseFooter').onclick = closeAll;
+    modal.addEventListener('click', e => { if (e.target === modal) closeAll(); });
+
+    modal.querySelectorAll('.pt-save-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const row = modal.querySelector(`.pt-row[data-ptvalue="${id}"]`);
+        const newLabel = row.querySelector('.pt-label-input').value.trim();
+        const newDesc  = row.querySelector('.pt-desc-input').value.trim();
+        if (!newLabel) { alert('กรุณาใส่ชื่อประเภท'); return; }
+        btn.disabled = true;
+        try {
+          await updateProductTypeLocal(id, newLabel, newDesc);
+          btn.textContent = '✅ บันทึกแล้ว';
+          setTimeout(() => { btn.textContent = '💾 บันทึก'; btn.disabled = false; }, 1400);
+        } catch(e) { alert('แก้ไม่ได้: ' + e.message); btn.disabled = false; }
+      };
+    });
+
+    modal.querySelectorAll('.pt-delete-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const usage = parseInt(btn.dataset.usage) || 0;
+        const pt = LIVE_PRODUCT_TYPES.find(p => p.value === id);
+        const name = pt?.label || id;
+        let msg = `ลบประเภท "${name}" (${id}) ออก?`;
+        if (usage > 0) msg += `\n\n⚠️ มีเมนู ${usage} รายการที่ใช้ประเภทนี้อยู่`;
+        if (!confirm(msg)) return;
+        btn.disabled = true;
+        try {
+          await deleteProductTypeLocal(id);
+          await remove(ref(db, `productTypeToppings/${id}`));
+        } catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
+      };
+    });
+
+    modal.querySelectorAll('.pt-topping-toggle').forEach(btn => {
+      btn.onclick = () => {
+        const ptVal = btn.dataset.ptval;
+        const editor = modal.querySelector(`.pt-topping-editor[data-ptval="${ptVal}"]`);
+        const isOpen = editor.style.display !== 'none';
+        if (isOpen) {
+          editor.style.display = 'none';
+          const tCount = (_ptToppingEditors[ptVal] || []).length;
+          btn.textContent = tCount > 0 ? '✏️ แก้ไข Topping' : '＋ เพิ่ม Topping';
+        } else {
+          editor.style.display = 'flex';
+          btn.textContent = '🔼 ซ่อน';
+          if (!_ptToppingEditors[ptVal]) _initPtToppingEditor(ptVal);
+          _renderPtToppingEditor(editor.querySelector('.pt-topping-groups'), ptVal);
+        }
+      };
+    });
+
+    modal.querySelectorAll('.pt-add-group').forEach(btn => {
+      btn.onclick = () => {
+        const ptVal = btn.dataset.ptval;
+        if (!_ptToppingEditors[ptVal]) _ptToppingEditors[ptVal] = [];
+        _ptToppingEditors[ptVal].push({
+          id: 'g' + Date.now(),
+          label: '',
+          type: 'single',
+          choices: [{ value: '', label: '', price: 0 }],
+        });
+        const editor = modal.querySelector(`.pt-topping-editor[data-ptval="${ptVal}"]`);
+        _renderPtToppingEditor(editor.querySelector('.pt-topping-groups'), ptVal);
+      };
+    });
+
+    modal.querySelectorAll('.pt-save-topping').forEach(btn => {
+      btn.onclick = async () => {
+        const ptVal = btn.dataset.ptval;
+        const groups = (_ptToppingEditors[ptVal] || [])
+          .filter(g => g.label.trim() && g.choices.some(c => c.label.trim()))
+          .map(g => ({
+            id:      g.id,
+            label:   g.label.trim(),
+            type:    g.type,
+            choices: g.choices
+              .filter(c => c.label.trim())
+              .map(c => ({ value: c.value||c.label, label: c.label, price: c.price||0 })),
+          }));
+        const msgEl = modal.querySelector(`.pt-topping-msg[data-ptval="${ptVal}"]`);
+        btn.disabled = true;
+        try {
+          await savePtToppings(ptVal, groups.length > 0 ? groups : null);
+          _ptToppingEditors[ptVal] = groups;
+          msgEl.textContent = '✅ บันทึกแล้ว!';
+          msgEl.style.color = 'var(--green)';
+          setTimeout(() => { msgEl.textContent = ''; btn.disabled = false; }, 2000);
+        } catch(e) {
+          msgEl.textContent = '❌ ' + e.message;
+          msgEl.style.color = 'var(--red)';
+          btn.disabled = false;
+        }
+      };
+    });
+
+    modal.querySelector('#addPtBtn').onclick = async () => {
+      const idInput    = modal.querySelector('#newPtId');
+      const labelInput = modal.querySelector('#newPtLabel');
+      const descInput  = modal.querySelector('#newPtDesc');
+      const errEl      = modal.querySelector('#ptModalError');
+      errEl.textContent = '';
+      let id    = idInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const label = labelInput.value.trim();
+      const desc  = descInput.value.trim();
+      if (!id)    { errEl.textContent = 'id ต้องเป็น a-z, 0-9, - หรือ _ เท่านั้น'; return; }
+      if (!label) { errEl.textContent = 'กรุณาใส่ชื่อประเภท'; return; }
+      if (LIVE_PRODUCT_TYPES.find(p => p.value === id)) {
+        errEl.textContent = `id "${id}" มีอยู่แล้ว`; return;
+      }
+      try {
+        await addProductTypeLocal(id, label, desc);
+        idInput.value = ''; labelInput.value = ''; descInput.value = '';
+        errEl.textContent = '';
+      } catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
+    };
+  }
+
+  renderModal();
+
+  window._ptModalRerender = () => {
+    if (modal.classList.contains('open')) { _ptToppingEditors = {}; renderModal(); }
+  };
+}
   let modal = document.getElementById('productTypeManagerModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -3181,6 +3569,8 @@ function openProductTypeModal() {
     if (modal.classList.contains('open')) renderModal();
   };
 }
+
+subscribePtToppings();
 
 subscribeOrders(orders => {
   MOCK_ORDERS = orders;
