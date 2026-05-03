@@ -3026,11 +3026,11 @@ function openCategoryModal() {
             }).join('')}
           </div>
 
-          <div id="catOrderSaveRow" style="display:none;margin-top:.6rem">
-            <button type="button" class="btn btn-primary btn-sm" id="catSaveOrderBtn" style="width:100%">
+          <div id="catOrderSaveRow" style="display:none;margin-top:.6rem;display:none;justify-content:flex-end;align-items:center;gap:.75rem">
+            <p id="catOrderSaveMsg" style="font-size:.8rem;color:var(--green);min-height:1rem;flex:1"></p>
+            <button type="button" class="btn btn-primary btn-sm" id="catSaveOrderBtn">
               💾 บันทึกลำดับใหม่
             </button>
-            <p id="catOrderSaveMsg" style="font-size:.8rem;color:var(--green);min-height:1rem;margin-top:.3rem"></p>
           </div>
 
           <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem">
@@ -3085,7 +3085,7 @@ function openCategoryModal() {
         const tgtIdx = rows.indexOf(row);
         if (srcIdx < tgtIdx) row.after(dragSrc);
         else row.before(dragSrc);
-        saveRow.style.display = 'block';
+        saveRow.style.display = 'flex';
         saveMsg.textContent = '';
       });
     });
