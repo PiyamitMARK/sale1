@@ -656,7 +656,16 @@ async function deleteOrder(firebaseKey, orderNumber) {
 
 // ==================== Menu Data (for add-item modal) ====================
 let allMenuData = {};
-onValue(ref(db, 'menu'), snap => { allMenuData = snap.val() || {}; });
+let _menuRawCache = null;
+let _menuDebounce = null;
+onValue(ref(db, 'menu'), snap => {
+  const raw = snap.val() || {};
+  const rawStr = JSON.stringify(raw);
+  if (rawStr === _menuRawCache) return;
+  _menuRawCache = rawStr;
+  clearTimeout(_menuDebounce);
+  _menuDebounce = setTimeout(() => { allMenuData = raw; }, 250);
+});
 
 // ==================== Products (admin add-item) ====================
 
