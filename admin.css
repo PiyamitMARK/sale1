@@ -929,11 +929,16 @@ body {
   font-family: inherit;
   font-weight: 600;
   line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .btn-sound-icon:hover {
   border-color: var(--brown-light);
   background: var(--cream-dark);
   color: var(--brown);
+}
+.btn-sound-icon:active {
+  transform: scale(0.95);
 }
 .btn-sound-icon.muted {
   opacity: 0.55;

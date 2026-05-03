@@ -1523,17 +1523,21 @@ clearDataConfirm.addEventListener('click', async () => {
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
-const soundDropdown  = document.getElementById('soundDropdown');
 
-// ── ฟังก์ชัน update label บนปุ่ม ──
+// ── update label + icon บนปุ่ม ──
 function updateSoundBtnLabel() {
   if (!soundToggleBtn) return;
-  const modeLabel = soundMode === 'beep' ? '🎵 Effect' : '🗣 เสียงคนพูด';
-  soundToggleBtn.textContent = soundEnabled ? `🔔 ${modeLabel}` : `🔕 ปิดเสียง`;
-  soundToggleBtn.classList.toggle('muted', !soundEnabled);
+  if (!soundEnabled) {
+    soundToggleBtn.textContent = '🔕 ปิดอยู่';
+    soundToggleBtn.classList.add('muted');
+  } else {
+    const modeLabel = soundMode === 'beep' ? '🎵 Effect' : '🗣 เสียงคนพูด';
+    soundToggleBtn.textContent = `🔔 ${modeLabel}`;
+    soundToggleBtn.classList.remove('muted');
+  }
 }
 
-// ── ตั้งค่า mode dropdown items ──
+// ── ตั้งค่า mode ──
 function applySoundMode(mode) {
   soundMode = mode;
   localStorage.setItem('soundMode', mode);
@@ -1543,37 +1547,93 @@ function applySoundMode(mode) {
   updateSoundBtnLabel();
 }
 applySoundMode(soundMode);
+updateSoundBtnLabel();
 
-// ── Toggle dropdown open/close เมื่อกดปุ่ม ──
+// ── Long press logic ──
+let _longPressTimer = null;
+const LONG_PRESS_MS = 450;
+
+function openSoundDropdown(e) {
+  e.stopPropagation();
+  unlockIOSSpeech();
+  soundControl?.classList.add('open');
+}
+
+function closeSoundDropdown() {
+  soundControl?.classList.remove('open');
+}
+
 if (soundToggleBtn) {
-  soundToggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    unlockIOSSpeech();
-    soundControl?.classList.toggle('open');
+  // mouse
+  soundToggleBtn.addEventListener('mousedown', (e) => {
+    _longPressTimer = setTimeout(() => {
+      _longPressTimer = null;
+      openSoundDropdown(e);
+    }, LONG_PRESS_MS);
+  });
+  soundToggleBtn.addEventListener('mouseup', () => {
+    if (_longPressTimer) {
+      clearTimeout(_longPressTimer);
+      _longPressTimer = null;
+      // short click → toggle on/off
+      unlockIOSSpeech();
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
+      soundControl?.classList.toggle('muted', !soundEnabled);
+      updateSoundBtnLabel();
+      if (soundEnabled) {
+        if (soundMode === 'beep') playBeep([880, 1047], 0.18);
+        else speak('เสียงเปิดแล้วจ้า');
+      }
+    }
+  });
+  soundToggleBtn.addEventListener('mouseleave', () => {
+    if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+  });
+
+  // touch (mobile)
+  soundToggleBtn.addEventListener('touchstart', (e) => {
+    _longPressTimer = setTimeout(() => {
+      _longPressTimer = null;
+      openSoundDropdown(e);
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+  soundToggleBtn.addEventListener('touchend', (e) => {
+    if (_longPressTimer) {
+      clearTimeout(_longPressTimer);
+      _longPressTimer = null;
+      unlockIOSSpeech();
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
+      soundControl?.classList.toggle('muted', !soundEnabled);
+      updateSoundBtnLabel();
+      if (soundEnabled) {
+        if (soundMode === 'beep') playBeep([880, 1047], 0.18);
+        else speak('เสียงเปิดแล้วจ้า');
+      }
+    }
+  });
+  soundToggleBtn.addEventListener('touchcancel', () => {
+    if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
   });
 }
 
-// ── เลือก mode จาก dropdown item ──
+// ── เลือก mode จาก dropdown ──
 document.querySelectorAll('.sound-dropdown-item').forEach(item => {
   item.addEventListener('click', (e) => {
     e.stopPropagation();
     unlockIOSSpeech();
     const mode = item.dataset.mode;
-    if (!soundEnabled) {
-      soundEnabled = true;
-      soundControl?.classList.remove('muted');
-    }
+    if (!soundEnabled) { soundEnabled = true; }
     applySoundMode(mode);
-    soundControl?.classList.remove('open');
+    closeSoundDropdown();
     if (mode === 'beep') playBeep([880, 1047, 1319], 0.18);
     else speak('เสียงคนพูดจ้า');
   });
 });
 
-// ── คลิกนอก dropdown แล้วปิด ──
-document.addEventListener('click', () => {
-  soundControl?.classList.remove('open');
-});
+// ── คลิกนอก → ปิด dropdown ──
+document.addEventListener('click', closeSoundDropdown);
 
 // ==================== Inject batch CSS (ส่วนที่ยังคงใน JS เพราะใช้ร่วมกับ receipt popup) ====================
 (function injectBatchStyle() {
