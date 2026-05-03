@@ -383,9 +383,6 @@ function openMenuFormModal(product) {
   const catOptions = Object.entries(CATEGORY_LABELS)
     .map(([v, l]) => `<option value="${v}"${p.category === v ? ' selected' : ''}>${_esc(l)}</option>`)
     .join('');
-  const typeOptions = PRODUCT_TYPES
-    .map(t => `<option value="${t.value}"${p.productType === t.value ? ' selected' : ''}>${_esc(t.label)}</option>`)
-    .join('');
 
   // ---- Promo section ----
   const promo = p.promo || {};
@@ -463,8 +460,14 @@ function openMenuFormModal(product) {
             <select id="mfCategory" class="field-input">${catOptions}</select>
           </div>
           <div class="field">
-            <label class="field-label">ประเภท (options)</label>
-            <select id="mfType" class="field-input">${typeOptions}</select>
+            <label class="field-label">ลำดับการแสดง</label>
+            <input type="number" id="mfSortOrder" class="field-input" value="${p.sortOrder ?? ''}"
+              placeholder="0" min="0" step="1">
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label class="field-label">รายละเอียด (ไม่บังคับ)</label>
+            <input type="text" id="mfDescription" class="field-input" value="${_esc(p.description || '')}"
+              placeholder="บรรยายสั้นๆ เช่น เส้นหมี ซอสแกงกะหรี่ เนื้อหมู" maxlength="120">
           </div>
         </div>
       </section>
@@ -610,9 +613,10 @@ function _collectFormData(existingProduct) {
   const name      = document.getElementById('mfName')?.value.trim()    || '';
   const price     = parseInt(document.getElementById('mfPrice')?.value, 10);
   const category  = document.getElementById('mfCategory')?.value        || 'kao';
-  const prodType  = document.getElementById('mfType')?.value            || 'simple';
   const imageNum  = parseInt(document.getElementById('mfImage')?.value, 10) || 0;
   const imageUrl  = document.getElementById('mfImageUrl')?.value        || '';
+  const description = document.getElementById('mfDescription')?.value.trim() || '';
+  const sortOrderInput = parseInt(document.getElementById('mfSortOrder')?.value, 10);
   const optData   = document.getElementById('mfOptionsData')?.value;
 
   const promoEnabled = document.getElementById('mfPromoEnabled')?.value === '1';
@@ -632,16 +636,27 @@ function _collectFormData(existingProduct) {
   let options = null;
   try { options = JSON.parse(optData); } catch { options = null; }
 
+  // productType อนุมานจาก options อัตโนมัติ
+  // ถ้ามี custom options → 'custom' (customer.js จะใช้ p.options แทน OPTION_CONFIGS)
+  // ถ้าไม่มี → 'simple' (แค่ช่องหมายเหตุ ไม่มี option groups)
+  // ถ้า existingProduct มี productType เดิมที่ไม่ใช่ custom/simple → เก็บไว้ (backward compat)
   const existing = existingProduct ? (_allMenuData[existingProduct.id] || existingProduct) : null;
+  let productType = options && options.length > 0 ? 'custom' : 'simple';
+  // backward compat: ถ้าเมนูเก่ามี productType ที่ hardcode (kaosoi ฯลฯ) และยังไม่มี options → คงเดิม
+  if (!options || options.length === 0) {
+    const oldType = existing?.productType;
+    if (oldType && oldType !== 'custom') productType = oldType;
+  }
 
   return {
     id:          existing?.id || generateMenuId(category),
     name, price: isNaN(price) ? 0 : price,
-    category, productType: prodType,
+    category, productType,
+    description: description || undefined,
     imageNum,
     imageUrl:    imageUrl || (existing?.imageUrl || ''),
     enabled:     existing?.enabled ?? true,
-    sortOrder:   existing?.sortOrder ?? (Object.keys(_allMenuData).length + 1),
+    sortOrder:   isNaN(sortOrderInput) ? (existing?.sortOrder ?? (Object.keys(_allMenuData).length + 1)) : sortOrderInput,
     promo,
     options,
   };

@@ -530,7 +530,9 @@ function renderProducts() {
   const QUICKADD_TYPES = ['simple', 'drink-ready'];
   grid.innerHTML = list.map(p => {
     const isDisabled = p.enabled === false;
-    const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType);
+    // quick-add ถ้า productType เป็น simple/drink-ready และไม่มี custom options
+    const hasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
+    const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType) && !hasOptions;
     const isPopular  = !isDisabled && popularItems.includes(p.name);
     return `
     <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}${isDisabled ? ' cust-product-card--disabled' : ''}"
@@ -554,9 +556,10 @@ function renderProducts() {
       const p = (PRODUCTS[currentCat] || []).find(x => x.id === btn.dataset.id);
       if (!p) return;
 
-      // ── Quick-add: เมนูไม่มี option → เพิ่มตะกร้าทันที ──
+      // ── Quick-add: เมนูไม่มี options และ productType เป็น simple/drink-ready → เพิ่มตะกร้าทันที ──
       const QUICKADD_TYPES = ['simple', 'drink-ready'];
-      if (QUICKADD_TYPES.includes(p.productType)) {
+      const pHasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
+      if (QUICKADD_TYPES.includes(p.productType) && !pHasOptions) {
         const cartKey = p.id + '|';
         const existing = cart.find(i => i.cartKey === cartKey);
         if (existing) {
@@ -629,11 +632,36 @@ function initSearchBar() {
 // state ของ option modal รอบนี้
 let currentOptionValues = {}; // { groupId: value | value[] }
 
+/**
+ * resolveOptionConfig — เลือก config ที่จะใช้แสดง option modal
+ *
+ * Priority:
+ *   1. product.options (custom options ที่ตั้งใน Admin) — ถ้ามี
+ *   2. OPTION_CONFIGS[productType] — fallback ตาม productType legacy
+ *   3. { groups:[], hasNote:true } — เมนูใหม่ที่ไม่มี options = แค่หมายเหตุ
+ */
+function resolveOptionConfig(product) {
+  // custom options จาก Firebase → ใช้เลย
+  if (product.options && Array.isArray(product.options) && product.options.length > 0) {
+    return { groups: product.options, hasNote: true };
+  }
+  // productType 'custom' แต่ options ว่าง → note only
+  if (product.productType === 'custom') {
+    return { groups: [], hasNote: true };
+  }
+  // legacy productType (kaosoi, drink-brew ฯลฯ) → ใช้ OPTION_CONFIGS เดิม
+  if (OPTION_CONFIGS[product.productType]) {
+    return OPTION_CONFIGS[product.productType];
+  }
+  // เมนูใหม่ที่ไม่มี options → แค่ช่องหมายเหตุ
+  return { groups: [], hasNote: true };
+}
+
 function openOptionModal(product) {
   pendingProduct = product;
   optionQty = 1;
 
-  const config = OPTION_CONFIGS[product.productType] || OPTION_CONFIGS['simple'];
+  const config = resolveOptionConfig(product);
 
   // reset state
   currentOptionValues = {};
@@ -722,7 +750,7 @@ function renderOptionModalBody(product, config) {
   // bind confirm
   document.getElementById('optionConfirm').addEventListener('click', () => {
     if (!pendingProduct) return;
-    const config2 = OPTION_CONFIGS[pendingProduct.productType] || OPTION_CONFIGS['simple'];
+    const config2 = resolveOptionConfig(pendingProduct);
     const rawNote = document.getElementById('optionNote')?.value ?? '';
     const note    = rawNote.trim().slice(0, 200);
 
