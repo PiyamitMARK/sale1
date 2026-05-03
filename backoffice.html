@@ -2574,6 +2574,7 @@ function renderMenuTable() {
 
 async function loadMenuItems() {
   menuLoaded = true;
+  renderCatBtns();          // แสดงปุ่มหมวดทันที
   MOCK_MENU = Object.values(LIVE_MENU);
   if (MOCK_MENU.length > 0) {
     renderMenuTable();
@@ -2589,15 +2590,7 @@ async function loadMenuItems() {
   }
 }
 
-// cat filter
-document.querySelectorAll('.menu-cat-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.menu-cat-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    menuCatFilter = btn.dataset.cat;
-    renderMenuTable();
-  });
-});
+// cat filter — ปุ่มสร้างแบบ dynamic โดย renderCatBtns() ซึ่งมี event delegation ในตัวอยู่แล้ว
 
 document.getElementById('menuSearchInput').addEventListener('input', e => {
   menuSearch = e.target.value;
