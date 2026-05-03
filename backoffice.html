@@ -281,6 +281,15 @@ body {
   max-width: 100%;
 }
 .field-input:focus { border-color: var(--accent); background: var(--white); }
+input[type="date"].field-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
 
 /* ============================================================
    EXPORT PANEL
