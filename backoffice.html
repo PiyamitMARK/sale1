@@ -1029,6 +1029,18 @@ tr.drag-over td { background: var(--cream-dark) !important; }
   padding: .25rem;
 }
 @media (max-width: 768px) { .hamburger { display: block; } }
+
+/* Topbar responsive — icon-only on mobile */
+.btn-label-short { display: none; }
+.btn-label-full  { display: inline; }
+@media (max-width: 480px) {
+  .btn-label-short { display: inline; }
+  .btn-label-full  { display: none; }
+  #darkToggleLabel { display: none; }
+  .bo-topbar-right { gap: .35rem; }
+  .bo-topbar-right .btn { padding: .35rem .55rem; font-size: .9rem; }
+  .bo-topbar-title { font-size: .88rem; }
+}
 /* ============================================================
    QR PANEL
    ============================================================ */
@@ -1205,8 +1217,14 @@ tr.drag-over td { background: var(--cream-dark) !important; }
         <span class="bo-topbar-title" id="topbarTitle">Export Sheet</span>
       </div>
       <div class="bo-topbar-right">
-        <button class="btn btn-ghost btn-sm" id="darkToggleBtn"><span id="darkToggleLabel">🌙 Dark Mode</span></button>
-        <a href="admin.html" class="btn btn-ghost btn-sm">⬅ แอดมิน</a>
+        <button class="btn btn-ghost btn-sm" id="darkToggleBtn">
+          <span id="darkToggleLabel">🌙 Dark Mode</span>
+          <span class="btn-label-short" id="darkToggleLabelShort">🌙</span>
+        </button>
+        <a href="admin.html" class="btn btn-ghost btn-sm">
+          <span class="btn-label-full">⬅ แอดมิน</span>
+          <span class="btn-label-short">⬅</span>
+        </a>
       </div>
     </div>
 
@@ -1716,7 +1734,9 @@ import { initializeAppCheck, ReCaptchaV3Provider }
   const t = localStorage.getItem('theme') || 'light';
   document.documentElement.setAttribute('data-theme', t);
   const lbl = document.getElementById('darkToggleLabel');
+  const lblS = document.getElementById('darkToggleLabelShort');
   if (lbl) lbl.textContent = t === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+  if (lblS) lblS.textContent = t === 'dark' ? '☀️' : '🌙';
 })();
 
 document.getElementById('darkToggleBtn').addEventListener('click', () => {
@@ -1724,6 +1744,8 @@ document.getElementById('darkToggleBtn').addEventListener('click', () => {
   localStorage.setItem('theme', next);
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('darkToggleLabel').textContent = next === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+  const lblS = document.getElementById('darkToggleLabelShort');
+  if (lblS) lblS.textContent = next === 'dark' ? '☀️' : '🌙';
 });
 
 // ---- sidebar (mobile) ----

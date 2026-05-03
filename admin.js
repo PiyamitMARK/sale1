@@ -1561,6 +1561,24 @@ function openSoundDropdown(e) {
   unlockIOSSpeech();
   _didOpenDropdown = true;
   soundControl?.classList.add('open');
+
+  // คำนวณตำแหน่งจาก button rect เพื่อป้องกัน overflow บนมือถือ
+  const dropdown = document.getElementById('soundDropdown');
+  const btn = soundToggleBtn;
+  if (!dropdown || !btn) return;
+  const rect = btn.getBoundingClientRect();
+  const dropW = 145;
+  const gap = 6;
+
+  // วางใต้ปุ่ม
+  let top = rect.bottom + gap;
+  // พยายามชิดขวาของปุ่ม แต่ถ้าล้นขวาหน้าจอให้ชิดซ้ายแทน
+  let left = rect.right - dropW;
+  if (left < 8) left = rect.left; // ถ้าล้นซ้ายให้ชิดซ้ายของปุ่ม
+  if (left + dropW > window.innerWidth - 8) left = window.innerWidth - dropW - 8;
+
+  dropdown.style.top  = `${top}px`;
+  dropdown.style.left = `${left}px`;
 }
 
 function closeSoundDropdown() {

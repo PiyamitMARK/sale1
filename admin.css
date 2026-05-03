@@ -943,14 +943,12 @@ body {
 /* Dropdown panel (เปิดจากกดค้าง) */
 .sound-dropdown {
   display: none;
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   background: var(--white);
   border: 1.5px solid var(--cream-dark);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
-  z-index: 200;
+  z-index: 9999;
   min-width: 145px;
   overflow: hidden;
   animation: fadeUp 0.15s ease both;
