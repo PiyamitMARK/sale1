@@ -1,17 +1,15 @@
 /**
- * ข้าวซอย 90 — POS System
- * Firebase Realtime Database — sync real-time
+ * ข้าวซอย 90 — Customer Order Page
+ * ลูกค้าสแกน QR → เปิดหน้านี้พร้อม ?table=N → สั่งอาหารได้เลย
  *
  * ระบบใหม่: 1 โต๊ะ = 1 Order Number จนกว่าจะจ่ายเงิน
- *   - สั่งเพิ่มในโต๊ะเดิม → ต่อท้าย order เดิม (แยก batch)
- *   - จ่ายแล้ว → order ใหม่ได้เลขถัดไป
+ *   - ถ้าโต๊ะมี order active → เพิ่ม batch ต่อท้าย order เดิม
+ *   - ถ้าไม่มี → สร้าง order ใหม่
  */
 
 import './darkmode.js';
 import { db } from './firebase-config.js';
-import {
-  ref, push, update, get, remove, runTransaction, onValue
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
 // LS fallback ใช้ตอน Firebase ยังไม่ตอบ
@@ -19,84 +17,83 @@ function _loadMenuFromLS() {
   try {
     const raw = localStorage.getItem('ks90-menu');
     if (!raw) return null;
-    const parsed = parseMenuFromRaw(JSON.parse(raw), 'image');
+    const parsed = parseMenuFromRaw(JSON.parse(raw), 'img');
     return Object.keys(parsed).length ? parsed : null;
   } catch { return null; }
 }
 
-// ==================== รูปสินค้า ====================
+// ==================== เมนู (โหลดจาก Firebase) ====================
 const IMG = (n) => 'images/img' + n + '.png';
 
-// ==================== เมนูสินค้า (โหลดจาก Firebase) ====================
-let products = {
+let PRODUCTS = {
   setkao: [
-    { id: 'setkao13', name: 'เซ็ตอิ่มคุ้มคู่❗',            price: 129, image: IMG(10021),   productType: 'setkao' },
-    { id: 'setkao1', name: 'ข้าวซอยน่องไก่ + โค๊ก',      price: 85, image: IMG(10012),   productType: 'setkao' },
-    { id: 'setkao2', name: 'ข้าวซอยน่องไก่ + ชาไทย',       price: 110, image: IMG(10013),  productType: 'setkao' },
-    { id: 'setkao3', name: 'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price: 115, image: IMG(10014),   productType: 'setkao' },
-    { id: 'setkao4', name: 'ข้าวซอยหมูทอด + โค๊ก',      price: 85, image: IMG(10020),   productType: 'setkao' },
-    { id: 'setkao5', name: 'ข้าวซอยหมูทอด + ชาไทย',       price: 110, image: IMG(10019),  productType: 'setkao' },
-    { id: 'setkao6', name: 'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price: 115, image: IMG(10018),   productType: 'setkao' },
-    { id: 'setkao7', name: 'น้ำเงี้ยว + โค๊ก',      price: 75, image: IMG(10015),   productType: 'setkao' },
-    { id: 'setkao8', name: 'น้ำเงี้ยว + ชาไทย',       price: 100, image: IMG(10016),  productType: 'setkao' },
-    { id: 'setkao9', name: 'น้ำเงี้ยว + มะพร้าวปั่น',            price: 105, image: IMG(10017),   productType: 'setkao' },
-    { id: 'setkao10', name: 'ข้าวหมูทอด + โค๊ก',      price: 65, image: IMG(10009),   productType: 'setkao' },
-    { id: 'setkao11', name: 'ข้าวหมูทอด + ชาไทย',       price: 90, image: IMG(10010),  productType: 'setkao' },
-    { id: 'setkao12', name: 'ข้าวหมูทอด + มะพร้าวปั่น',            price: 95, image: IMG(10011),   productType: 'setkao' },
+    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:129, img:IMG(10021),   productType:'setkao' },
+    { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:85, img:IMG(10012),   productType:'setkao' },
+    { id:'setkao2', name:'ข้าวซอยน่องไก่ + ชาไทย',       price:110, img:IMG(10013),  productType:'setkao' },
+    { id:'setkao3', name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price:115, img:IMG(10014),   productType:'setkao' },
+    { id:'setkao4', name:'ข้าวซอยหมูทอด + โค๊ก',      price:85, img:IMG(10020),   productType:'setkao' },
+    { id:'setkao5', name:'ข้าวซอยหมูทอด + ชาไทย',       price:110, img:IMG(10019),  productType:'setkao' },
+    { id:'setkao6', name:'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price:115, img:IMG(10018),   productType:'setkao' },
+    { id:'setkao7', name:'น้ำเงี้ยว + โค๊ก',      price:75, img:IMG(10015),   productType:'setkao' },
+    { id:'setkao8', name:'น้ำเงี้ยว + ชาไทย',       price:100, img:IMG(10016),  productType:'setkao' },
+    { id:'setkao9', name:'น้ำเงี้ยว + มะพร้าวปั่น',            price:105, img:IMG(10017),   productType:'setkao' },
+    { id:'setkao10', name:'ข้าวหมูทอด + โค๊ก',      price:65, img:IMG(10009),   productType:'setkao' },
+    { id:'setkao11', name:'ข้าวหมูทอด + ชาไทย',       price:90, img:IMG(10010),  productType:'setkao' },
+    { id:'setkao12', name:'ข้าวหมูทอด + มะพร้าวปั่น',            price:95, img:IMG(10011),   productType:'setkao' },
   ],
   kao: [
-    { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, image: IMG(111),   productType: 'kaosoi'   },
-    { id: 'kao2', name: 'ข้าวซอยหมูทอด',       price: 70, image: IMG(1007),   productType: 'kaosoi'  },
-    { id: 'kao3', name: 'น้ำเงี้ยว',            price: 60, image: IMG(555),    productType: 'namngiao'  },
-    { id: 'kao4', name: 'ข้าวหมูทอด',           price: 50, image: IMG(7667),   productType: 'kaomutod'  },
-    { id: 'kao5', name: 'แคบหมู',               price: 15, image: IMG(98789),  productType: 'simple' },
-    { id: 'kao7', name: 'ลาบเหนือ',           price: 60, image: IMG(10001),  productType: 'kaomutod' },
-    { id: 'kao8', name: 'ข้าวเหนียว',           price: 10, image: IMG(10002),  productType: 'simple' },
-    { id: 'kao9', name: 'ข้าวสวย',           price: 10, image: IMG(10003),  productType: 'simple' },
-    { id: 'kao6', name: 'ไข่ต้ม',               price: 10, image: IMG(1090),  productType: 'simple' },
-    ],
+    { id:'kao1', name:'ข้าวซอยน่องไก่',      price:70, img:IMG(111),   productType:'kaosoi' },
+    { id:'kao2', name:'ข้าวซอยหมูทอด',       price:70, img:IMG(1007),  productType:'kaosoi' },
+    { id:'kao3', name:'น้ำเงี้ยว',            price:60, img:IMG(555),   productType:'namngiao' },
+    { id:'kao4', name:'ข้าวหมูทอด',           price:50, img:IMG(7667),  productType:'kaomutod' },
+    { id:'kao7', name:'ลาบเหนือ',           price:60, img:IMG(10001),  productType:'kaomutod' },
+    { id:'kao8', name:'ข้าวเหนียว',           price:10, img:IMG(10002),  productType:'simple' },
+    { id:'kao9', name:'ข้าวสวย',           price:10, img:IMG(10003),  productType:'simple' },
+    { id:'kao5', name:'แคบหมู',               price:15, img:IMG(98789), productType:'simple' },
+    { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
+  ],
   nam: [
-    { id: 'nam1',  name: 'น้ำเปล่า',       price: 10, image: IMG(60),  productType: 'drink-ready' },
-    { id: 'nam2',  name: 'โค๊ก',           price: 15, image: IMG(80),  productType: 'drink-ready' },
-    { id: 'nam3',  name: 'สไปร์ท',         price: 15, image: IMG(345), productType: 'drink-ready' },
-    { id: 'nam4',  name: 'มะพร้าวปั่น',    price: 45, image: IMG(333), productType: 'mapraopun' },
-    { id: 'nam5',  name: 'ชาไทย',          price: 40, image: IMG(1),   productType: 'drink-brew' },
-    { id: 'nam6',  name: 'ชาดำเย็น',       price: 40, image: IMG(5),   productType: 'drink-brew' },
-    { id: 'nam7',  name: 'ชามะนาว',        price: 40, image: IMG(13),  productType: 'drink-brew' },
-    { id: 'nam8',  name: 'นมชมพู',         price: 40, image: IMG(14),  productType: 'drink-brew' },
-    { id: 'nam9',  name: 'โกโก้',          price: 40, image: IMG(9),   productType: 'drink-brew' },
-    { id: 'nam10', name: 'มัทฉะมะพร้าว',   price: 60, image: IMG(15),  productType: 'drink-brew' },
-    { id: 'nam11', name: 'มัทฉะลาเต้',     price: 60, image: IMG(3),   productType: 'drink-brew' },
-    { id: 'nam12', name: 'เพียวมัทฉะ',     price: 55, image: IMG(2),   productType: 'drink-brew' },
+    { id:'nam1',  name:'น้ำเปล่า',       price:10, img:IMG(60),  productType:'drink-ready' },
+    { id:'nam2',  name:'โค๊ก',           price:15, img:IMG(80),  productType:'drink-ready' },
+    { id:'nam3',  name:'สไปร์ท',         price:15, img:IMG(345), productType:'drink-ready' },
+    { id:'nam4',  name:'มะพร้าวปั่น',    price:45, img:IMG(333), productType:'mapraopun' },
+    { id:'nam5',  name:'ชาไทย',          price:40, img:IMG(1),   productType:'drink-brew' },
+    { id:'nam6',  name:'ชาดำเย็น',       price:40, img:IMG(5),   productType:'drink-brew' },
+    { id:'nam7',  name:'ชามะนาว',        price:40, img:IMG(13),  productType:'drink-brew' },
+    { id:'nam8',  name:'นมชมพู',         price:40, img:IMG(14),  productType:'drink-brew' },
+    { id:'nam9',  name:'โกโก้',          price:40, img:IMG(9),   productType:'drink-brew' },
+    { id:'nam10', name:'มัทฉะมะพร้าว',   price:60, img:IMG(15),  productType:'drink-brew' },
+    { id:'nam11', name:'มัทฉะลาเต้',     price:60, img:IMG(3),   productType:'drink-brew' },
+    { id:'nam12', name:'เพียวมัทฉะ',     price:55, img:IMG(2),   productType:'drink-brew' },
   ],
   coffee: [
-    { id: 'coffee1', name: 'เอสเปรสโซ่',         price: 55, image: IMG(12), productType: 'drink-brew' },
-    { id: 'coffee2', name: 'คาปูชิโน่',           price: 55, image: IMG(7),  productType: 'drink-brew' },
-    { id: 'coffee3', name: 'ลาเต้',               price: 55, image: IMG(4),  productType: 'drink-brew' },
-    { id: 'coffee4', name: 'มอคค่า',              price: 55, image: IMG(12), productType: 'drink-brew' },
-    { id: 'coffee5', name: 'อเมริกาโน่',           price: 45, image: IMG(5),  productType: 'drink-brew' },
-    { id: 'coffee6', name: 'อเมริกาโน่มะพร้าว',   price: 60, image: IMG(6),  productType: 'drink-brew' },
-    { id: 'coffee7', name: 'อเมริกาโน่น้ำผึ้ง',   price: 60, image: IMG(5),  productType: 'drink-brew' },
-    { id: 'coffee8', name: 'อเมริกาโน่ส้ม',       price: 60, image: IMG(8),  productType: 'drink-brew' },
+    { id:'coffee1', name:'เอสเปรสโซ่',         price:55, img:IMG(12), productType:'drink-brew' },
+    { id:'coffee2', name:'คาปูชิโน่',           price:55, img:IMG(7),  productType:'drink-brew' },
+    { id:'coffee3', name:'ลาเต้',               price:55, img:IMG(4),  productType:'drink-brew' },
+    { id:'coffee4', name:'มอคค่า',              price:55, img:IMG(12), productType:'drink-brew' },
+    { id:'coffee5', name:'อเมริกาโน่',           price:45, img:IMG(5),  productType:'drink-brew' },
+    { id:'coffee6', name:'อเมริกาโน่มะพร้าว',   price:60, img:IMG(6),  productType:'drink-brew' },
+    { id:'coffee7', name:'อเมริกาโน่น้ำผึ้ง',   price:60, img:IMG(5),  productType:'drink-brew' },
+    { id:'coffee8', name:'อเมริกาโน่ส้ม',       price:60, img:IMG(8),  productType:'drink-brew' }, 
   ],
   soda: [
-    { id: 'soda1', name: 'แดงมะนาวโซดา',      price: 35, image: IMG(23), productType: 'drink-ready' },
-    { id: 'soda2', name: 'บลูฮาวายมะนาวโซดา', price: 35, image: IMG(26), productType: 'drink-ready' },
-    { id: 'soda3', name: 'แอปเปิ้ลโซดา',      price: 35, image: IMG(24), productType: 'drink-ready' },
-    { id: 'soda4', name: 'ส้มโซดา',           price: 35, image: IMG(25), productType: 'drink-ready' },
-    { id: 'soda5', name: 'สตรอเบอร์รี่โซดา',  price: 35, image: IMG(30), productType: 'drink-ready' },
-    { id: 'soda6', name: 'บลูเบอร์รี่โซดา',   price: 35, image: IMG(21), productType: 'drink-ready' },
+    { id:'soda1', name:'แดงมะนาวโซดา',      price:35, img:IMG(23), productType:'drink-ready' },
+    { id:'soda2', name:'บลูฮาวายมะนาวโซดา', price:35, img:IMG(26), productType:'drink-ready' },
+    { id:'soda3', name:'แอปเปิ้ลโซดา',      price:35, img:IMG(24), productType:'drink-ready' },
+    { id:'soda4', name:'ส้มโซดา',           price:35, img:IMG(25), productType:'drink-ready' },
+    { id:'soda5', name:'สตรอเบอร์รี่โซดา',  price:35, img:IMG(30), productType:'drink-ready' },
+    { id:'soda6', name:'บลูเบอร์รี่โซดา',   price:35, img:IMG(21), productType:'drink-ready' },
   ],
 };
 
-// ==================== โหลดเมนู: LS ก่อน (fast) → Firebase subscribe (realtime) ====================
-const _lsMenuPOS = _loadMenuFromLS();
-if (_lsMenuPOS) products = _lsMenuPOS;
+// ==================== โหลดเมนู (LocalStorage → fallback hardcode) ====================
+const _lsMenu = _loadMenuFromLS();
+if (_lsMenu) PRODUCTS = _lsMenu;
 
-// Firebase subscribe: อัปเดต products realtime ทุกครั้งที่เมนูเปลี่ยน
 let _menuRawCache = null;
 let _menuDebounce = null;
 
+// Firebase subscribe: อัปเดต PRODUCTS realtime
 function _startMenuSubscribe() {
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
@@ -112,16 +109,22 @@ function _startMenuSubscribe() {
     // debounce 250ms กันการ re-render ถี่เกินไป
     clearTimeout(_menuDebounce);
     _menuDebounce = setTimeout(() => {
-      const parsed = parseMenuFromRaw(raw, 'image');
+      const parsed = parseMenuFromRaw(raw, 'img');
       if (Object.keys(parsed).length) {
-        products = parsed;
-        renderProducts();
+        PRODUCTS = parsed;
+        if (document.getElementById('productGrid')) renderProducts();
       }
     }, 250);
   });
 }
 
 // ==================== Option Configs แยกตาม productType ====================
+// productType: 'food' | 'drink-brew' | 'drink-ready' | 'simple'
+// food        = อาหาร → เผ็ด + ท็อปปิ้ง + หมายเหตุ
+// drink-brew  = ชง (กาแฟ, ชา, มัทฉะ) → ร้อน/เย็น + ความหวาน + extra + หมายเหตุ
+// drink-ready = น้ำขวด/กระป๋อง/สำเร็จรูป → ไม่มี option (แค่ qty + note)
+// simple      = เมนูเดี่ยวไม่มีตัวเลือก (แคบหมู ไข่ต้ม) → qty เท่านั้น
+
 const OPTION_CONFIGS = {
   'kaosoi': {
     groups: [
@@ -241,289 +244,597 @@ const OPTION_CONFIGS = {
     ],
     hasNote: true,
   },
-  'setkao':      { groups: [], hasNote: true, },
-  'drink-ready': { groups: [], hasNote: true },
-  'simple':      { groups: [], hasNote: false },
+  'setkao': {
+    groups: [],
+    hasNote: true,
+  },
+  'drink-ready': {
+    groups: [],
+    hasNote: true,
+  },
+  'simple': {
+    groups: [],
+    hasNote: false,
+  },
 };
 
 // ==================== State ====================
-let cart = [];
-let orderNumber = 1001;
-let currentCategory = 'setkao';
+let tableNum      = null;
+let currentCat    = 'setkao';
 
 // subscribe defaultCat จาก Firebase — set เป็นค่าเริ่มต้นก่อน categories โหลด
 subscribeDefaultCat(db, catId => {
-  if (catId) currentCategory = catId;
+  if (catId) currentCat = catId;
 });
-let selectedTable = null;
+let searchQuery   = '';         // ข้อความค้นหาเมนู
+let cart          = [];
+let pendingProduct = null;
+let optionQty     = 1;
 
-// สถานะ order ปัจจุบันของโต๊ะที่เลือก
-let currentTableOrderKey = null; // Firebase key ของ order ที่กำลัง active
-let currentTableOrderNumber = null; // order number ที่ active
+// สถานะ order ปัจจุบันของโต๊ะ
+let activeOrderKey    = null; // Firebase key ของ order ที่ยังไม่ได้จ่าย
+let activeOrderNumber = null; // order number ที่ active
+let popularItems      = [];   // ── Feature #1: รายชื่อเมนูยอดนิยม ──
 
-// ==================== DOM ====================
-const currentDateEl    = document.getElementById('currentDate');
-const orderNumberEl    = document.getElementById('orderNumber');
-const tableChipEl      = document.getElementById('tableChip');
-const productsGrid     = document.getElementById('productsGrid');
-const productsOverlay  = document.getElementById('productsOverlay');
-const cartItemsEl      = document.getElementById('cartItems');
-const cartEmptyEl      = document.getElementById('cartEmpty');
-const totalEl          = document.getElementById('total');
-const clearCartBtn     = document.getElementById('clearCart');
-const completeOrderBtn = document.getElementById('completeOrder');
-const receiptModal     = document.getElementById('receiptModal');
-const receiptOrderNum  = document.getElementById('receiptOrderNum');
-const receiptTableEl   = document.getElementById('receiptTable');
-const receiptDate      = document.getElementById('receiptDate');
-const receiptItemsEl   = document.getElementById('receiptItems');
-const receiptTotal     = document.getElementById('receiptTotal');
-const printReceiptBtn  = document.getElementById('printReceipt');
-const newOrderBtn      = document.getElementById('newOrder');
-const confirmOrderModal  = document.getElementById('confirmOrderModal');
-const confirmTableLabel  = document.getElementById('confirmTableLabel');
-const confirmOrderList   = document.getElementById('confirmOrderList');
-const confirmTotal       = document.getElementById('confirmTotal');
-const confirmOrderCancel = document.getElementById('confirmOrderCancel');
-const confirmOrderOk     = document.getElementById('confirmOrderOk');
+// ==================== Cart Persistence (sessionStorage) ====================
+// เก็บตะกร้าไว้ใน sessionStorage แยกตามโต๊ะ
+// → กดรีหน้า / เน็ตหลุดแล้วกลับมา → ตะกร้าคืนมาได้
+function cartStorageKey(t) { return 'cart_t' + t; }
+
+function saveCart() {
+  if (!tableNum) return;
+  try {
+    if (cart.length > 0) {
+      sessionStorage.setItem(cartStorageKey(tableNum), JSON.stringify(cart));
+    } else {
+      sessionStorage.removeItem(cartStorageKey(tableNum));
+    }
+  } catch (_) {}
+}
+
+function loadCart() {
+  if (!tableNum) return;
+  try {
+    const raw = sessionStorage.getItem(cartStorageKey(tableNum));
+    if (raw) cart = JSON.parse(raw);
+  } catch (_) { cart = []; }
+}
+
+function clearSavedCart() {
+  if (!tableNum) return;
+  try { sessionStorage.removeItem(cartStorageKey(tableNum)); } catch (_) {}
+}
 
 // ==================== Helpers ====================
-function formatMoney(n) {
+function fmt(n) {
   return '฿' + Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
-function setDate() {
-  currentDateEl.textContent = new Date().toLocaleDateString('th-TH', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
-
-// ==================== XSS helpers ====================
-function escapeHtml(str) {
+function esc(str) {
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-function escapeAttr(str) {
-  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ==================== Table Selection ====================
-async function selectTable(tableNum) {
-  selectedTable = tableNum;
+// ==================== Init: Read URL param ====================
+// รองรับ ?table=1-99 (โต๊ะ) หรือ ?table=takeaway1/2/3 (กลับบ้าน)
+const TAKEAWAY_IDS = ['takeaway1', 'takeaway2', 'takeaway3'];
 
-  document.querySelectorAll('.table-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.table === String(tableNum));
+function isTakeaway(t) { return TAKEAWAY_IDS.includes(String(t)); }
+function tableLabel(t) { return isTakeaway(t) ? `กลับบ้าน (${String(t).replace('takeaway','')})` : `โต๊ะ ${t}`; }
+
+async function init() {
+  const params = new URLSearchParams(location.search);
+  const raw    = params.get('table') || '';
+  const tNum   = parseInt(raw, 10);
+  const isTA   = TAKEAWAY_IDS.includes(raw);
+
+  // ตรวจสอบ: โต๊ะ 1-99 หรือ takeaway1/2/3
+  if (!isTA && (!tNum || tNum < 1 || tNum > 99)) {
+    show('invalidScreen');
+    return;
+  }
+
+  tableNum = isTA ? raw : tNum;
+  show('mainScreen');
+  const lbl = tableLabel(tableNum);
+  document.getElementById('tableLabel').textContent     = lbl;
+  document.getElementById('cartTableLabel').textContent = lbl;
+
+  // ปรับสไตล์ badge ถ้าเป็นกลับบ้าน
+  if (isTA) {
+    // เพิ่ม class สีเขียวเฉพาะ badge เล็กๆ ไม่เป็น background ทั้งแถว
+    const tableEl = document.getElementById('tableLabel');
+    const cartTableEl = document.getElementById('cartTableLabel');
+    if (tableEl) {
+      tableEl.style.background = '#1a7a4a';
+      tableEl.style.color = '#fff';
+    }
+    // cartTableLabel ให้แค่ข้อความ + icon ไม่เป็น full-width green bar
+    if (cartTableEl) {
+      cartTableEl.style.cssText = 'display:inline-block;background:#e8f5e9;color:#1a7a4a;border:1.5px solid #1a7a4a;font-weight:700;';
+    }
+    // ซ่อนปุ่มเรียกพนักงาน (ไม่ใช่โต๊ะในร้าน)
+    const callBtn = document.getElementById('callStaffBtn');
+    if (callBtn) callBtn.style.display = 'none';
+  }
+
+  // ─── โหลดตะกร้าที่ค้างไว้ (กรณีรีหน้า / เน็ตหลุด) ───
+  loadCart();
+
+  // render เมนูทันที ไม่ต้องรอ Firebase
+  renderProducts();
+  initSearchBar();
+  updateCartBar();
+
+  // ── Feature #1: โหลด popular items ──
+  loadPopularItems();
+
+  // subscribe Firebase menu realtime
+  _startMenuSubscribe();
+
+  // ตรวจ order active ของโต๊ะ (background — ไม่บล็อก render)
+  checkActiveOrder().then(() => {
+    if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
   });
 
-  productsOverlay.classList.add('hidden');
-  tableChipEl.textContent = ` · โต๊ะ ${tableNum}`;
-
-  // ตรวจว่าโต๊ะนี้มี order ค้างอยู่หรือเปล่า
-  await checkTableActiveOrder(tableNum);
-  renderProducts();
+  bindCats();
 }
 
-/**
- * ตรวจสอบ order ที่ active อยู่สำหรับโต๊ะ
- * โครงสร้าง Firebase: tableOrders/{table} = { orderKey, orderNumber }
- */
-async function checkTableActiveOrder(tableNum) {
+async function checkActiveOrder() {
   try {
     const snap = await get(ref(db, `tableOrders/${tableNum}`));
     if (snap.exists()) {
       const data = snap.val();
-      currentTableOrderKey    = data.orderKey;
-      currentTableOrderNumber = data.orderNumber;
-      orderNumber             = data.orderNumber;
-      orderNumberEl.textContent = orderNumber;
-      showTableOrderBanner(tableNum, orderNumber);
+
+      // ตรวจสอบสถานะ order จริงก่อนว่ายังค้างอยู่ (ไม่ใช่ paid/canceled)
+      const orderSnap = await get(ref(db, `orders/${data.orderKey}`));
+      if (orderSnap.exists()) {
+        const order = orderSnap.val();
+        if (order.status === 'paid' || order.status === 'canceled') {
+          // order นี้ปิดแล้ว → ล้าง tableOrders ทิ้ง
+          await set(ref(db, `tableOrders/${tableNum}`), null);
+          activeOrderKey    = null;
+          activeOrderNumber = null;
+          clearSavedCart();
+          return;
+        }
+      } else {
+        // order ถูกลบไปแล้ว → ล้างเช่นกัน
+        await set(ref(db, `tableOrders/${tableNum}`), null);
+        activeOrderKey    = null;
+        activeOrderNumber = null;
+        clearSavedCart();
+        return;
+      }
+
+      activeOrderKey    = data.orderKey;
+      activeOrderNumber = data.orderNumber;
+      showOrderBanner();
     } else {
-      currentTableOrderKey    = null;
-      currentTableOrderNumber = null;
-      hideTableOrderBanner();
-      // order number จะได้ตอน saveOrder
+      // Firebase ตอบว่าไม่มี order active จริงๆ → ล้าง cart ที่ค้าง
+      activeOrderKey    = null;
+      activeOrderNumber = null;
+      clearSavedCart();
     }
   } catch (err) {
-    console.error('checkTableActiveOrder error:', err);
-    currentTableOrderKey    = null;
-    currentTableOrderNumber = null;
-    hideTableOrderBanner();
+    // เน็ตหลุด / Firebase error → ไม่ล้าง cart เพราะยังไม่รู้สถานะจริง
+    console.error('checkActiveOrder error:', err);
+    activeOrderKey = null;
   }
 }
 
-function showTableOrderBanner(tableNum, orderNum) {
-  let banner = document.getElementById('tableOrderBanner');
+function showOrderBanner() {
+  let banner = document.getElementById('activeBanner');
   if (!banner) {
     banner = document.createElement('div');
-    banner.id = 'tableOrderBanner';
-    banner.className = 'table-order-banner';
-    document.querySelector('.table-bar').insertAdjacentElement('afterend', banner);
+    banner.id = 'activeBanner';
+    banner.style.cssText = `
+      background:#fff8e1; border-left:4px solid #c8853a;
+      padding:0.55rem 1rem; font-size:0.85rem; color:#5c3d2e;
+      position:sticky; top:100px; z-index:38;
+    `;
+    document.getElementById('mainScreen').insertBefore(
+      banner,
+      document.getElementById('productGrid')
+    );
   }
-  banner.innerHTML = `
-    <span class="table-order-banner-text">
-      🔄 โต๊ะ ${tableNum} มีออเดอร์ <strong>#${orderNum}</strong> ค้างอยู่ — จะเพิ่มรายการต่อท้ายออเดอร์นี้
-    </span>
-  `;
-  banner.style.display = '';
+  banner.innerHTML = `🔄 ออเดอร์ <strong>#${activeOrderNumber}</strong> ยังค้างอยู่ — การสั่งเพิ่มจะต่อท้ายออเดอร์นี้`;
 }
 
-function hideTableOrderBanner() {
-  const banner = document.getElementById('tableOrderBanner');
-  if (banner) banner.style.display = 'none';
+// ==================== Kitchen Status Real-time ====================
+let kitchenStatusUnsubscribe = null;
+
+const KITCHEN_STATUS_MAP = {
+  pending:  { icon: '⏳', msg: 'รอครัวรับออเดอร์',   cls: '' },
+  cooking:  { icon: '👨‍🍳', msg: 'ครัวกำลังทำอาหาร',  cls: 'status-cooking' },
+  served:   { icon: '🍽',  msg: 'อาหารเสิร์ฟแล้ว! 🎉', cls: 'status-served' },
+  paid:     { icon: '✅',  msg: 'ชำระเงินแล้ว ขอบคุณ', cls: 'status-paid' },
+};
+
+function startKitchenStatusWatcher(orderKey) {
+  if (kitchenStatusUnsubscribe) { kitchenStatusUnsubscribe(); kitchenStatusUnsubscribe = null; }
+  if (!orderKey) { hideKitchenBar(); return; }
+  kitchenStatusUnsubscribe = onValue(ref(db, `orders/${orderKey}/status`), snap => {
+    updateKitchenBar(snap.exists() ? snap.val() : 'pending');
+  });
 }
 
-document.querySelectorAll('.table-btn').forEach(btn => {
-  btn.addEventListener('click', () => selectTable(parseInt(btn.dataset.table)));
+const STATUS_ORDER = ['pending', 'cooking', 'served', 'paid'];
+
+function updateKitchenBar(status) {
+  const bar  = document.getElementById('kitchenBar');
+  const icon = document.getElementById('kitchenIcon');
+  const msg  = document.getElementById('kitchenMsg');
+  if (!bar) return;
+  const info = KITCHEN_STATUS_MAP[status] || KITCHEN_STATUS_MAP.pending;
+  icon.textContent = info.icon;
+  msg.textContent  = info.msg;
+  bar.className    = 'cust-kitchen-bar' + (info.cls ? ' ' + info.cls : '');
+  bar.classList.remove('hidden');
+
+  // เมื่อ status เป็น paid → ล้าง activeOrderKey ทันที
+  // เพื่อให้การสั่งครั้งถัดไปสร้างออเดอร์ใหม่แทนการต่อท้าย
+  if (status === 'paid' || status === 'canceled') {
+    activeOrderKey    = null;
+    activeOrderNumber = null;
+    clearSavedCart();
+    // ล้าง banner ออเดอร์เก่า
+    const banner = document.getElementById('activeBanner');
+    if (banner) banner.remove();
+    // ล้าง tableOrders ใน Firebase (background)
+    if (tableNum) set(ref(db, `tableOrders/${tableNum}`), null).catch(() => {});
+  }
+
+  // อัปเดต timeline steps
+  const currentIdx = STATUS_ORDER.indexOf(status);
+  document.querySelectorAll('.cust-status-step').forEach((step, i) => {
+    step.classList.remove('active', 'done');
+    if (i < currentIdx)        step.classList.add('done');
+    else if (i === currentIdx) step.classList.add('active');
+  });
+  ['stepLine1', 'stepLine2', 'stepLine3'].forEach((id, i) => {
+    const line = document.getElementById(id);
+    if (line) line.classList.toggle('filled', i < currentIdx);
+  });
+}
+
+function hideKitchenBar() {
+  const bar = document.getElementById('kitchenBar');
+  if (bar) bar.classList.add('hidden');
+}
+
+// ==================== Call Staff ====================
+let callCooldown = false;
+
+document.getElementById('callStaffBtn').addEventListener('click', async () => {
+  if (callCooldown || !tableNum) return;
+  callCooldown = true;
+  const btn = document.getElementById('callStaffBtn');
+  btn.disabled = true;
+
+  try {
+    // ตรวจ last call ก่อน write เพื่อป้องกัน bypass จาก client อื่น
+    const lastCallSnap = await get(ref(db, `callStaff/${tableNum}`));
+    if (lastCallSnap.exists()) {
+      const lastCall = lastCallSnap.val();
+      const secondsAgo = (Date.now() - new Date(lastCall.time).getTime()) / 1000;
+      if (!lastCall.done && secondsAgo < 30) {
+        // ยังอยู่ใน cooldown — ไม่ต้องส่งซ้ำ
+        callCooldown = false;
+        btn.disabled = false;
+        return;
+      }
+    }
+    await set(ref(db, `callStaff/${tableNum}`), {
+      table:       tableNum,
+      orderNumber: activeOrderNumber || null,
+      time:        new Date().toISOString(),
+      done:        false,
+    });
+    const toast = document.getElementById('callToast');
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 3000);
+  } catch (err) {
+    console.error('callStaff error:', err);
+  }
+
+  // cooldown 30 วิ ป้องกันกดซ้ำ + countdown
+  let remaining = 30;
+  const btn2 = document.getElementById('callStaffBtn');
+  const origText = btn2 ? btn2.textContent : '🔔 เรียกพนักงาน';
+  const countdownInterval = setInterval(() => {
+    remaining--;
+    if (btn2) btn2.textContent = `⏳ ${remaining}s`;
+    if (remaining <= 0) clearInterval(countdownInterval);
+  }, 1000);
+  setTimeout(() => {
+    callCooldown = false;
+    if (btn2) { btn2.disabled = false; btn2.textContent = origText; }
+    clearInterval(countdownInterval);
+  }, 30000);
 });
+
+function show(id) {
+  ['invalidScreen','mainScreen'].forEach(sid => {
+    document.getElementById(sid).classList.toggle('hidden', sid !== id);
+  });
+}
+
+// ==================== Popular Items ====================
+function loadPopularItems() {
+  onValue(ref(db, 'meta/popularItems'), snap => {
+    popularItems = snap.exists() ? (snap.val() || []) : [];
+    renderProducts(); // re-render เพื่อให้ badge ขึ้น
+  }, { onlyOnce: false });
+}
 
 // ==================== Products ====================
 function renderProducts() {
-  productsGrid.innerHTML = (products[currentCategory] || []).map((p, idx) => `
-    <button type="button" class="product-card"
-      data-id="${p.id}" data-name="${escapeAttr(p.name)}"
-      data-price="${p.price}" data-image="${escapeAttr(p.image)}">
-      <div class="product-img-wrap pos-img-skeleton">
-        <img class="product-img" src="${p.image}" alt="${escapeAttr(p.name)}"
-             loading="${idx < 6 ? 'eager' : 'lazy'}" decoding="async"
-             onload="this.parentNode.classList.remove('pos-img-skeleton')"
-             onerror="this.parentNode.classList.remove('pos-img-skeleton');this.style.display='none'">
+  const grid = document.getElementById('productGrid');
+  // กรองตาม search query ถ้ามี
+  const allList = searchQuery
+    ? Object.values(PRODUCTS).flat().filter(p =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : (PRODUCTS[currentCat] || []);
+  const list = allList;
+  const QUICKADD_TYPES = ['simple', 'drink-ready'];
+  grid.innerHTML = list.map((p, idx) => {
+    const isDisabled = p.enabled === false;
+    // quick-add ถ้า productType เป็น simple/drink-ready และไม่มี custom options
+    const hasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
+    const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType) && !hasOptions;
+    const isPopular  = !isDisabled && popularItems.includes(p.name);
+    // รูป 6 ใบแรกใน viewport โหลดทันที, ที่เหลือ lazy
+    const loadAttr   = idx < 6 ? 'eager' : 'lazy';
+    return `
+    <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}${isDisabled ? ' cust-product-card--disabled' : ''}"
+      data-id="${p.id}" type="button" ${isDisabled ? 'disabled aria-disabled="true"' : ''}>
+      ${isDisabled ? '<span class="cust-soldout-badge">หมดชั่วคราว</span>' : ''}
+      ${isPopular ? '<span class="cust-popular-badge">\U0001f525 ยอดนิยม</span>' : ''}
+      ${isQuick && !isPopular ? '<span class="cust-quick-badge">+</span>' : ''}
+      <div class="cust-product-img-wrap cust-img-skeleton">
+        <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}"
+             loading="${loadAttr}" decoding="async"
+             onload="this.parentNode.classList.remove('cust-img-skeleton')"
+             onerror="this.parentNode.classList.remove('cust-img-skeleton');this.parentNode.innerHTML='<span class=cust-product-img-fallback>\U0001f37d</span>'">
       </div>
-      <p class="product-name">${escapeHtml(p.name)}</p>
-      <p class="product-price">${formatMoney(p.price)}</p>
-    </button>
-  `).join('');
+      <div class="cust-product-info">
+        <div class="cust-product-name">${esc(p.name)}</div>
+        <div class="cust-product-price">${fmt(p.price)}</div>
+      </div>
+    </button>`;
+  }).join('');
 
-  productsGrid.querySelectorAll('.product-card').forEach((btn) => {
+  grid.querySelectorAll('.cust-product-card').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (!selectedTable) return;
-      openOptionModal(btn.dataset);
+      const p = (PRODUCTS[currentCat] || []).find(x => x.id === btn.dataset.id);
+      if (!p) return;
+
+      // ── Quick-add: เมนูไม่มี options และ productType เป็น simple/drink-ready → เพิ่มตะกร้าทันที ──
+      const QUICKADD_TYPES = ['simple', 'drink-ready'];
+      const pHasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
+      if (QUICKADD_TYPES.includes(p.productType) && !pHasOptions) {
+        const cartKey = p.id + '|';
+        const existing = cart.find(i => i.cartKey === cartKey);
+        if (existing) {
+          existing.qty++;
+        } else {
+          cart.push({ cartKey, id: p.id, name: p.name, price: p.price, qty: 1, optionLabel: '' });
+        }
+        saveCart();
+        updateCartBar();
+        // flash feedback
+        btn.classList.add('quick-add-flash');
+        setTimeout(() => btn.classList.remove('quick-add-flash'), 400);
+        return;
+      }
+
+      openOptionModal(p);
     });
   });
 }
 
-// ==================== Option Modal (Dynamic) ====================
-const optionModal = document.getElementById('optionModal');
-let pendingProduct = null;
-let currentOptionValues = {};
+const _catBar = document.getElementById('catBar');
 
-function getProductTypeLabel(type) {
-  return { mapraopun: 'เมนูพิเศษ', kaomutod: '🍚 ข้าวหมูทอด', namngiao: '🍜 น้ำเงี้ยว', kaosoi: '🍜 ข้าวซอย', food: '🍽 อาหาร', 'drink-brew': '☕ เครื่องดื่มชง', 'drink-ready': '🥤 เครื่องดื่ม', simple: '' }[type] || '';
+function renderCategoryTabs(cats) {
+  if (!_catBar) return;
+  const ids = Object.keys(cats);
+  if (!ids.includes(currentCat)) currentCat = ids[0] || 'setkao';
+
+  _catBar.innerHTML = ids.map((id, i) =>
+    `<button class="cust-cat${currentCat === id ? ' active' : ''}" data-cat="${id}">${cats[id]}</button>`
+  ).join('');
+
+  _catBar.querySelectorAll('.cust-cat').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _catBar.querySelectorAll('.cust-cat').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCat = btn.dataset.cat;
+      renderProducts();
+    });
+  });
+  renderProducts();
 }
 
-function openOptionModal(dataset) {
-  // หา product object จากทุก category
-  let product = null;
-  for (const cat of Object.values(products)) {
-    product = cat.find(p => p.id === dataset.id);
-    if (product) break;
+// โหลด categories จาก LocalStorage ทันที (ไม่รอ Firebase) → tabs แสดงเร็ว
+try {
+  const _lsCats = localStorage.getItem('ks90-categories');
+  if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
+} catch (_) {}
+
+// Subscribe Firebase → อัปเดต realtime เมื่อข้อมูลเปลี่ยน
+subscribeCategoriesAndSync(db, renderCategoryTabs);
+
+// ชื่อเดิมยังคงอยู่สำหรับ backward compat (ถูกเรียกใน init())
+function bindCats() { /* no-op: handled by renderCategoryTabs */ }
+
+// ==================== Search Bar ====================
+function initSearchBar() {
+  const catBar = document.getElementById('catBar');
+  if (!catBar || document.getElementById('menuSearchBar')) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'menuSearchBar';
+  bar.innerHTML = `
+    <div class="cust-search-wrap">
+      <input class="cust-search-input" id="menuSearchInput" type="search"
+        placeholder="🔍 ค้นหาเมนู..." autocomplete="off" maxlength="60">
+      <button class="cust-search-clear hidden" id="menuSearchClear" type="button">✕</button>
+    </div>`;
+  catBar.insertAdjacentElement('afterend', bar);
+
+  const input   = document.getElementById('menuSearchInput');
+  const clearBtn = document.getElementById('menuSearchClear');
+
+  input.addEventListener('input', () => {
+    searchQuery = input.value.trim();
+    clearBtn.classList.toggle('hidden', !searchQuery);
+    // ซ่อน/แสดง cat tabs เมื่อค้นหา
+    catBar.style.display = searchQuery ? 'none' : '';
+    renderProducts();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    searchQuery = '';
+    clearBtn.classList.add('hidden');
+    catBar.style.display = '';
+    input.focus();
+    renderProducts();
+  });
+}
+
+// ==================== Option Modal (Dynamic) ====================
+
+// state ของ option modal รอบนี้
+let currentOptionValues = {}; // { groupId: value | value[] }
+
+/**
+ * resolveOptionConfig — เลือก config ที่จะใช้แสดง option modal
+ *
+ * Priority:
+ *   1. product.options (custom options ที่ตั้งใน Admin) — ถ้ามี
+ *   2. OPTION_CONFIGS[productType] — fallback ตาม productType legacy
+ *   3. { groups:[], hasNote:true } — เมนูใหม่ที่ไม่มี options = แค่หมายเหตุ
+ */
+function resolveOptionConfig(product) {
+  // custom options จาก Firebase → ใช้เลย
+  if (product.options && Array.isArray(product.options) && product.options.length > 0) {
+    return { groups: product.options, hasNote: true };
   }
-  if (!product) return;
+  // productType 'custom' แต่ options ว่าง → note only
+  if (product.productType === 'custom') {
+    return { groups: [], hasNote: true };
+  }
+  // legacy productType (kaosoi, drink-brew ฯลฯ) → ใช้ OPTION_CONFIGS เดิม
+  if (OPTION_CONFIGS[product.productType]) {
+    return OPTION_CONFIGS[product.productType];
+  }
+  // เมนูใหม่ที่ไม่มี options → แค่ช่องหมายเหตุ
+  return { groups: [], hasNote: true };
+}
 
+function openOptionModal(product) {
   pendingProduct = product;
+  optionQty = 1;
 
-  // ── Priority: custom options จาก Firebase ก่อน, fallback OPTION_CONFIGS legacy ──
-  const config = _resolveOptionConfig(product);
+  const config = resolveOptionConfig(product);
 
   // reset state
   currentOptionValues = {};
   config.groups.forEach(g => {
-    currentOptionValues[g.id] = g.type === 'single' ? (g.defaultValue ?? '') : [];
+    if (g.type === 'single') currentOptionValues[g.id] = g.defaultValue ?? '';
+    else currentOptionValues[g.id] = [];
   });
 
+  // render modal content
   renderOptionModalBody(product, config);
-  optionModal.setAttribute('aria-hidden', 'false');
-}
-
-function _resolveOptionConfig(product) {
-  // 1. custom options ที่ตั้งใน admin (menu-manager format)
-  if (product.options && Array.isArray(product.options) && product.options.length > 0) {
-    return { groups: product.options, hasNote: true };
-  }
-  // 2. productType === 'custom' แต่ options ว่าง → note only
-  if (product.productType === 'custom') {
-    return { groups: [], hasNote: true };
-  }
-  // 3. legacy productType → OPTION_CONFIGS
-  return OPTION_CONFIGS[product.productType] || OPTION_CONFIGS['simple'];
+  openModal('optionModal');
 }
 
 function renderOptionModalBody(product, config) {
-  const box = optionModal.querySelector('.option-modal-content');
+  const modal = document.getElementById('optionModal');
+  const box   = modal.querySelector('.cust-modal-box');
 
-  const TYPE_BADGE = {
-    food:          '<span class="pos-option-badge pos-badge-food">🍽 อาหาร</span>',
-    'drink-brew':  '<span class="pos-option-badge pos-badge-brew">☕ เครื่องดื่มชง</span>',
-    'drink-ready': '<span class="pos-option-badge pos-badge-ready">🥤 เครื่องดื่ม</span>',
-    simple:        '',
-  };
-
+  // สร้าง HTML groups
   const groupsHtml = config.groups.map(g => {
     const pillsHtml = g.choices.map(c => {
       const isActive = g.type === 'single'
         ? currentOptionValues[g.id] === c.value
         : currentOptionValues[g.id].includes(c.value);
-      return `<button type="button"
-        class="option-pill${g.type === 'multi' ? ' toggle' : ''}${isActive ? ' active' : ''}"
-        data-group="${g.id}" data-gtype="${g.type}" data-value="${escapeAttr(c.value)}"
-        ${c.price ? `data-price="${c.price}"` : ''}
-      >${escapeHtml(c.label)}</button>`;
+      return `<button class="cust-pill${g.type === 'multi' ? ' toggle' : ''}${isActive ? ' active' : ''}"
+        data-group="${g.id}" data-type="${g.type}" data-value="${esc(c.value)}"
+        ${c.price ? `data-price="${c.price}"` : ''} type="button">${esc(c.label)}</button>`;
     }).join('');
-    return `<div class="option-group">
-      <p class="option-group-label">${g.label}</p>
-      <div class="option-pill-row">${pillsHtml}</div>
-    </div>`;
+    return `
+      <div class="cust-option-group">
+        <p class="cust-option-label">${g.label}</p>
+        <div class="cust-pill-row" id="optGroup_${g.id}">${pillsHtml}</div>
+      </div>`;
   }).join('');
 
   const noteHtml = config.hasNote ? `
-    <div class="option-group">
-      <p class="option-group-label">📝 หมายเหตุ</p>
-      <textarea class="option-note" id="optionNote" placeholder="เช่น ไม่ใส่ผักชี, หวานน้อย..." rows="2"></textarea>
+    <div class="cust-option-group">
+      <p class="cust-option-label">📝 หมายเหตุ</p>
+      <textarea class="cust-textarea" id="optionNote" rows="2" placeholder="เช่น ไม่ใส่ผักชี, หวานน้อย..." maxlength="200"></textarea>
     </div>` : '';
 
   box.innerHTML = `
-    <h3 class="modal-title">ตั้งค่าเมนู</h3>
-    <p class="option-product-name">${escapeHtml(product.name)}</p>
-    ${TYPE_BADGE[product.productType] || ''}
+    <button class="cust-modal-close" id="optionClose">✕</button>
+    <h3 class="cust-modal-title" id="optionProductName">${esc(product.name)}</h3>
+    <span class="cust-option-type-badge cust-option-type-${product.productType}">${getProductTypeLabel(product.productType)}</span>
     ${groupsHtml}
     ${noteHtml}
-    <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" id="optionCancel">ยกเลิก</button>
-      <button type="button" class="btn btn-primary" id="optionConfirm">🛒 เพิ่มในตะกร้า</button>
+    <div class="cust-option-group cust-qty-row">
+      <p class="cust-option-label">จำนวน</p>
+      <div class="cust-qty-ctrl">
+        <button class="cust-qty-btn" id="qtyMinus" type="button">−</button>
+        <span class="cust-qty-num" id="qtyNum">1</span>
+        <button class="cust-qty-btn" id="qtyPlus" type="button">+</button>
+      </div>
     </div>
+    <button class="cust-btn-add" id="optionConfirm" type="button">🛒 เพิ่มในตะกร้า</button>
   `;
 
   // bind pill events
-  box.querySelectorAll('.option-pill').forEach(btn => {
+  box.querySelectorAll('.cust-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       const gid   = btn.dataset.group;
-      const gtype = btn.dataset.gtype;
-      const val   = btn.dataset.value;
-      if (gtype === 'single') {
-        currentOptionValues[gid] = val;
-        box.querySelectorAll(`.option-pill[data-group="${gid}"]`).forEach(p =>
-          p.classList.toggle('active', p.dataset.value === val));
+      const type  = btn.dataset.type;
+      const value = btn.dataset.value;
+
+      if (type === 'single') {
+        currentOptionValues[gid] = value;
+        box.querySelectorAll(`.cust-pill[data-group="${gid}"]`).forEach(p =>
+          p.classList.toggle('active', p.dataset.value === value));
       } else {
         const arr = currentOptionValues[gid];
-        const idx = arr.indexOf(val);
-        if (idx === -1) arr.push(val); else arr.splice(idx, 1);
-        btn.classList.toggle('active', arr.includes(val));
+        const idx = arr.indexOf(value);
+        if (idx === -1) arr.push(value); else arr.splice(idx, 1);
+        btn.classList.toggle('active', arr.includes(value));
       }
     });
   });
 
-  // bind cancel & confirm
-  box.querySelector('#optionCancel').addEventListener('click', closeOptionModal);
-  box.querySelector('#optionConfirm').addEventListener('click', () => {
+  // bind qty
+  document.getElementById('qtyMinus').addEventListener('click', () => {
+    if (optionQty > 1) { optionQty--; document.getElementById('qtyNum').textContent = optionQty; }
+  });
+  document.getElementById('qtyPlus').addEventListener('click', () => {
+    if (optionQty < 99) { optionQty++; document.getElementById('qtyNum').textContent = optionQty; }
+  });
+
+  // bind confirm
+  document.getElementById('optionConfirm').addEventListener('click', () => {
     if (!pendingProduct) return;
-    const cfg2 = _resolveOptionConfig(pendingProduct);
-    const note  = document.getElementById('optionNote')?.value.trim() || '';
+    const config2 = resolveOptionConfig(pendingProduct);
+    const rawNote = document.getElementById('optionNote')?.value ?? '';
+    const note    = rawNote.trim().slice(0, 200);
+
     const parts = [];
     let extraPrice = 0;
 
-    cfg2.groups.forEach(g => {
+    config2.groups.forEach(g => {
       const val = currentOptionValues[g.id];
       if (g.type === 'single') {
         if (val) {
@@ -542,505 +853,486 @@ function renderOptionModalBody(product, config) {
     });
     if (note) parts.push(note);
 
-    addToCart(pendingProduct, parts.join(' · '), extraPrice);
-    closeOptionModal();
-  });
-}
+    const optionLabel = parts.join(' · ');
+    const finalPrice  = pendingProduct.price + extraPrice;
+    const cartKey     = pendingProduct.id + '|' + optionLabel;
+    const existing    = cart.find(i => i.cartKey === cartKey);
 
-function closeOptionModal() {
-  optionModal.setAttribute('aria-hidden', 'true');
-  pendingProduct = null;
-}
-
-optionModal.addEventListener('click', (e) => {
-  if (e.target === optionModal) closeOptionModal();
-});
-
-// ==================== Cart ====================
-function addToCart({ id, name, price, image }, optionLabel = '', extraPrice = 0) {
-  const basePrice = parseFloat(price) + extraPrice;
-  const cartKey = id + '|' + optionLabel;
-  const existing = cart.find(i => i.cartKey === cartKey);
-  if (existing) {
-    existing.qty += 1;
-  } else {
-    cart.push({ id, cartKey, name, price: basePrice, qty: 1, image, table: selectedTable, optionLabel });
-  }
-  renderCart();
-}
-
-function removeFromCart(index) {
-  cart.splice(index, 1);
-  renderCart();
-}
-
-function updateQty(index, delta) {
-  cart[index].qty += delta;
-  if (cart[index].qty <= 0) removeFromCart(index);
-  else renderCart();
-}
-
-function renderCart() {
-  cartEmptyEl.style.display = cart.length ? 'none' : 'flex';
-  cartItemsEl.querySelectorAll('.cart-item').forEach((el) => el.remove());
-
-  cart.forEach((item, index) => {
-    const li = document.createElement('li');
-    li.className = 'cart-item';
-
-    const img = item.image
-      ? `<img class="cart-item-img" src="${item.image}" alt="" onerror="this.style.display='none'">`
-      : '<span class="cart-item-img-placeholder"></span>';
-
-    li.innerHTML = `
-      ${img}
-      <div class="cart-item-info">
-        <div class="cart-item-name">${escapeHtml(item.name)}</div>
-        ${item.optionLabel ? `<div class="cart-item-note">${escapeHtml(item.optionLabel)}</div>` : ''}
-        <div class="cart-item-price">${formatMoney(item.price)} × ${item.qty}</div>
-      </div>
-      <div class="cart-item-qty">
-        <button type="button" class="qty-btn" aria-label="ลดจำนวน">−</button>
-        <span class="qty-num">${item.qty}</span>
-        <button type="button" class="qty-btn" aria-label="เพิ่มจำนวน">+</button>
-      </div>
-      <button type="button" class="cart-item-remove" aria-label="ลบรายการ">✕</button>
-    `;
-
-    li.querySelector('.qty-btn:first-child').addEventListener('click', () => updateQty(index, -1));
-    li.querySelector('.qty-btn:last-child').addEventListener('click', () => updateQty(index, 1));
-    li.querySelector('.cart-item-remove').addEventListener('click', () => removeFromCart(index));
-    cartItemsEl.appendChild(li);
-  });
-
-  const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
-  const badge = document.getElementById('cartBadge');
-  if (badge) {
-    badge.textContent = totalQty;
-    badge.style.display = totalQty > 0 ? 'inline-flex' : 'none';
-  }
-
-  totalEl.textContent = formatMoney(cart.reduce((sum, i) => sum + i.price * i.qty, 0));
-}
-
-function clearCart() {
-  cart = [];
-  renderCart();
-}
-
-// ==================== Firebase: Order Number ====================
-// วันที่ตามเวลาไทย (UTC+7) สำหรับ reset order number รายวัน
-function getTodayTH() {
-  const now = new Date();
-  const th = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return th.toISOString().slice(0, 10);
-}
-
-async function loadOrderNumber() {
-  try {
-    const today = getTodayTH();
-    const metaSnap = await get(ref(db, 'meta'));
-    const meta = metaSnap.exists() ? metaSnap.val() : {};
-
-    if (meta.lastOrderDate !== today) {
-      orderNumber = 1001;
-      await update(ref(db, 'meta'), { orderNumber: 1001, lastOrderDate: today });
+    if (existing) {
+      existing.qty += optionQty;
     } else {
-      orderNumber = meta.orderNumber || 1001;
+      cart.push({ cartKey, id: pendingProduct.id, name: pendingProduct.name, price: finalPrice, qty: optionQty, optionLabel });
     }
-    orderNumberEl.textContent = orderNumber;
-  } catch (err) {
-    console.error('loadOrderNumber error:', err);
-  }
-}
 
-// ==================== Firebase: Save Order (batch-aware) ====================
-// คืนค่า { allBatches, grandTotal } เพื่อให้ receipt แสดงยอดรวมทั้ง order
-async function saveOrder() {
-  const today = getTodayTH();
-  const batchItems = cart.map((i) => ({
-    name: i.name,
-    price: i.price,
-    qty: i.qty,
-    ...(i.optionLabel ? { option: i.optionLabel } : {}),
-  }));
-
-  // ─── Fix 2: อ่าน snap ครั้งเดียว แล้ว reuse ───
-  let existingSnap = null;
-  if (currentTableOrderKey) {
-    existingSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
-    if (!existingSnap.exists()) {
-      // order ถูกลบไปแล้ว → สร้างใหม่
-      currentTableOrderKey = null;
-      existingSnap = null;
-    }
-  }
-
-  if (!currentTableOrderKey) {
-    // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
-    let newOrderNum;
-    const txResult = await runTransaction(ref(db, 'meta'), (meta) => {
-      if (!meta) meta = {};
-      if (meta.lastOrderDate !== today) {
-        meta.orderNumber   = 1001;
-        meta.lastOrderDate = today;
-      } else {
-        meta.orderNumber = (meta.orderNumber || 1000) + 1;
-      }
-      return meta;
-    });
-    if (!txResult.committed || !txResult.snapshot.exists()) {
-      throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
-    }
-    newOrderNum = txResult.snapshot.val().orderNumber;
-    if (!newOrderNum) throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
-
-    const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const order = {
-      orderNumber: newOrderNum,
-      table: selectedTable,
-      date: new Date().toISOString(),
-      batches: [batchItems],
-      total,
-      status: 'pending',
-    };
-
-    const newRef = await push(ref(db, 'orders'), order);
-    currentTableOrderKey    = newRef.key;
-    currentTableOrderNumber = newOrderNum;
-    orderNumber             = newOrderNum;
-
-    // บันทึก tableOrders (meta อัปเดตไปแล้วใน transaction)
-    await update(ref(db, `tableOrders/${selectedTable}`), {
-      orderKey:    newRef.key,
-      orderNumber: newOrderNum,
-    });
-
-    orderNumberEl.textContent = orderNumber;
-    // ─── Fix 1: คืนข้อมูลสำหรับ receipt (order ใหม่) ───
-    return { allBatches: [batchItems], grandTotal: total };
-
-  } else {
-    // ─── Fix 2: reuse snap ที่อ่านแล้ว ไม่ต้อง get ซ้ำ ───
-    const existingOrder = existingSnap.val();
-    const batches = existingOrder.batches || [existingOrder.items || []];
-    batches.push(batchItems);
-
-    const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
-
-    await update(ref(db, `orders/${currentTableOrderKey}`), {
-      batches,
-      total: newTotal,
-      status: 'pending', // reset เป็น pending เพื่อให้ admin เห็น batch ใหม่
-      lastBatchDate: new Date().toISOString(),
-    });
-    // ─── Fix 1: คืนข้อมูลสำหรับ receipt (เพิ่ม batch) ───
-    return { allBatches: batches, grandTotal: newTotal };
-  }
-}
-
-// ==================== Receipt ====================
-// Fix 1: รับ allBatches + grandTotal จาก saveOrder เพื่อแสดงยอดรวมทั้ง order
-function showReceipt({ allBatches, grandTotal }) {
-  receiptOrderNum.textContent = currentTableOrderNumber || orderNumber;
-  receiptTableEl.textContent  = `โต๊ะ ${selectedTable}`;
-  receiptDate.textContent     = new Date().toLocaleString('th-TH');
-
-  // แสดงทุก item จากทุก batch (ยอดรวมทั้ง order)
-  const allItems = allBatches.flat();
-  receiptItemsEl.innerHTML = allItems.map((i) =>
-    `<div class="receipt-item">
-      <span>${escapeHtml(i.name)}${i.option ? ` (${escapeHtml(i.option)})` : ''} × ${i.qty}</span>
-      <span>${formatMoney(i.price * i.qty)}</span>
-    </div>`
-  ).join('');
-
-  receiptTotal.textContent = formatMoney(grandTotal);
-  receiptModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeReceipt() {
-  receiptModal.setAttribute('aria-hidden', 'true');
-}
-
-// ==================== Confirm Modal ====================
-function openConfirmOrderModal() {
-  const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-
-  // แสดงว่าเป็น order ใหม่หรือสั่งเพิ่ม
-  if (currentTableOrderKey) {
-    confirmTableLabel.innerHTML = `โต๊ะ ${selectedTable} · <span style="color:var(--accent)">เพิ่มในออเดอร์ #${currentTableOrderNumber}</span>`;
-  } else {
-    confirmTableLabel.textContent = `โต๊ะ ${selectedTable} · ออเดอร์ใหม่`;
-  }
-
-  confirmOrderList.innerHTML = cart.map((i) =>
-    `<div class="confirm-order-item">
-      <span>${escapeHtml(i.name)}${i.optionLabel ? `<br><small style="color:var(--accent);font-size:0.78rem">${escapeHtml(i.optionLabel)}</small>` : ''} × ${i.qty}</span>
-      <span>${formatMoney(i.price * i.qty)}</span>
-    </div>`
-  ).join('');
-  confirmTotal.innerHTML = `<span>รวมทั้งหมด</span><span>${formatMoney(total)}</span>`;
-  confirmOrderModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeConfirmOrderModal() {
-  confirmOrderModal.setAttribute('aria-hidden', 'true');
-}
-
-// ==================== New Order (after payment) ====================
-async function startNewOrder() {
-  // ลบ tableOrders เฉพาะกรณีที่ order จ่ายแล้ว (paid) หรือถูกลบไปแล้ว
-  // ถ้า order ยังไม่ paid → คง tableOrders ไว้ เพื่อให้ครั้งต่อไป append batch เข้าออเดอร์เดิม
-  if (currentTableOrderKey && selectedTable) {
-    try {
-      const tableSnap = await get(ref(db, `tableOrders/${selectedTable}`));
-      if (tableSnap.exists() && tableSnap.val().orderKey === currentTableOrderKey) {
-        const orderSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
-        const orderStatus = orderSnap.exists() ? orderSnap.val().status : null;
-        if (!orderSnap.exists() || orderStatus === 'paid') {
-          // order หายไปแล้ว หรือ paid แล้ว → ลบได้
-          await remove(ref(db, `tableOrders/${selectedTable}`));
-        }
-        // ถ้า order ยังค้างอยู่ (pending/cooking/served) → ไม่ลบ tableOrders
-      }
-    } catch (err) {
-      console.error('startNewOrder tableOrders remove error:', err);
-    }
-  }
-
-  cart = [];
-  selectedTable = null;
-  currentTableOrderKey    = null;
-  currentTableOrderNumber = null;
-  tableChipEl.textContent = '';
-  document.querySelectorAll('.table-btn').forEach(b => b.classList.remove('active'));
-  productsOverlay.classList.remove('hidden');
-  hideTableOrderBanner();
-  renderCart();
-  closeReceipt();
-
-  // โหลด order number ล่าสุดจาก meta
-  await loadOrderNumber();
-}
-
-// ==================== Event Listeners ====================
-
-// ─── Dynamic category tabs ────────────────────────────────────────
-const _categoriesNav = document.getElementById('categoriesNav');
-
-function renderCategoryTabs(cats) {
-  if (!_categoriesNav) return;
-  // รักษา currentCategory ถ้ายังมีอยู่ใน cats ใหม่ ไม่งั้น reset เป็นตัวแรก
-  const ids = Object.keys(cats);
-  if (!ids.includes(currentCategory)) currentCategory = ids[0] || 'setkao';
-
-  _categoriesNav.innerHTML = ids.map((id, i) =>
-    `<button class="category-btn${i === 0 && currentCategory === id || currentCategory === id ? ' active' : ''}" data-category="${id}">${cats[id]}</button>`
-  ).join('');
-
-  _categoriesNav.querySelectorAll('.category-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      _categoriesNav.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentCategory = btn.dataset.category;
-      renderProducts();
-    });
+    saveCart(); // บันทึกตะกร้าทันที
+    closeModal('optionModal');
+    updateCartBar();
   });
-  renderProducts();
+
+  // bind close
+  document.getElementById('optionClose').addEventListener('click', () => closeModal('optionModal'));
 }
 
-// โหลด categories จาก LocalStorage ทันที (ไม่รอ Firebase) → tabs แสดงเร็ว
-try {
-  const _lsCats = localStorage.getItem('ks90-categories');
-  if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
-} catch (_) {}
-
-// Subscribe Firebase → อัปเดต realtime เมื่อข้อมูลเปลี่ยน
-subscribeCategoriesAndSync(db, renderCategoryTabs);
-
-clearCartBtn.addEventListener('click', clearCart);
-
-completeOrderBtn.addEventListener('click', () => {
-  if (cart.length === 0) return;
-  closeCartOnMobile();
-  openConfirmOrderModal();
-});
-
-printReceiptBtn.addEventListener('click', () => window.print());
-newOrderBtn.addEventListener('click', startNewOrder);
-
-confirmOrderCancel.addEventListener('click', closeConfirmOrderModal);
-confirmOrderModal.addEventListener('click', (e) => {
-  if (e.target === confirmOrderModal) closeConfirmOrderModal();
-});
-receiptModal.addEventListener('click', (e) => {
-  if (e.target === receiptModal) closeReceipt();
-});
-
-confirmOrderOk.addEventListener('click', async () => {
-  confirmOrderOk.disabled = true;
-  closeConfirmOrderModal();
-  let receiptData;
-  try {
-    receiptData = await saveOrder();
-  } catch (err) {
-    console.error('saveOrder error:', err);
-    alert('เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาตรวจสอบการเชื่อมต่อ');
-    confirmOrderOk.disabled = false;
-    return;
-  }
-  confirmOrderOk.disabled = false;
-  // หลังบันทึกสำเร็จ → ล้าง cart แต่คง tableOrderKey ไว้
-  cart = [];
-  renderCart();
-  showTableOrderBanner(selectedTable, currentTableOrderNumber);
-  showReceipt(receiptData);
-});
-
-// ==================== Mobile Cart Toggle + Smooth Drag ====================
-const cartSection = document.querySelector('.cart-section');
-const cartHeader  = document.querySelector('.cart-header');
-
-const cartBackdrop = document.createElement('div');
-cartBackdrop.className = 'cart-backdrop';
-document.body.appendChild(cartBackdrop);
-
-function isMobile() { return window.innerWidth <= 900; }
-
-let cartH        = 0;
-let closedOffset = 0;
-let currentOffset = 0;
-let isOpen       = false;
-
-function getCartMetrics() {
-  cartH        = cartSection.offsetHeight;
-  closedOffset = cartH - 58;
+function getProductTypeLabel(type) {
+  return { mapraopun: 'เมนูพิเศษ', kaomutod: '🍚 ข้าวหมูทอด', namngiao: '🍜 น้ำเงี้ยว', kaosoi: '🍜 ข้าวซอย', food: '🍽 อาหาร', 'drink-brew': '☕ เครื่องดื่มชง', 'drink-ready': '🥤 เครื่องดื่ม', simple: '' }[type] || '';
 }
 
-function setOffset(offset, animate = false) {
-  currentOffset = Math.max(0, Math.min(offset, closedOffset));
-  cartSection.style.transition = animate ? 'transform 0.32s cubic-bezier(0.34,1.1,0.64,1)' : 'none';
-  cartSection.style.transform  = `translateY(${currentOffset}px)`;
-
-  const progress = closedOffset > 0 ? 1 - currentOffset / closedOffset : 0;
-  cartBackdrop.style.opacity        = Math.max(0, Math.min(progress * 0.5, 0.5));
-  cartBackdrop.style.visibility     = currentOffset < closedOffset ? 'visible' : 'hidden';
-  cartBackdrop.style.pointerEvents  = currentOffset < closedOffset ? 'auto' : 'none';
+// ==================== Cart Bar ====================
+function updateCartBar() {
+  const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+  const totalAmt = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const bar = document.getElementById('cartBar');
+  bar.style.display = totalQty > 0 ? '' : 'none';
+  document.getElementById('cartCountBadge').textContent = `${totalQty} รายการ`;
+  document.getElementById('cartTotalBadge').textContent = fmt(totalAmt);
 }
 
-function openCart(animate = true)  { isOpen = true;  setOffset(0, animate);            cartSection.classList.add('open'); }
-function closeCart(animate = true) { isOpen = false; getCartMetrics(); setOffset(closedOffset, animate); cartSection.classList.remove('open'); }
+document.getElementById('openCartBtn').addEventListener('click', () => {
+  renderCartModal();
+  openModal('cartModal');
+});
+document.getElementById('cartClose').addEventListener('click', () => closeModal('cartModal'));
 
-function openCartOnMobile()  { if (isMobile()) { getCartMetrics(); openCart(); } }
-function closeCartOnMobile() { if (isMobile()) closeCart(); }
+// ==================== Cart Modal ====================
+function renderCartModal() {
+  const list     = document.getElementById('cartList');
+  const empty    = document.getElementById('cartEmpty');
+  const totalAmt = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
-cartBackdrop.addEventListener('click', () => closeCart());
+  if (cart.length === 0) {
+    empty.style.display = '';
+    list.querySelectorAll('.cust-cart-item').forEach(el => el.remove());
+  } else {
+    empty.style.display = 'none';
+    list.querySelectorAll('.cust-cart-item').forEach(el => el.remove());
+    cart.forEach((item, idx) => {
+      const li = document.createElement('li');
+      li.className = 'cust-cart-item';
+      li.innerHTML = `
+        <div class="cust-cart-item-info">
+          <div class="cust-cart-item-name">${esc(item.name)}</div>
+          ${item.optionLabel ? `<div class="cust-cart-item-note">${esc(item.optionLabel)}</div>` : ''}
+          <div class="cust-cart-item-price">${fmt(item.price)}</div>
+        </div>
+        <div class="cust-cart-item-qty">
+          <button class="cust-cart-qty-btn" data-idx="${idx}" data-d="-1">−</button>
+          <span class="cust-cart-qty-num">${item.qty}</span>
+          <button class="cust-cart-qty-btn" data-idx="${idx}" data-d="1">+</button>
+        </div>
+        <button class="cust-cart-item-del" data-idx="${idx}">✕</button>
+      `;
+      list.appendChild(li);
+    });
 
-let dragStartY     = 0;
-let dragStartOffset = 0;
-let isDragging     = false;
-let rafId          = null;
-let latestY        = 0;
-
-function onPointerStart(clientY) {
-  if (!isMobile()) return;
-  getCartMetrics();
-  isDragging      = true;
-  dragStartY      = clientY;
-  dragStartOffset = currentOffset;
-  cartSection.style.transition = 'none';
-  document.body.style.overflow = 'hidden';
-}
-
-function onPointerMove(clientY) {
-  if (!isDragging) return;
-  latestY = clientY;
-  if (!rafId) {
-    rafId = requestAnimationFrame(() => {
-      const delta     = latestY - dragStartY;
-      const newOffset = Math.max(0, Math.min(dragStartOffset + delta, closedOffset));
-      currentOffset   = newOffset;
-      cartSection.style.transform = `translateY(${newOffset}px)`;
-      const progress = closedOffset > 0 ? 1 - newOffset / closedOffset : 0;
-      cartBackdrop.style.opacity       = Math.max(0, Math.min(progress * 0.5, 0.5));
-      cartBackdrop.style.visibility    = newOffset < closedOffset ? 'visible' : 'hidden';
-      cartBackdrop.style.pointerEvents = newOffset < closedOffset ? 'auto' : 'none';
-      rafId = null;
+    list.querySelectorAll('.cust-cart-qty-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.dataset.idx), d = parseInt(btn.dataset.d);
+        if (d > 0 && cart[i].qty >= 99) return; // max qty 99
+        cart[i].qty += d;
+        if (cart[i].qty <= 0) cart.splice(i, 1);
+        saveCart();
+        renderCartModal(); updateCartBar();
+      });
+    });
+    list.querySelectorAll('.cust-cart-item-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        cart.splice(parseInt(btn.dataset.idx), 1);
+        saveCart();
+        renderCartModal(); updateCartBar();
+      });
     });
   }
-}
 
-function onPointerEnd(clientY) {
-  if (!isDragging) return;
-  isDragging = false;
-  document.body.style.overflow = '';
-  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  document.getElementById('cartTotal').textContent = fmt(totalAmt);
 
-  const delta    = clientY - dragStartY;
-  const velocity = delta;
-
-  if (velocity > 80 || currentOffset > closedOffset * 0.5) {
-    closeCart(true);
+  // ปรับปุ่ม send ให้บอกว่าสั่งเพิ่มหรือสั่งใหม่
+  const sendBtn = document.getElementById('sendOrderBtn');
+  if (activeOrderKey) {
+    sendBtn.textContent = `✓ เพิ่มในออเดอร์ #${activeOrderNumber}`;
   } else {
-    openCart(true);
+    sendBtn.textContent = '✓ ส่งออเดอร์';
   }
 }
 
-cartHeader.addEventListener('touchstart', (e) => { onPointerStart(e.touches[0].clientY); }, { passive: true });
-document.addEventListener('touchmove',   (e) => { if (isDragging) onPointerMove(e.touches[0].clientY); }, { passive: true });
-document.addEventListener('touchend',    (e) => { onPointerEnd(e.changedTouches[0].clientY); });
+// ==================== Send Order ====================
+document.getElementById('sendOrderBtn').addEventListener('click', async () => {
+  if (cart.length === 0) return;
+  const btn = document.getElementById('sendOrderBtn');
+  btn.disabled = true;
+  btn.textContent = 'กำลังส่ง...';
 
-cartHeader.addEventListener('mousedown', (e) => { onPointerStart(e.clientY); e.preventDefault(); });
-document.addEventListener('mousemove',   (e) => { if (isDragging) onPointerMove(e.clientY); });
-document.addEventListener('mouseup',     (e) => { if (isDragging) onPointerEnd(e.clientY); });
+  try {
+    const today = new Date().toISOString().slice(0, 10);
 
-cartHeader.addEventListener('click', () => {
-  if (!isMobile() || isDragging) return;
-  const didDrag = Math.abs(currentOffset - dragStartOffset) > 5;
-  if (didDrag) return;
-  if (isOpen) closeCart(); else { getCartMetrics(); openCart(); }
+    const batchItems = cart.map(i => ({
+      name:  i.name,
+      price: i.price,
+      qty:   i.qty,
+      ...(i.optionLabel ? { option: i.optionLabel } : {}),
+    }));
+
+    let usedOrderNum = activeOrderNumber;
+
+    if (activeOrderKey) {
+      // ─── มี order active → ตรวจก่อนว่ายังไม่ได้จ่าย ───
+      const orderSnap = await get(ref(db, `orders/${activeOrderKey}`));
+
+      if (orderSnap.exists()) {
+        const existingOrder = orderSnap.val();
+
+        if (existingOrder.status === 'paid' || existingOrder.status === 'canceled') {
+          // order นี้จ่ายแล้ว / ยกเลิกแล้ว → ล้าง activeOrder แล้วสร้างใหม่
+          activeOrderKey    = null;
+          activeOrderNumber = null;
+          await set(ref(db, `tableOrders/${tableNum}`), null);
+          // ซ่อน banner ออเดอร์เก่า
+          const banner = document.getElementById('activeBanner');
+          if (banner) banner.remove();
+        } else {
+          // order ยังค้างอยู่ → เพิ่ม batch ต่อท้าย
+          const batches = existingOrder.batches || [existingOrder.items || []];
+          batches.push(batchItems);
+          const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
+
+          await update(ref(db, `orders/${activeOrderKey}`), {
+            batches,
+            total: newTotal,
+            status: 'pending',
+            lastBatchDate: new Date().toISOString(),
+          });
+        }
+      } else {
+        // order ถูกลบไปแล้ว → ล้าง tableOrders แล้วสร้างใหม่
+        activeOrderKey    = null;
+        activeOrderNumber = null;
+        await set(ref(db, `tableOrders/${tableNum}`), null);
+      }
+    }
+
+    if (!activeOrderKey) {
+      // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
+      let newOrderNum;
+      const txResult = await runTransaction(ref(db, 'meta'), (meta) => {
+        if (!meta) meta = {};
+        if (meta.lastOrderDate !== today) {
+          meta.orderNumber   = 1001;
+          meta.lastOrderDate = today;
+        } else {
+          meta.orderNumber = (meta.orderNumber || 1000) + 1;
+        }
+        return meta;
+      });
+      if (!txResult.committed || !txResult.snapshot.exists()) {
+        throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
+      }
+      newOrderNum  = txResult.snapshot.val().orderNumber;
+      usedOrderNum = newOrderNum;
+
+      const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+      const order = {
+        orderNumber: newOrderNum,
+        table:  tableNum,
+        date:   new Date().toISOString(),
+        batches: [batchItems],
+        total,
+        status: 'pending',
+        source: 'qr',
+        ...(isTakeaway(tableNum) ? { takeaway: true } : {}),
+      };
+
+      const newRef = await push(ref(db, 'orders'), order);
+      activeOrderKey    = newRef.key;
+      activeOrderNumber = newOrderNum;
+
+      await update(ref(db, `tableOrders/${tableNum}`), {
+        orderKey:    newRef.key,
+        orderNumber: newOrderNum,
+      });
+    }
+
+    // ─── success ───
+    cart = [];
+    clearSavedCart(); // ล้าง cart ที่ค้างใน sessionStorage
+    updateCartBar();
+    closeModal('cartModal');
+
+    document.getElementById('successMsg').textContent =
+      `ออเดอร์ #${usedOrderNum} ${tableLabel(tableNum)} ถูกส่งแล้ว 🙏`;
+    openModal('successModal');
+
+    // อัปเดต banner
+    showOrderBanner();
+    // เริ่ม / รีเซ็ต watch สถานะครัว
+    startKitchenStatusWatcher(activeOrderKey);
+
+  } catch (err) {
+    alert('เกิดข้อผิดพลาด กรุณาลองอีกครั้ง\n' + err.message);
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = activeOrderKey
+      ? `✓ เพิ่มในออเดอร์ #${activeOrderNumber}`
+      : '✓ ส่งออเดอร์';
+  }
 });
 
-window.addEventListener('load',   () => { getCartMetrics(); setOffset(closedOffset); });
-window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0 : closedOffset); });
+document.getElementById('continueOrderBtn').addEventListener('click', () => {
+  closeModal('successModal');
+});
 
-// ==================== CSS for banner (inject once) ====================
-(function injectBannerStyle() {
+document.getElementById('viewHistoryFromSuccessBtn').addEventListener('click', () => {
+  closeModal('successModal');
+  openHistoryModal();
+});
+
+// ==================== Order History Modal ====================
+let historyUnsubscribe = null;
+
+function openHistoryModal() {
+  document.getElementById('historyTableLabel').textContent = tableLabel(tableNum);
+  document.getElementById('historyLoading').classList.remove('hidden');
+  document.getElementById('historyEmpty').classList.add('hidden');
+  document.getElementById('historyContent').classList.add('hidden');
+  document.getElementById('historyOrderMoreBtn').style.display = 'none';
+
+  openModal('historyModal');
+  loadHistoryRealtime();
+}
+
+function loadHistoryRealtime() {
+  // ยกเลิก listener เก่าถ้ามี
+  if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
+
+  if (!activeOrderKey) {
+    // ลองดึง tableOrders ก่อน กรณี banner ยังไม่โหลด
+    get(ref(db, `tableOrders/${tableNum}`)).then(snap => {
+      if (snap.exists()) {
+        const data = snap.val();
+        activeOrderKey    = data.orderKey;
+        activeOrderNumber = data.orderNumber;
+        attachHistoryListener();
+      } else {
+        showHistoryEmpty();
+      }
+    }).catch(() => showHistoryEmpty());
+  } else {
+    attachHistoryListener();
+  }
+}
+
+function attachHistoryListener() {
+  historyUnsubscribe = onValue(ref(db, `orders/${activeOrderKey}`), snap => {
+    if (!snap.exists()) {
+      showHistoryEmpty();
+      return;
+    }
+    renderHistoryContent(snap.val());
+  }, () => showHistoryEmpty());
+}
+
+function showHistoryEmpty() {
+  document.getElementById('historyLoading').classList.add('hidden');
+  document.getElementById('historyContent').classList.add('hidden');
+  document.getElementById('historyEmpty').classList.remove('hidden');
+  document.getElementById('historyOrderMoreBtn').style.display = 'none';
+}
+
+function renderHistoryContent(order) {
+  document.getElementById('historyLoading').classList.add('hidden');
+  document.getElementById('historyEmpty').classList.add('hidden');
+  document.getElementById('historyContent').classList.remove('hidden');
+
+  // Meta chips
+  const metaEl = document.getElementById('historyMeta');
+  const orderDate = order.date ? new Date(order.date) : null;
+  const dateStr = orderDate
+    ? orderDate.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })
+    : '';
+  metaEl.innerHTML = `
+    <span class="cust-history-meta-chip">ออเดอร์ #${esc(String(order.orderNumber))}</span>
+    <span class="cust-history-meta-chip">โต๊ะ ${esc(String(order.table))}</span>
+    ${dateStr ? `<span class="cust-history-meta-chip">🕐 ${dateStr}</span>` : ''}
+  `;
+
+  // Batches
+  const batchesEl = document.getElementById('historyBatches');
+  const batches = order.batches || (order.items ? [order.items] : []);
+  batchesEl.innerHTML = batches.map((batch, bi) => {
+    const batchTime = bi === 0
+      ? (order.date ? new Date(order.date) : null)
+      : (bi === batches.length - 1 && order.lastBatchDate
+          ? new Date(order.lastBatchDate)
+          : null);
+    const timeStr = batchTime
+      ? batchTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+      : '';
+
+    const itemsHtml = batch.map(item => `
+      <div class="cust-history-item">
+        <span class="cust-history-item-qty">${item.qty}x</span>
+        <div class="cust-history-item-info">
+          <div class="cust-history-item-name">${esc(item.name)}</div>
+          ${item.option ? `<div class="cust-history-item-option">${esc(item.option)}</div>` : ''}
+        </div>
+        <span class="cust-history-item-price">${fmt(item.price * item.qty)}</span>
+      </div>
+    `).join('');
+
+    return `
+      <div class="cust-history-batch">
+        <div class="cust-history-batch-header">
+          <span class="cust-history-batch-label">ครั้งที่ ${bi + 1}</span>
+          ${timeStr ? `<span class="cust-history-batch-time">${timeStr}</span>` : ''}
+        </div>
+        <div class="cust-history-batch-items">${itemsHtml}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Grand total
+  const grandTotal = batches.flat().reduce((s, i) => s + i.price * i.qty, 0);
+  document.getElementById('historyGrandTotal').innerHTML = `
+    <span>รวมทั้งหมด</span>
+    <span class="cust-history-grand-amt">${fmt(grandTotal)}</span>
+  `;
+
+  // Status badge
+  const statusMap = {
+    pending:  { label: '⏳ รอดำเนินการ',   cls: 'status-pending'  },
+    cooking:  { label: '👨‍🍳 กำลังทำอาหาร', cls: 'status-cooking'  },
+    served:   { label: '🍽 เสิร์ฟแล้ว!',    cls: 'status-served'   },
+    paid:     { label: '✅ ชำระแล้ว',       cls: 'status-paid'     },
+    canceled: { label: '❌ ยกเลิก',         cls: 'status-canceled' },
+  };
+  const s = statusMap[order.status] || statusMap.pending;
+  document.getElementById('historyStatusRow').innerHTML = `
+    <span class="cust-history-status-badge ${s.cls}">${s.label}</span>
+  `;
+
+  // ถ้า pending → แสดงปุ่ม "สั่งเพิ่ม"
+  const moreBtn = document.getElementById('historyOrderMoreBtn');
+  if (order.status !== 'paid') {
+    moreBtn.style.display = '';
+  } else {
+    moreBtn.style.display = 'none';
+  }
+}
+
+document.getElementById('historyClose').addEventListener('click', () => {
+  if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
+  closeModal('historyModal');
+});
+
+document.getElementById('historyOrderMoreBtn').addEventListener('click', () => {
+  if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
+  closeModal('historyModal');
+});
+
+document.getElementById('openHistoryBtn').addEventListener('click', () => {
+  openHistoryModal();
+});
+
+document.getElementById('historyModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('historyModal')) {
+    if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
+    closeModal('historyModal');
+  }
+});
+
+// ==================== Modal helpers ====================
+function openModal(id)  { document.getElementById(id).setAttribute('aria-hidden','false'); }
+function closeModal(id) { document.getElementById(id).setAttribute('aria-hidden','true'); }
+
+['optionModal','cartModal','successModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', (e) => {
+    if (e.target === document.getElementById(id)) closeModal(id);
+  });
+});
+
+// ==================== Start ====================
+
+init();
+// ==================== Inject CSS (new features) ====================
+(function injectFeatureStyles() {
   const style = document.createElement('style');
   style.textContent = `
-    .table-order-banner {
-      background: #fff8e1;
-      border-left: 4px solid var(--accent, #c8853a);
-      padding: 0.55rem 1rem;
-      font-size: 0.88rem;
-      color: #5c3d2e;
-    }
-    .table-order-banner strong { color: var(--accent, #c8853a); }
-
-    /* ── Skeleton loader รูปภาพ POS ── */
-    .product-img-wrap {
-      width: 100%; aspect-ratio: 1; overflow: hidden;
-      border-radius: 8px 8px 0 0;
-    }
-    @keyframes pos-shimmer {
+    /* ── Skeleton loader สำหรับรูปภาพ ── */
+    @keyframes cust-shimmer {
       0%   { background-position: -400px 0; }
       100% { background-position:  400px 0; }
     }
-    .pos-img-skeleton {
+    .cust-img-skeleton {
       background: linear-gradient(90deg, #ede8e0 25%, #f5f2ec 50%, #ede8e0 75%);
       background-size: 800px 100%;
-      animation: pos-shimmer 1.4s infinite linear;
+      animation: cust-shimmer 1.4s infinite linear;
     }
-    .pos-img-skeleton img { opacity: 0; transition: opacity 0.2s; }
-    .product-img-wrap:not(.pos-img-skeleton) img { opacity: 1; }
+    .cust-img-skeleton img { opacity: 0; transition: opacity 0.2s; }
+    .cust-product-img-wrap:not(.cust-img-skeleton) img { opacity: 1; }
+
+    /* ── Search Bar ── */
+    #menuSearchBar { padding: 0.5rem 1rem 0; background: var(--cream, #faf6f0); }
+    .cust-search-wrap {
+      position: relative; display: flex; align-items: center;
+      background: #fff; border: 2px solid #e2d8cb; border-radius: 999px;
+      padding: 0.4rem 0.9rem; gap: 0.4rem; transition: border-color 0.2s;
+    }
+    .cust-search-wrap:focus-within { border-color: #c8853a; }
+    .cust-search-input {
+      flex: 1; border: none; outline: none; font-family: 'Sarabun', sans-serif;
+      font-size: 0.95rem; background: transparent; color: #3d2b1f;
+    }
+    .cust-search-input::placeholder { color: #b5a090; }
+    .cust-search-clear {
+      border: none; background: none; color: #8b6655; cursor: pointer;
+      font-size: 0.85rem; padding: 0; line-height: 1;
+    }
+    .cust-search-clear.hidden { display: none; }
+
+    /* ── Quick-add badge & flash ── */
+    .cust-product-card--quick { position: relative; }
+    .cust-quick-badge {
+      position: absolute; top: 6px; right: 6px;
+      background: #c8853a; color: #fff;
+      font-size: 0.75rem; font-weight: 700; font-family: 'Mitr', sans-serif;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 6px rgba(200,133,58,0.35); z-index: 2;
+    }
+    .quick-add-flash { animation: qaFlash 0.4s ease; }
+    @keyframes qaFlash {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(0.93); background: #e8a055; }
+      100% { transform: scale(1); }
+    }
+
+    /* ── Popular badge ── */
+    .cust-popular-badge {
+      position: absolute; top: 6px; left: 6px;
+      background: linear-gradient(135deg, #ff6b35, #f7c59f);
+      color: #fff; font-size: 0.68rem; font-weight: 700;
+      font-family: 'Mitr', sans-serif;
+      padding: 0.15rem 0.5rem; border-radius: 999px;
+      box-shadow: 0 2px 6px rgba(255,107,53,0.35);
+      z-index: 2; white-space: nowrap;
+    }
+    .cust-product-card { position: relative; }
+
+    /* Disabled / sold-out menu item */
+    .cust-product-card--disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      pointer-events: none;
+      filter: grayscale(60%);
+    }
+    .cust-soldout-badge {
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(61,43,31,0.75);
+      color: #fff; font-size: 0.68rem; font-weight: 700;
+      font-family: 'Mitr', sans-serif;
+      padding: 0.15rem 0.5rem; border-radius: 999px;
+      z-index: 2; white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
   `;
   document.head.appendChild(style);
 })();
-
-// ==================== Init ====================
-setDate();
-renderProducts();
-renderCart();
-loadOrderNumber();
-_startMenuSubscribe(); // ← subscribe Firebase menu realtime
