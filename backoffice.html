@@ -1563,12 +1563,13 @@ tr.drag-over td { background: var(--cream-dark) !important; }
                     <th style="width:42px">แสดง</th>
                     <th>ชื่อเมนู</th>
                     <th>หมวด</th>
+                    <th>ประเภท</th>
                     <th style="text-align:right">ราคา (฿)</th>
                     <th style="width:120px">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody id="menuTableBody">
-                  <tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div></td></tr>
+                  <tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1667,6 +1668,21 @@ tr.drag-over td { background: var(--cream-dark) !important; }
           <select class="field-input" id="menuCategory">
             <option value="setkao">🍱 เซ็ตอาหาร</option>
           </select>
+        </div>
+
+        <div class="field span2">
+          <label class="field-label">ประเภทเมนู (productType) *</label>
+          <select class="field-input" id="menuProductType">
+            <option value="kaosoi">🍜 ข้าวซอย — มีตัวเลือกท็อปปิ้ง</option>
+            <option value="namngiao">🍜 น้ำเงี้ยว — มีตัวเลือกท็อปปิ้ง</option>
+            <option value="kaomutod">🍚 ข้าวหมูทอด / ลาบเหนือ — มีตัวเลือกเพิ่ม</option>
+            <option value="setkao">🍱 เซ็ตอาหาร — ไม่มีตัวเลือก (แค่หมายเหตุ)</option>
+            <option value="mapraopun">🥥 มะพร้าวปั่น — เลือกความหวาน</option>
+            <option value="drink-brew">☕ เครื่องดื่มชง — ร้อน/เย็น + ความหวาน + เพิ่มเติม</option>
+            <option value="drink-ready">🥤 เครื่องดื่มสำเร็จ — ไม่มีตัวเลือก (แค่หมายเหตุ)</option>
+            <option value="simple">🍽 เมนูเดี่ยว — ไม่มีตัวเลือก ไม่มีหมายเหตุ</option>
+          </select>
+          <p style="font-size:.76rem;color:var(--brown-light);margin-top:.3rem">กำหนดว่าลูกค้าจะเห็น option อะไรเมื่อสั่งเมนูนี้</p>
         </div>
 
         <div class="field">
@@ -2453,6 +2469,18 @@ let optionGroups = [];
 
 const CAT_CSS = { setkao:'cat-setkao', kao:'cat-kao', nam:'cat-nam', coffee:'cat-coffee', soda:'cat-soda' };
 
+const PRODUCT_TYPE_LABELS = {
+  kaosoi:       '🍜 ข้าวซอย',
+  namngiao:     '🍜 น้ำเงี้ยว',
+  kaomutod:     '🍚 ข้าวหมูทอด',
+  setkao:       '🍱 เซ็ตอาหาร',
+  mapraopun:    '🥥 มะพร้าวปั่น',
+  'drink-brew': '☕ เครื่องดื่มชง',
+  'drink-ready':'🥤 สำเร็จรูป',
+  simple:       '🍽 เมนูเดี่ยว',
+  custom:       '⚙️ custom',
+};
+
 function getFilteredMenu() {
   return MOCK_MENU
     .filter(m => menuCatFilter === 'all' || m.category === menuCatFilter)
@@ -2465,7 +2493,7 @@ function renderMenuTable() {
   document.getElementById('menuCountBadge').textContent = items.length + ' รายการ';
   const body = document.getElementById('menuTableBody');
   if (!items.length) {
-    body.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">🍽</div><div class="empty-state-text">ไม่มีเมนูในหมวดนี้</div></div></td></tr>`;
+    body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🍽</div><div class="empty-state-text">ไม่มีเมนูในหมวดนี้</div></div></td></tr>`;
     return;
   }
   body.innerHTML = items.map(m => {
@@ -2485,6 +2513,7 @@ function renderMenuTable() {
           ${hasPromo ? `<span class="promo-badge">${escHtml(m.promo.label||'โปร')}</span>` : ''}
         </td>
         <td><span class="cat-chip ${CAT_CSS[m.category]||''}">${escHtml(catLabel)}</span></td>
+        <td style="font-size:.78rem;color:var(--brown-light)">${escHtml(PRODUCT_TYPE_LABELS[m.productType] || m.productType || '—')}</td>
         <td style="text-align:right">
           ${hasPromo
             ? `<span class="price-orig">${m.price}</span><span class="price-promo">${m.promo.promoPrice}</span>`
@@ -2551,7 +2580,7 @@ async function loadMenuItems() {
   } else {
     // Firebase ยังไม่ตอบ — แสดง spinner รอ callback จาก subscribeMenu
     document.getElementById('menuTableBody').innerHTML =
-      '<tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนูจาก Firebase…</div></td></tr>';
+      '<tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนูจาก Firebase…</div></td></tr>';
     document.getElementById('menuCountBadge').textContent = '…';
     // ตั้ง timeout fallback: ถ้า 8 วิยังว่าง แสดงว่าอาจไม่มีเมนูใน Firebase
     setTimeout(() => {
@@ -2583,7 +2612,7 @@ function clearMenuModal() {
   ['menuName','menuDesc','menuImgUrl'].forEach(id => document.getElementById(id).value = '');
   ['menuPrice','menuSortOrder','menuPromoPrice'].forEach(id => document.getElementById(id).value = '');
   rebuildCategorySelect(Object.keys(getCategoriesLocal())[0] || 'setkao');
-  // productType อนุมานอัตโนมัติจาก optionGroups
+  document.getElementById('menuProductType').value = 'simple';
   document.getElementById('menuPromoEnabled').checked = false;
   document.getElementById('menuPromoFields').style.display = 'none';
   document.getElementById('menuPromoLabel').value = '';
@@ -2608,7 +2637,9 @@ function openMenuModal(id = null) {
     document.getElementById('menuPrice').value     = m.price;
     document.getElementById('menuSortOrder').value = m.sortOrder || '';
     rebuildCategorySelect(m.category);
-    // productType อนุมานอัตโนมัติ
+    // productType
+    const ptSelect = document.getElementById('menuProductType');
+    if (ptSelect && m.productType) ptSelect.value = m.productType;
     if (m.imageUrl) {
       document.getElementById('menuImgUrl').value = m.imageUrl;
       document.getElementById('imgUploadArea').innerHTML = `<img src="${escHtml(m.imageUrl)}" alt="">`;
@@ -2664,7 +2695,7 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
     name,
     desc: document.getElementById('menuDesc').value.trim(),
     category: document.getElementById('menuCategory').value,
-    productType: (optionGroups && optionGroups.length > 0) ? 'custom' : 'simple',
+    productType: document.getElementById('menuProductType').value || 'simple',
     price,
     sortOrder: parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
     enabled: editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
