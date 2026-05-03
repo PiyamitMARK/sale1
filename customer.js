@@ -10,7 +10,7 @@
 import './darkmode.js';
 import { db } from './firebase-config.js';
 import { ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { parseMenuFromRaw } from './menu-manager.js';
+import { parseMenuFromRaw, subscribeCategoriesAndSync } from './menu-manager.js';
 
 // LS fallback ใช้ตอน Firebase ยังไม่ตอบ
 function _loadMenuFromLS() {
@@ -575,16 +575,32 @@ function renderProducts() {
   });
 }
 
-function bindCats() {
-  document.querySelectorAll('.cust-cat').forEach(btn => {
+const _catBar = document.getElementById('catBar');
+
+function renderCategoryTabs(cats) {
+  if (!_catBar) return;
+  const ids = Object.keys(cats);
+  if (!ids.includes(currentCat)) currentCat = ids[0] || 'setkao';
+
+  _catBar.innerHTML = ids.map((id, i) =>
+    `<button class="cust-cat${currentCat === id ? ' active' : ''}" data-cat="${id}">${cats[id]}</button>`
+  ).join('');
+
+  _catBar.querySelectorAll('.cust-cat').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.cust-cat').forEach(b => b.classList.remove('active'));
+      _catBar.querySelectorAll('.cust-cat').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentCat = btn.dataset.cat;
       renderProducts();
     });
   });
+  renderProducts();
 }
+
+subscribeCategoriesAndSync(db, renderCategoryTabs);
+
+// ชื่อเดิมยังคงอยู่สำหรับ backward compat (ถูกเรียกใน init())
+function bindCats() { /* no-op: handled by renderCategoryTabs */ }
 
 // ==================== Search Bar ====================
 function initSearchBar() {

@@ -12,7 +12,7 @@ import { db } from './firebase-config.js';
 import {
   ref, push, update, get, remove, runTransaction, onValue
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { parseMenuFromRaw } from './menu-manager.js';
+import { parseMenuFromRaw, subscribeCategoriesAndSync } from './menu-manager.js';
 
 // LS fallback ใช้ตอน Firebase ยังไม่ตอบ
 function _loadMenuFromLS() {
@@ -247,7 +247,6 @@ let currentTableOrderNumber = null; // order number ที่ active
 const currentDateEl    = document.getElementById('currentDate');
 const orderNumberEl    = document.getElementById('orderNumber');
 const tableChipEl      = document.getElementById('tableChip');
-const categoryBtns     = document.querySelectorAll('.category-btn');
 const productsGrid     = document.getElementById('productsGrid');
 const productsOverlay  = document.getElementById('productsOverlay');
 const cartItemsEl      = document.getElementById('cartItems');
@@ -792,14 +791,32 @@ async function startNewOrder() {
 }
 
 // ==================== Event Listeners ====================
-categoryBtns.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    categoryBtns.forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentCategory = btn.dataset.category;
-    renderProducts();
+
+// ─── Dynamic category tabs ────────────────────────────────────────
+const _categoriesNav = document.getElementById('categoriesNav');
+
+function renderCategoryTabs(cats) {
+  if (!_categoriesNav) return;
+  // รักษา currentCategory ถ้ายังมีอยู่ใน cats ใหม่ ไม่งั้น reset เป็นตัวแรก
+  const ids = Object.keys(cats);
+  if (!ids.includes(currentCategory)) currentCategory = ids[0] || 'setkao';
+
+  _categoriesNav.innerHTML = ids.map((id, i) =>
+    `<button class="category-btn${i === 0 && currentCategory === id || currentCategory === id ? ' active' : ''}" data-category="${id}">${cats[id]}</button>`
+  ).join('');
+
+  _categoriesNav.querySelectorAll('.category-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _categoriesNav.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategory = btn.dataset.category;
+      renderProducts();
+    });
   });
-});
+  renderProducts();
+}
+
+subscribeCategoriesAndSync(db, renderCategoryTabs);
 
 clearCartBtn.addEventListener('click', clearCart);
 
