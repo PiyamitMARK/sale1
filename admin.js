@@ -924,7 +924,9 @@ function renderOrders() {
     } else if (s === 'cooking') {
       actionBtns = `<button type="button" class="btn-served" data-key="${order.firebaseKey}">🍽 เสิร์ฟแล้ว</button>`;
     } else if (s === 'served') {
-      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button>`;
+      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button><button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
+    } else if (s === 'paid') {
+      actionBtns = `<button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
     }
 
     // ─── Render batches ───
@@ -965,7 +967,6 @@ function renderOrders() {
             <div class="order-actions">
               ${actionBtns}
               <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
-              <button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>
               <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
             </div>
           </div>
@@ -1289,7 +1290,9 @@ function renderTakeawayOrders() {
     } else if (s === 'cooking') {
       actionBtns = `<button type="button" class="btn-served" data-key="${order.firebaseKey}">📦 พร้อมส่ง</button>`;
     } else if (s === 'served') {
-      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button>`;
+      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button><button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
+    } else if (s === 'paid') {
+      actionBtns = `<button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
     }
 
     const batches = order.batches || [order.items || []];
@@ -1351,6 +1354,12 @@ function renderTakeawayOrders() {
   taList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', () => {
       markOrderAsPaid(btn.dataset.key, null);
+    });
+  });
+  taList.querySelectorAll('.btn-print-receipt').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      if (order) printOrderReceipt(order);
     });
   });
   taList.querySelectorAll('.btn-edit-order').forEach((btn) => {
