@@ -51,7 +51,7 @@ export function bindBillButtons(container) {
     }
 
     // หา actions div และใส่ปุ่มแยกบิล เฉพาะ served / paid
-    const isServedOrPaid = card.classList.contains('order-card--served') || card.classList.contains('order-card--paid');
+    const isServedOrPaid = card.classList.contains('order-card--served');
     const actions = card.querySelector('.order-actions');
     if (isServedOrPaid && actions && !actions.querySelector('.btn-split-bill')) {
       const btn = document.createElement('button');
