@@ -143,6 +143,14 @@ body {
   margin: .5rem 0;
 }
 
+.bo-nav-item--danger {
+  color: #f87171;
+}
+.bo-nav-item--danger:hover {
+  background: rgba(239,68,68,.15);
+  color: #fca5a5;
+}
+
 .bo-sidebar-footer {
   padding: .85rem .6rem;
   border-top: 1px solid rgba(255,255,255,.1);
@@ -1184,6 +1192,9 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       <button class="bo-nav-item" id="darkToggleBtn">
         <span class="bo-nav-icon"></span><span id="darkToggleLabel">Dark Mode</span>
       </button>
+      <button class="bo-nav-item bo-nav-item--danger" id="clearDataBtn">
+        <span class="bo-nav-icon">🗑</span>ล้างข้อมูล
+      </button>
     </div>
   </aside>
 
@@ -1197,7 +1208,6 @@ tr.drag-over td { background: var(--cream-dark) !important; }
         <span class="bo-topbar-title" id="topbarTitle">Export Sheet</span>
       </div>
       <div class="bo-topbar-right">
-        <button class="btn btn-danger btn-sm" id="clearDataBtn">🗑 ล้างข้อมูล</button>
         <a href="admin.html" class="btn btn-ghost btn-sm">⬅ แอดมิน</a>
       </div>
     </div>
