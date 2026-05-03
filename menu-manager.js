@@ -179,10 +179,26 @@ function _syncCatsToLS(catsObj) {
 }
 
 export function subscribeCategoriesAndSync(db, cb) {
-  return onValue(ref(db, 'categories'), snap => {
-    const cats = snap.exists() ? snap.val() : { ...CATEGORY_LABELS };
-    _syncCatsToLS(cats);
-    cb(cats);
+  let _rawCats = null;
+  let _sortMap  = {};
+
+  function _emit() {
+    if (!_rawCats) return;
+    const entries = Object.entries(_rawCats);
+    entries.sort(([a], [b]) => (_sortMap[a] ?? 9999) - (_sortMap[b] ?? 9999));
+    const sorted = Object.fromEntries(entries);
+    _syncCatsToLS(sorted);
+    cb(sorted);
+  }
+
+  onValue(ref(db, 'categories'), snap => {
+    _rawCats = snap.exists() ? snap.val() : { ...CATEGORY_LABELS };
+    _emit();
+  });
+
+  onValue(ref(db, 'categories_sort'), snap => {
+    _sortMap = snap.exists() ? snap.val() : {};
+    _emit();
   });
 }
 
