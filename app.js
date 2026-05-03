@@ -780,13 +780,19 @@ function closeConfirmOrderModal() {
 
 // ==================== New Order (after payment) ====================
 async function startNewOrder() {
-  // ล้าง tableOrders ใน Firebase ด้วย เพื่อป้องกัน banner "ออเดอร์ค้าง" ผิดพลาด
-  // (กรณีที่ POS กด "ออเดอร์ใหม่" ก่อน admin กด "จ่ายแล้ว")
+  // ลบ tableOrders เฉพาะกรณีที่ order จ่ายแล้ว (paid) หรือถูกลบไปแล้ว
+  // ถ้า order ยังไม่ paid → คง tableOrders ไว้ เพื่อให้ครั้งต่อไป append batch เข้าออเดอร์เดิม
   if (currentTableOrderKey && selectedTable) {
     try {
       const tableSnap = await get(ref(db, `tableOrders/${selectedTable}`));
       if (tableSnap.exists() && tableSnap.val().orderKey === currentTableOrderKey) {
-        await remove(ref(db, `tableOrders/${selectedTable}`));
+        const orderSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
+        const orderStatus = orderSnap.exists() ? orderSnap.val().status : null;
+        if (!orderSnap.exists() || orderStatus === 'paid') {
+          // order หายไปแล้ว หรือ paid แล้ว → ลบได้
+          await remove(ref(db, `tableOrders/${selectedTable}`));
+        }
+        // ถ้า order ยังค้างอยู่ (pending/cooking/served) → ไม่ลบ tableOrders
       }
     } catch (err) {
       console.error('startNewOrder tableOrders remove error:', err);
