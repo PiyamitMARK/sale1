@@ -1760,7 +1760,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
           <input type="checkbox" id="menuPromoEnabled" style="accent-color:var(--accent)">
           🏷 เปิดโปรโมชั่น / ราคาลด
         </label>
-        <div id="menuPromoFields" style="display:none;margin-top:.65rem;display:grid;grid-template-columns:1fr 1fr;gap:.65rem">
+        <div id="menuPromoFields" style="display:none;margin-top:.65rem;grid-template-columns:1fr 1fr;gap:.65rem">
           <div class="field">
             <label class="field-label">ราคาโปร (฿)</label>
             <input type="number" class="field-input" id="menuPromoPrice" placeholder="0" min="0" step="0.5">
@@ -2775,6 +2775,7 @@ function openMenuModal(id = null) {
       renderOptionGroups();
     }
   }
+}
 
 document.getElementById('menuPromoEnabled').addEventListener('change', function() {
   document.getElementById('menuPromoFields').style.display = this.checked ? 'grid' : 'none';
@@ -3394,149 +3395,6 @@ function openProductTypeModal() {
 
   window._ptModalRerender = () => {
     if (modal.classList.contains('open')) { _ptToppingEditors = {}; renderModal(); }
-  };
-}
-  let modal = document.getElementById('productTypeManagerModal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'productTypeManagerModal';
-    modal.className = 'bo-modal';
-    document.body.appendChild(modal);
-  }
-
-  function getUsageCount(value) {
-    return Object.values(LIVE_MENU).filter(m => m.productType === value).length;
-  }
-
-  function renderModal() {
-    const pts = LIVE_PRODUCT_TYPES;
-    modal.innerHTML = `
-      <div class="bo-modal-box" style="max-width:560px">
-        <div class="bo-modal-header">
-          <span class="bo-modal-title">🏷 จัดการประเภทเมนู (productType)</span>
-          <button class="bo-modal-close" id="ptModalClose">✕</button>
-        </div>
-        <div class="bo-modal-body">
-          <p style="font-size:.82rem;color:var(--brown-light);margin-top:-.25rem">
-            productType กำหนดว่าลูกค้าจะเห็น option อะไรเมื่อสั่งเมนูนั้น
-          </p>
-
-          <!-- รายการที่มีอยู่ -->
-          <div style="display:flex;flex-direction:column;gap:.4rem" id="ptList">
-            ${pts.map(pt => {
-              const usage = getUsageCount(pt.value);
-              const safeVal = escHtml(pt.value);
-              const safeLabel = escHtml(pt.label);
-              const safeDesc  = escHtml(pt.desc || '');
-              return `
-              <div class="pt-row" data-ptvalue="${safeVal}">
-                <div class="pt-row-info">
-                  <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap">
-                    <input type="text" class="field-input pt-label-input" data-id="${safeVal}"
-                      value="${safeLabel}" placeholder="ชื่อประเภท" style="flex:1;min-width:120px;font-size:.85rem;padding:.35rem .55rem">
-                    <input type="text" class="field-input pt-desc-input" data-id="${safeVal}"
-                      value="${safeDesc}" placeholder="คำอธิบาย (ไม่บังคับ)" style="flex:2;min-width:140px;font-size:.82rem;padding:.35rem .55rem;color:var(--brown-light)">
-                  </div>
-                  <div class="pt-row-id" style="margin-top:.25rem">id: <strong>${safeVal}</strong></div>
-                </div>
-                <span class="pt-usage-badge${usage > 0 ? ' has-usage' : ''}" title="จำนวนเมนูที่ใช้ประเภทนี้">${usage} เมนู</span>
-                <button type="button" class="btn btn-outline btn-sm pt-save-btn" data-id="${safeVal}" title="บันทึก">💾</button>
-                <button type="button" class="btn btn-danger btn-sm pt-delete-btn" data-id="${safeVal}" data-usage="${usage}" title="ลบ">🗑</button>
-              </div>`;
-            }).join('')}
-          </div>
-
-          <!-- เพิ่มใหม่ -->
-          <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.25rem">
-            <p style="font-size:.82rem;font-weight:700;color:var(--brown-light);margin-bottom:.6rem">＋ เพิ่มประเภทใหม่</p>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr;gap:.45rem;flex-wrap:wrap">
-              <input type="text" class="field-input" id="newPtId"
-                placeholder="id เช่น hotpot" style="font-size:.82rem">
-              <input type="text" class="field-input" id="newPtLabel"
-                placeholder="ชื่อ เช่น 🍲 หม้อไฟ" style="font-size:.82rem">
-              <input type="text" class="field-input" id="newPtDesc"
-                placeholder="คำอธิบาย (ไม่บังคับ)" style="font-size:.82rem">
-            </div>
-            <p id="ptModalError" style="color:var(--red);font-size:.82rem;min-height:1.2rem;margin-top:.3rem"></p>
-            <button type="button" class="btn btn-primary btn-sm" id="addPtBtn" style="margin-top:.25rem">＋ เพิ่มประเภท</button>
-          </div>
-        </div>
-        <div class="bo-modal-footer">
-          <p style="font-size:.75rem;color:var(--brown-light);flex:1">
-            💡 เมนูที่ใช้ประเภทนี้อยู่จะไม่ถูกลบ แต่ประเภทจะหายจาก dropdown
-          </p>
-          <button type="button" class="btn btn-outline" id="ptModalCloseFooter">ปิด</button>
-        </div>
-      </div>
-    `;
-    modal.classList.add('open');
-
-    const closeAll = () => modal.classList.remove('open');
-    modal.querySelector('#ptModalClose').onclick = closeAll;
-    modal.querySelector('#ptModalCloseFooter').onclick = closeAll;
-    modal.addEventListener('click', e => { if (e.target === modal) closeAll(); });
-
-    // บันทึก
-    modal.querySelectorAll('.pt-save-btn').forEach(btn => {
-      btn.onclick = async () => {
-        const id = btn.dataset.id;
-        const row = modal.querySelector(`.pt-row[data-ptvalue="${id}"]`);
-        const newLabel = row.querySelector('.pt-label-input').value.trim();
-        const newDesc  = row.querySelector('.pt-desc-input').value.trim();
-        if (!newLabel) { alert('กรุณาใส่ชื่อประเภท'); return; }
-        btn.disabled = true;
-        try {
-          await updateProductTypeLocal(id, newLabel, newDesc);
-          btn.textContent = '✅';
-          setTimeout(() => { btn.textContent = '💾'; btn.disabled = false; }, 1400);
-        } catch(e) { alert('แก้ไม่ได้: ' + e.message); btn.disabled = false; }
-      };
-    });
-
-    // ลบ
-    modal.querySelectorAll('.pt-delete-btn').forEach(btn => {
-      btn.onclick = async () => {
-        const id = btn.dataset.id;
-        const usage = parseInt(btn.dataset.usage) || 0;
-        const pt = LIVE_PRODUCT_TYPES.find(p => p.value === id);
-        const name = pt?.label || id;
-        let msg = `ลบประเภท "${name}" (${id}) ออก?`;
-        if (usage > 0) msg += `\n\n⚠️ มีเมนู ${usage} รายการที่ใช้ประเภทนี้อยู่ — ค่า productType ของเมนูเหล่านั้นจะยังคงอยู่แต่ไม่มีชื่อแสดง`;
-        if (!confirm(msg)) return;
-        btn.disabled = true;
-        try {
-          await deleteProductTypeLocal(id);
-        } catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
-      };
-    });
-
-    // เพิ่มใหม่
-    modal.querySelector('#addPtBtn').onclick = async () => {
-      const idInput    = modal.querySelector('#newPtId');
-      const labelInput = modal.querySelector('#newPtLabel');
-      const descInput  = modal.querySelector('#newPtDesc');
-      const errEl      = modal.querySelector('#ptModalError');
-      errEl.textContent = '';
-      let id    = idInput.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const label = labelInput.value.trim();
-      const desc  = descInput.value.trim();
-      if (!id)    { errEl.textContent = 'id ต้องเป็น a-z, 0-9, - หรือ _ เท่านั้น'; return; }
-      if (!label) { errEl.textContent = 'กรุณาใส่ชื่อประเภท'; return; }
-      if (LIVE_PRODUCT_TYPES.find(p => p.value === id)) {
-        errEl.textContent = `id "${id}" มีอยู่แล้ว`; return;
-      }
-      try {
-        await addProductTypeLocal(id, label, desc);
-        idInput.value = ''; labelInput.value = ''; descInput.value = '';
-        errEl.textContent = '';
-      } catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
-    };
-  }
-
-  renderModal();
-
-  window._ptModalRerender = () => {
-    if (modal.classList.contains('open')) renderModal();
   };
 }
 
