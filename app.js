@@ -625,9 +625,16 @@ function clearCart() {
 }
 
 // ==================== Firebase: Order Number ====================
+// วันที่ตามเวลาไทย (UTC+7) สำหรับ reset order number รายวัน
+function getTodayTH() {
+  const now = new Date();
+  const th = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  return th.toISOString().slice(0, 10);
+}
+
 async function loadOrderNumber() {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayTH();
     const metaSnap = await get(ref(db, 'meta'));
     const meta = metaSnap.exists() ? metaSnap.val() : {};
 
@@ -645,8 +652,8 @@ async function loadOrderNumber() {
 
 // ==================== Firebase: Save Order (batch-aware) ====================
 // คืนค่า { allBatches, grandTotal } เพื่อให้ receipt แสดงยอดรวมทั้ง order
-async function saveOrder(paymentMethod = 'cash') {
-  const today = new Date().toISOString().slice(0, 10);
+async function saveOrder() {
+  const today = getTodayTH();
   const batchItems = cart.map((i) => ({
     name: i.name,
     price: i.price,
@@ -692,7 +699,6 @@ async function saveOrder(paymentMethod = 'cash') {
       batches: [batchItems],
       total,
       status: 'pending',
-      paymentMethod,
     };
 
     const newRef = await push(ref(db, 'orders'), order);
@@ -866,7 +872,7 @@ confirmOrderOk.addEventListener('click', async () => {
   closeConfirmOrderModal();
   let receiptData;
   try {
-    receiptData = await saveOrder('cash');
+    receiptData = await saveOrder();
   } catch (err) {
     console.error('saveOrder error:', err);
     alert('เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาตรวจสอบการเชื่อมต่อ');

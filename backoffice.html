@@ -3694,7 +3694,15 @@ document.getElementById('clearDataConfirm').addEventListener('click', async () =
   }
   errEl.textContent = '';
   try {
-    await remove(ref(db, 'orders'));
+    const today = (() => {
+      const th = new Date(Date.now() + 7 * 60 * 60 * 1000);
+      return th.toISOString().slice(0, 10);
+    })();
+    await Promise.all([
+      remove(ref(db, 'orders')),
+      remove(ref(db, 'tableOrders')),
+      update(ref(db, 'meta'), { orderNumber: 1000, lastOrderDate: today }),
+    ]);
     document.getElementById('clearDataModal').classList.remove('open');
     alert('✅ ล้างข้อมูลเรียบร้อย');
   } catch (e) {
