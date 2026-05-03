@@ -19,8 +19,7 @@ import {
 const ADMIN_USER = 'Piyamit';
 const ADMIN_PASS_HASH = 'bfa474b7bef2a64f28c6d8ec0c668174f381bdfc7ad5e0736fb0a9fadf681be0'; 
 
-const AUTH_KEY          = 'krua-khun-mae-auth';
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_mne3bzBqINl9JjpoU_fBhpeWENyyxXkpulpFt3oAgfbS704xij-A_FMlLM1k0_2Cog/exec';
+const AUTH_KEY = 'krua-khun-mae-auth';
 
 // ==================== Rate Limiting ====================
 const LOGIN_MAX_ATTEMPTS = 5;
@@ -72,13 +71,6 @@ const todayOrderCount  = document.getElementById('todayOrderCount');
 const todayTotal       = document.getElementById('todayTotal');
 const tabRecent        = document.getElementById('tabRecent');
 
-const clearDataBtn     = document.getElementById('clearDataBtn');
-const clearDataModal   = document.getElementById('clearDataModal');
-const clearDataCode    = document.getElementById('clearDataCode');
-const clearDataError   = document.getElementById('clearDataError');
-const clearDataCancel  = document.getElementById('clearDataCancel');
-const clearDataConfirm = document.getElementById('clearDataConfirm');
-
 
 // ==================== State ====================
 let allOrders = [];
@@ -129,12 +121,6 @@ function getDateKey(isoString) { return new Date(isoString).toISOString().slice(
 function isToday(isoString) {
   return getDateKey(isoString) === new Date().toISOString().slice(0, 10);
 }
-function isWithinLast30Days(isoString) {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 30);
-  return new Date(isoString) >= cutoff;
-}
-
 /**
  * ดึง flat items จาก order ที่อาจมี batches หรือ items (รองรับทั้งสองรูปแบบ)
  */
@@ -668,16 +654,6 @@ async function deleteOrder(firebaseKey, orderNumber) {
   }
 }
 
-async function clearAllOrders() {
-  await remove(ref(db, 'orders'));
-  await remove(ref(db, 'tableOrders')); // ล้าง active table orders ด้วย
-  await update(ref(db, 'meta'), {
-    orderNumber: 1001,
-    lastOrderDate: new Date().toISOString().slice(0, 10),
-  });
-  closeClearDataModal();
-}
-
 // ==================== Menu Data (for add-item modal) ====================
 let allMenuData = {};
 onValue(ref(db, 'menu'), snap => { allMenuData = snap.val() || {}; });
@@ -703,11 +679,6 @@ function getLiveCats() {
     { id: 'soda',   label: '🫧 โซดา' },
   ];
 }
-// backward compat alias
-const ADD_ITEM_CATEGORIES = getLiveCats();
-let addItemActiveCategory = 'all';
-
-// ==================== Add Item Modal ====================
 // ==================== Edit-modal inline Add Item ====================
 function renderEditAddItemList() {
   const container = document.getElementById('editAddItemProductList');
@@ -1549,48 +1520,6 @@ document.querySelectorAll('.tab-btn').forEach((tab) => {
   tab.addEventListener('click', () => switchTab(tab.dataset.tab));
 });
 
-// ==================== Clear Data Modal ====================
-function openClearDataModal() {
-  clearDataError.textContent = '';
-  clearDataCode.value        = '';
-  clearDataModal.setAttribute('aria-hidden', 'false');
-  clearDataCode.focus();
-}
-function closeClearDataModal() {
-  clearDataModal.setAttribute('aria-hidden', 'true');
-  clearDataCode.value        = '';
-  clearDataError.textContent = '';
-}
-
-clearDataBtn.addEventListener('click', openClearDataModal);
-clearDataCancel.addEventListener('click', closeClearDataModal);
-clearDataModal.addEventListener('click', (e) => { if (e.target === clearDataModal) closeClearDataModal(); });
-
-clearDataConfirm.addEventListener('click', async () => {
-  clearDataError.textContent = '';
-  const code = clearDataCode.value;
-  if (!code) { clearDataError.textContent = 'กรุณาใส่รหัส'; clearDataCode.focus(); return; }
-
-  clearDataConfirm.disabled    = true;
-  clearDataConfirm.textContent = 'กำลังตรวจสอบ...';
-
-  try {
-    const hash = await hashPassword(code);
-    if (hash !== ADMIN_PASS_HASH) {
-      clearDataError.textContent = 'รหัสไม่ถูกต้อง';
-      clearDataCode.value        = '';
-      clearDataCode.focus();
-      return;
-    }
-    if (confirm('ยืนยันล้างรายการสั่งซื้อทั้งหมดและรีเซ็ตหมายเลขออเดอร์เป็น 1001?')) {
-      await clearAllOrders();
-    }
-  } finally {
-    clearDataConfirm.disabled    = false;
-    clearDataConfirm.textContent = 'ล้างข้อมูล';
-  }
-});
-
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
@@ -1746,36 +1675,6 @@ document.querySelectorAll('.sound-dropdown-item').forEach(item => {
 document.addEventListener('click', (e) => {
   if (!soundControl?.contains(e.target)) closeSoundDropdown();
 });
-
-// ==================== Inject batch CSS (ส่วนที่ยังคงใน JS เพราะใช้ร่วมกับ receipt popup) ====================
-(function injectBatchStyle() {
-  const style = document.createElement('style');
-  style.textContent = `
-    .batch-group { margin-bottom: 0.5rem; }
-    .batch-label {
-      font-size: 0.78rem; font-weight: 700;
-      color: var(--accent, #c8853a);
-      margin-bottom: 0.25rem; padding: 0.2rem 0.5rem;
-      background: #fff8e1; border-radius: 4px;
-      display: inline-block;
-    }
-    .batch-subtotal {
-      text-align: right; font-size: 0.78rem;
-      color: var(--brown-light, #8b6655);
-      padding: 0.15rem 0 0.35rem;
-      border-bottom: 1px dashed var(--cream-dark, #e2d8cb);
-      margin-bottom: 0.25rem;
-    }
-    .order-batch-chip {
-      background: #fff3cd; color: #856404;
-      font-size: 0.72rem; font-weight: 700;
-      padding: 0.1rem 0.5rem; border-radius: 999px;
-      margin-left: 0.35rem; vertical-align: middle;
-    }
-  `;
-  document.head.appendChild(style);
-})();
-
 
 // ==================== Init ====================
 checkAuth();
@@ -1950,4 +1849,3 @@ function printOrderReceipt(order) {
 </body></html>`);
   win.document.close();
 }
-// (CSS ย้ายไป admin.css แล้ว)

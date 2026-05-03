@@ -57,7 +57,6 @@
             <button class="sound-dropdown-item" data-mode="beep">🎵 Effect</button>
           </div>
         </div>
-        <button type="button" class="btn btn-outline-danger hidden" id="clearDataBtn" style="display:none">🗑 ล้างข้อมูล</button>
         <a href="backoffice.html" class="btn btn-outline">📊 Backoffice</a>
         <a href="index.html" class="btn btn-outline">POS</a>
         <button type="button" class="btn btn-outline" id="logoutBtn">ออกจากระบบ</button>
@@ -138,24 +137,6 @@
       </div>
 
     </main>
-  </div>
-
-  <!-- =============== MODAL: Clear Data =============== -->
-  <div class="modal" id="clearDataModal" aria-hidden="true">
-    <div class="modal-box">
-      <h3 class="modal-title">🗑 ล้างรายการสั่งซื้อทั้งหมด</h3>
-      <p class="modal-desc">กรอกรหัสผ่านแอดมินเพื่อยืนยันการล้างข้อมูลและรีเซ็ตหมายเลขออเดอร์</p>
-      <div class="field">
-        <label class="field-label" for="clearDataCode">รหัสยืนยัน</label>
-        <input type="password" id="clearDataCode" class="field-input" placeholder="••••••" autocomplete="off">
-      </div>
-      <p id="clearDataError" class="login-error" aria-live="polite"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="clearDataCancel">ยกเลิก</button>
-        <button type="button" class="btn btn-danger" id="clearDataConfirm">ล้างข้อมูล</button>
-      </div>
-    </div>
-  </div>
   </div>
 
 

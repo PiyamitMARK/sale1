@@ -161,7 +161,7 @@ export function subscribeMenu(db, callback) {
  * Sync raw Firebase menu object → LocalStorage 'ks90-menu'
  * เพื่อให้ app.js / customer.js (fallback) และ backoffice.html อ่านได้
  */
-export function _syncMenuToLS(rawMenuObj) {
+function _syncMenuToLS(rawMenuObj) {
   try {
     localStorage.setItem('ks90-menu', JSON.stringify(rawMenuObj));
     // แจ้ง tab อื่น (backoffice / POS) ด้วย storage event
@@ -172,7 +172,7 @@ export function _syncMenuToLS(rawMenuObj) {
 /**
  * Sync categories จาก Firebase → LocalStorage 'ks90-categories'
  */
-export function _syncCatsToLS(catsObj) {
+function _syncCatsToLS(catsObj) {
   try {
     localStorage.setItem('ks90-categories', JSON.stringify(catsObj));
   } catch (_) {}
