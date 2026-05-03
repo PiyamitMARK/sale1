@@ -1791,7 +1791,7 @@ function switchPanel(id) {
   overlay.classList.remove('open');
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history' && !histLoaded) loadHistory();
-  if (id === 'menu' && !menuLoaded) loadMenuItems();
+  if (id === 'menu') loadMenuItems();
   if (id === 'qr') initQrPanel();
 }
 
@@ -2542,7 +2542,14 @@ function renderMenuTable() {
 async function loadMenuItems() {
   menuLoaded = true;
   MOCK_MENU = Object.values(LIVE_MENU);
-  renderMenuTable();
+  // ถ้า LIVE_MENU ยังว่าง แสดง loading แล้วรอ Firebase callback
+  if (MOCK_MENU.length === 0) {
+    document.getElementById('menuTableBody').innerHTML =
+      '<tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนู…</div></td></tr>';
+    document.getElementById('menuCountBadge').textContent = '…';
+  } else {
+    renderMenuTable();
+  }
 }
 
 // cat filter
@@ -2885,10 +2892,14 @@ subscribeOrders(orders => {
   }
 });
 
-// เมนู: subscribe จาก LocalStorage
+// เมนู: subscribe จาก Firebase (real-time)
 subscribeMenu(menuObj => {
   MOCK_MENU = Object.values(menuObj);
-  if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+  // render ทุกครั้งที่ข้อมูลเปลี่ยน ไม่ว่า menuLoaded จะเป็นอะไร
+  if (activePanelId === 'menu') {
+    menuLoaded = true;
+    renderMenuTable();
+  }
 });
 subscribeCategories();
 
