@@ -1523,44 +1523,56 @@ clearDataConfirm.addEventListener('click', async () => {
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
-const soundModeTabs  = document.querySelectorAll('.sound-mode-tab');
+const soundDropdown  = document.getElementById('soundDropdown');
 
-// ตั้งค่า mode tabs ตาม localStorage
+// ── ฟังก์ชัน update label บนปุ่ม ──
+function updateSoundBtnLabel() {
+  if (!soundToggleBtn) return;
+  const modeLabel = soundMode === 'beep' ? '🎵 Effect' : '🗣 เสียงคนพูด';
+  soundToggleBtn.textContent = soundEnabled ? `🔔 ${modeLabel}` : `🔕 ปิดเสียง`;
+  soundToggleBtn.classList.toggle('muted', !soundEnabled);
+}
+
+// ── ตั้งค่า mode dropdown items ──
 function applySoundMode(mode) {
   soundMode = mode;
   localStorage.setItem('soundMode', mode);
-  soundModeTabs.forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.mode === mode);
+  document.querySelectorAll('.sound-dropdown-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.mode === mode);
   });
+  updateSoundBtnLabel();
 }
 applySoundMode(soundMode);
 
+// ── Toggle dropdown open/close เมื่อกดปุ่ม ──
 if (soundToggleBtn) {
-  soundToggleBtn.addEventListener('click', () => {
-    unlockIOSSpeech(); // iOS: unlock ด้วย user gesture
-    soundEnabled = !soundEnabled;
-    if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
-    soundToggleBtn.textContent = soundEnabled ? '🔔 เสียงเปิด' : '🔕 เสียงปิด';
-    soundControl?.classList.toggle('muted', !soundEnabled);
-    // ทดสอบเสียงทันทีหลังเปิด (เพื่อให้ iOS unlock สำเร็จ)
-    if (soundEnabled) {
-      if (soundMode === 'beep') playBeep([880, 1047], 0.18);
-      else speak('เสียงเปิดแล้วจ้า');
-    }
+  soundToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    unlockIOSSpeech();
+    soundControl?.classList.toggle('open');
   });
 }
 
-soundModeTabs.forEach(tab => {
-  tab.addEventListener('click', () => {
+// ── เลือก mode จาก dropdown item ──
+document.querySelectorAll('.sound-dropdown-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.stopPropagation();
     unlockIOSSpeech();
-    const mode = tab.dataset.mode;
-    applySoundMode(mode);
-    // ทดสอบเสียงให้ฟังทันที
-    if (soundEnabled) {
-      if (mode === 'beep') playBeep([880, 1047, 1319], 0.18);
-      else speak('เสียงคนพูดจ้า');
+    const mode = item.dataset.mode;
+    if (!soundEnabled) {
+      soundEnabled = true;
+      soundControl?.classList.remove('muted');
     }
+    applySoundMode(mode);
+    soundControl?.classList.remove('open');
+    if (mode === 'beep') playBeep([880, 1047, 1319], 0.18);
+    else speak('เสียงคนพูดจ้า');
   });
+});
+
+// ── คลิกนอก dropdown แล้วปิด ──
+document.addEventListener('click', () => {
+  soundControl?.classList.remove('open');
 });
 
 // ==================== Inject batch CSS (ส่วนที่ยังคงใน JS เพราะใช้ร่วมกับ receipt popup) ====================
