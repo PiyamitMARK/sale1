@@ -336,6 +336,7 @@ async function init() {
 
   tableNum = isTA ? raw : tNum;
   show('mainScreen');
+  requestAnimationFrame(updateStickyOffsets);
   const lbl = tableLabel(tableNum);
   document.getElementById('tableLabel').textContent     = lbl;
   document.getElementById('cartTableLabel').textContent = lbl;
@@ -431,7 +432,7 @@ function showOrderBanner() {
     banner.style.cssText = `
       background:#fff8e1; border-left:4px solid #c8853a;
       padding:0.55rem 1rem; font-size:0.85rem; color:#5c3d2e;
-      position:sticky; top:100px; z-index:38;
+      position:sticky; top:calc(var(--header-h, 52px) + var(--kitchen-h, 0px)); z-index:38;
     `;
     document.getElementById('mainScreen').insertBefore(
       banner,
@@ -471,6 +472,7 @@ function updateKitchenBar(status) {
   msg.textContent  = info.msg;
   bar.className    = 'cust-kitchen-bar' + (info.cls ? ' ' + info.cls : '');
   bar.classList.remove('hidden');
+  requestAnimationFrame(updateStickyOffsets);
 
   // เมื่อ status เป็น paid → ล้าง activeOrderKey ทันที
   // เพื่อให้การสั่งครั้งถัดไปสร้างออเดอร์ใหม่แทนการต่อท้าย
@@ -501,6 +503,7 @@ function updateKitchenBar(status) {
 function hideKitchenBar() {
   const bar = document.getElementById('kitchenBar');
   if (bar) bar.classList.add('hidden');
+  requestAnimationFrame(updateStickyOffsets);
 }
 
 // ==================== Call Staff ====================
@@ -559,6 +562,28 @@ function show(id) {
     document.getElementById(sid).classList.toggle('hidden', sid !== id);
   });
 }
+
+// ==================== Sticky offset: วัด header + kitchen bar จริง ====================
+// set CSS var --header-h และ --kitchen-h เพื่อให้ tabs/banner ไม่ทับ
+function updateStickyOffsets() {
+  const header  = document.querySelector('.cust-header');
+  const kitchen = document.getElementById('kitchenBar');
+  const root    = document.documentElement;
+  const hH = header  ? header.offsetHeight  : 0;
+  const kH = (kitchen && !kitchen.classList.contains('hidden')) ? kitchen.offsetHeight : 0;
+  root.style.setProperty('--header-h',  hH + 'px');
+  root.style.setProperty('--kitchen-h', kH + 'px');
+}
+if (typeof ResizeObserver !== 'undefined') {
+  const _stickyRO = new ResizeObserver(updateStickyOffsets);
+  document.addEventListener('DOMContentLoaded', () => {
+    const h = document.querySelector('.cust-header');
+    const k = document.getElementById('kitchenBar');
+    if (h) _stickyRO.observe(h);
+    if (k) _stickyRO.observe(k);
+  });
+}
+window.addEventListener('resize', updateStickyOffsets);
 
 // ==================== Popular Items ====================
 function loadPopularItems() {

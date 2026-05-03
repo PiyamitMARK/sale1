@@ -78,7 +78,7 @@ body {
   background: var(--cream-mid);
   border-bottom: 2px solid var(--cream-dark);
   scrollbar-width: none;
-  position: sticky; top: 52px; z-index: 40;
+  position: sticky; top: calc(var(--header-h, 52px) + var(--kitchen-h, 0px)); z-index: 40;
 }
 .cust-cats::-webkit-scrollbar { display: none; }
 .cust-cat {
@@ -398,7 +398,7 @@ body {
   background: var(--cream-mid);
   border-bottom: 2px solid var(--cream-dark);
   gap: 0.75rem;
-  position: sticky; top: 52px; z-index: 39;
+  position: sticky; top: var(--header-h, 52px); z-index: 39;
   transition: background 0.4s, border-color 0.4s;
 }
 .cust-kitchen-bar.status-cooking {
