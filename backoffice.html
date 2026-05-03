@@ -276,6 +276,8 @@ body {
   outline: none;
   transition: border-color var(--ease);
   width: 100%;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 .field-input:focus { border-color: var(--accent); background: var(--white); }
 
@@ -480,16 +482,16 @@ body {
    HISTORY PANEL
    ============================================================ */
 .history-filters {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+.history-filters .field { min-width: 0; width: 100%; }
+.history-date-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: .75rem;
-  align-items: flex-end;
-}
-.history-filters .field { min-width: 0; }
-.history-filters .field--full { grid-column: span 2; }
-.history-filters > .btn { grid-column: span 2; justify-self: start; }
-.history-date-row {
-  display: contents;
+  width: 100%;
 }
 .history-date-row .field { min-width: 0; }
 
