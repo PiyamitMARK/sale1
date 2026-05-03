@@ -180,8 +180,13 @@ async function _mergeOrdersInFirebase(orders, paymentMethod) {
   const sorted = [...orders].sort((a, b) => new Date(a.date) - new Date(b.date));
   const mergedBatches = sorted.flatMap(o => o.batches || [o.items || []]);
   const grandTotal    = sorted.reduce((s, o) => s + (o.total || 0), 0);
-  const tableLabel    = sorted.map(o => o.table || '-').join('+');
   const orderNums     = sorted.map(o => o.orderNumber);
+
+  // ถ้า order ที่รวมล้วนเป็น takeaway ให้ใช้ slot แรก และตั้ง takeaway: true
+  const allTakeaway = sorted.every(o => o.takeaway || String(o.table).startsWith('takeaway'));
+  const tableLabel  = allTakeaway
+    ? sorted[0].table                                           // คง slot เดิมของ order แรก
+    : sorted.map(o => o.table || '-').join('+');               // รวมหมายเลขโต๊ะ
 
   // 2. สร้าง order ใหม่ (ใช้ orderNumber ของ order แรก เพื่อ continuity)
   const mergedOrder = {
@@ -194,6 +199,7 @@ async function _mergeOrdersInFirebase(orders, paymentMethod) {
     paymentMethod: paymentMethod || 'cash',
     mergedFrom:    orderNums,   // เก็บหลักฐานว่ารวมมาจาก order ไหน
     mergedAt:      new Date().toISOString(),
+    ...(allTakeaway ? { takeaway: true } : {}),
   };
 
   // 3. push order ใหม่เข้า Firebase
@@ -599,7 +605,9 @@ function _printSplitReceipt(order, personName, items, total) {
 function _showToast(msg) {
   const t = document.createElement('div');
   t.className = 'new-order-toast';
-  t.innerHTML = `<strong>${msg}</strong>`;
+  const strong = document.createElement('strong');
+  strong.textContent = msg;   // textContent ป้องกัน XSS
+  t.appendChild(strong);
   document.body.appendChild(t);
   setTimeout(() => { if (t.parentNode) t.remove(); }, 4000);
 }
