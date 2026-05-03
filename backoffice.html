@@ -1798,7 +1798,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getDatabase, ref, onValue, update, remove, push, set } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js';
+// AppCheck removed — not needed for backoffice
 
 // ============================================================
 //  Back Office — main script
@@ -1970,13 +1970,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db  = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
-
-  try {
-  initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaV3Provider('6LdcccksAAAAAIU2DAOVbhc0yao-zcNxHWyApA17'),
-    isTokenAutoRefreshEnabled: true,
-  });
-} catch(e) { console.warn('AppCheck init failed:', e.message); }
+  // AppCheck disabled
 signInAnonymously(auth).catch(e => console.error('Auth:', e));
 
 // ---- Live data from Firebase ----
