@@ -12,7 +12,7 @@ import './darkmode.js';
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getDatabase, ref, update, remove, onValue, get, set
+  getDatabase, ref, update, remove, onValue, get, set, push
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
@@ -1563,6 +1563,7 @@ initBillFeature({
   printOrderReceipt,
   formatMoney,
   escapeHtml,
+  firebaseUtils:    { push, set, remove, get, ref, update },
 });
 // ==================== Print Receipt (admin) ====================
 /**

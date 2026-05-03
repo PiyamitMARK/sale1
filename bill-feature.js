@@ -47,13 +47,7 @@ export function bindBillButtons(container) {
     card.classList.toggle('order-card--merge-selectable', mergeMode);
     if (mergeMode) {
       card.classList.toggle('order-card--merge-selected', mergeSelected.has(key));
-      // ลบ listener เก่าก่อน (ถ้ามี) แล้วค่อยใส่ใหม่ เพื่อป้องกัน duplicate
-      card.removeEventListener('click', _onMergeCardClick);
-      card.addEventListener('click', _onMergeCardClick);
-    } else {
-      // ออกจาก merge mode — เอา class และ listener ออกให้หมด
-      card.classList.remove('order-card--merge-selectable', 'order-card--merge-selected');
-      card.removeEventListener('click', _onMergeCardClick);
+      card.addEventListener('click', _onMergeCardClick, { once: true });
     }
 
     // หา actions div และใส่ปุ่มแยกบิล
@@ -106,7 +100,6 @@ function _cancelMergeMode() {
   mergeMode = false;
   mergeSelected.clear();
   document.getElementById('mergeBillBar')?.classList.add('hidden');
-  // rebind หลังจาก mergeMode = false แล้ว เพื่อให้ bindBillButtons เอา class/listener ออกได้ถูกต้อง
   _rebindOrderCards();
 }
 function _rebindOrderCards() {
@@ -175,6 +168,53 @@ function _openBillModal() {
   if (!billModal) _injectModal();
   billModal.setAttribute('aria-hidden', 'false');
   billModal.style.display = 'flex';
+}
+
+// ─── Merge orders เป็น record เดียวใน Firebase ──────────────────
+async function _mergeOrdersInFirebase(orders, paymentMethod) {
+  const { db, firebaseUtils } = _cfg;
+  if (!firebaseUtils) throw new Error('firebaseUtils ไม่ได้ถูก inject ใน initBillFeature');
+  const { push, set, remove, get, ref, update } = firebaseUtils;
+
+  // 1. รวม batches จากทุก order เรียงตาม date
+  const sorted = [...orders].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const mergedBatches = sorted.flatMap(o => o.batches || [o.items || []]);
+  const grandTotal    = sorted.reduce((s, o) => s + (o.total || 0), 0);
+  const tableLabel    = sorted.map(o => o.table || '-').join('+');
+  const orderNums     = sorted.map(o => o.orderNumber);
+
+  // 2. สร้าง order ใหม่ (ใช้ orderNumber ของ order แรก เพื่อ continuity)
+  const mergedOrder = {
+    orderNumber:   sorted[0].orderNumber,
+    table:         tableLabel,
+    date:          sorted[0].date,
+    batches:       mergedBatches,
+    total:         grandTotal,
+    status:        'paid',
+    paymentMethod: paymentMethod || 'cash',
+    mergedFrom:    orderNums,   // เก็บหลักฐานว่ารวมมาจาก order ไหน
+    mergedAt:      new Date().toISOString(),
+  };
+
+  // 3. push order ใหม่เข้า Firebase
+  const newRef = await push(ref(db, 'orders'), mergedOrder);
+
+  // 4. ลบ order เก่าและ tableOrders ของแต่ละโต๊ะออก
+  for (const o of sorted) {
+    // ลบ tableOrders/{table} ถ้า key ตรงกัน
+    if (o.table) {
+      try {
+        const snap = await get(ref(db, `tableOrders/${o.table}`));
+        if (snap.exists() && snap.val().orderKey === o.firebaseKey) {
+          await remove(ref(db, `tableOrders/${o.table}`));
+        }
+      } catch (_) {}
+    }
+    // ลบ order เก่า
+    await remove(ref(db, `orders/${o.firebaseKey}`));
+  }
+
+  return newRef.key;
 }
 
 // ─── รวมบิล ──────────────────────────────────────────────────────
@@ -248,17 +288,15 @@ function _renderMergeBody(orders) {
   document.getElementById('billConfirmMerge').addEventListener('click', async () => {
     const btn = document.getElementById('billConfirmMerge');
     btn.disabled = true;
-    btn.textContent = 'กำลังบันทึก...';
+    btn.textContent = 'กำลังรวม...';
     try {
-      for (const o of orders) {
-        await _cfg.markOrderAsPaid(o.firebaseKey, selectedPayment);
-      }
+      await _mergeOrdersInFirebase(orders, selectedPayment);
       // ปิด merge mode ก่อน close modal เพื่อให้ Firebase re-render ได้ state ที่ถูกต้องทันที
       mergeMode = false;
       mergeSelected.clear();
       _closeBillModal();
       _cancelMergeMode();
-      _showToast(`✅ ชำระรวม ${orders.length} โต๊ะ เรียบร้อย`);
+      _showToast(`✅ รวมบิล ${orders.length} โต๊ะ (${orders.map(o=>'#'+o.orderNumber).join(', ')}) เป็น order เดียวแล้ว`);
     } catch (err) {
       btn.disabled = false;
       btn.textContent = '✅ ยืนยันชำระรวม';
