@@ -3035,12 +3035,12 @@ function openCategoryModal() {
 
           <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem">
             <p style="font-size:.82rem;font-weight:700;color:var(--brown-light)">＋ เพิ่มหมวดใหม่</p>
-            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-start">
               <input type="text" class="field-input" id="newCatId" placeholder="id เช่น dessert (a-z)" style="flex:1;min-width:100px">
               <input type="text" class="field-input" id="newCatLabel" placeholder="ชื่อ เช่น 🍮 ของหวาน" style="flex:1;min-width:120px">
+              <button type="button" class="btn btn-primary btn-sm" id="addCatBtn" style="flex-shrink:0">＋ เพิ่มหมวด</button>
             </div>
             <p id="catModalError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
-            <button type="button" class="btn btn-primary btn-sm" id="addCatBtn">＋ เพิ่มหมวด</button>
           </div>
         </div>
         <div class="bo-modal-footer">
