@@ -2049,6 +2049,8 @@ const DEFAULT_PRODUCT_TYPES = [
   { value: 'simple',       label: '🍽 เมนูเดี่ยว',           desc: 'ไม่มีตัวเลือก ไม่มีหมายเหตุ' },
 ];
 let LIVE_PRODUCT_TYPES = [...DEFAULT_PRODUCT_TYPES]; // array of { value, label, desc }
+let LIVE_PT_TOPPINGS = {}; // { [ptValue]: [ {id,label,type,choices} ] }
+let _ptToppingEditors = {};
 
 function subscribeProductTypes() {
   onValue(ref(db, 'productTypes'), snap => {
@@ -2301,6 +2303,7 @@ document.getElementById('exportSendBtn').addEventListener('click', async () => {
 // ============================================================
 let tsLoaded = false;
 let tsDays = 30;
+let qrInited = false;
 
 function buildTopSellers(orders, days) {
   const now = new Date();
@@ -3078,9 +3081,6 @@ function openCategoryModal() {
 
 // ==================== ProductType Manager Modal ====================
 
-// Live cache ของ topping defaults จาก Firebase
-let LIVE_PT_TOPPINGS = {}; // { [ptValue]: [ {id,label,type,choices:[{value,label,price}]} ] }
-
 function subscribePtToppings() {
   onValue(ref(db, 'productTypeToppings'), snap => {
     LIVE_PT_TOPPINGS = snap.exists() ? snap.val() : {};
@@ -3097,8 +3097,6 @@ async function savePtToppings(ptValue, groups) {
 }
 
 // ─── Topping editor state (per open modal) ───
-let _ptToppingEditors = {}; // { [ptValue]: [ groupObj ] }
-
 function _initPtToppingEditor(ptValue) {
   const raw = LIVE_PT_TOPPINGS[ptValue];
   if (Array.isArray(raw)) {
@@ -3601,8 +3599,6 @@ subscribeProductTypes();
 // ============================================================
 //  ===== PANEL: QR โต๊ะ =====
 // ============================================================
-let qrInited = false;
-
 function initQrPanel() {
   const baseInput  = document.getElementById('qrBaseUrl');
   const countInput = document.getElementById('qrTableCount');
