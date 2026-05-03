@@ -50,9 +50,10 @@ export function bindBillButtons(container) {
       card.addEventListener('click', _onMergeCardClick, { once: true });
     }
 
-    // หา actions div และใส่ปุ่มแยกบิล
+    // หา actions div และใส่ปุ่มแยกบิล เฉพาะ served / paid
+    const isServedOrPaid = card.classList.contains('order-card--served') || card.classList.contains('order-card--paid');
     const actions = card.querySelector('.order-actions');
-    if (actions && !actions.querySelector('.btn-split-bill')) {
+    if (isServedOrPaid && actions && !actions.querySelector('.btn-split-bill')) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn-split-bill';
