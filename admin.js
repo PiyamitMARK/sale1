@@ -1528,12 +1528,14 @@ const soundControl   = document.getElementById('soundControl');
 function updateSoundBtnLabel() {
   if (!soundToggleBtn) return;
   if (!soundEnabled) {
-    soundToggleBtn.textContent = '🔕 ปิดอยู่';
+    soundToggleBtn.textContent = '🔕';
     soundToggleBtn.classList.add('muted');
+    soundToggleBtn.title = 'เสียงปิดอยู่ • กดเพื่อเปิด';
   } else {
-    const modeLabel = soundMode === 'beep' ? '🎵 Effect' : '🗣 เสียงคนพูด';
-    soundToggleBtn.textContent = `🔔 ${modeLabel}`;
+    soundToggleBtn.textContent = '🔔';
     soundToggleBtn.classList.remove('muted');
+    const modeLabel = soundMode === 'beep' ? 'Effect' : 'คนพูด';
+    soundToggleBtn.title = `เสียง: ${modeLabel} • กดค้างเพื่อเลือกโหมด`;
   }
 }
 

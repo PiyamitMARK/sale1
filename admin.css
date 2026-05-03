@@ -904,28 +904,26 @@ body {
   line-height: 1;
 }
 
-/* ================================================ SOUND CONTROL GROUP */
-/* ================================================ SOUND CONTROL (Dropdown) */
+/* ================================================ SOUND CONTROL (กดเปิด/ปิด • กดค้างเลือกโหมด) */
 .sound-control {
   position: relative;
   display: inline-flex;
   align-items: center;
 }
 
-/* ปุ่มไอคอนเปิด/ปิดเสียง */
 .btn-sound-icon {
   background: var(--cream-mid);
   border: 1.5px solid var(--cream-dark);
   border-radius: var(--radius-pill);
-  padding: 0.28rem 0.6rem;
-  font-size: 0.82rem;
+  padding: 0.22rem 0.52rem;
+  font-size: 0.75rem;
   cursor: pointer;
   color: var(--brown-mid);
   transition: all var(--transition);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
   font-family: inherit;
   font-weight: 600;
   line-height: 1;
@@ -935,16 +933,14 @@ body {
 .btn-sound-icon:hover {
   border-color: var(--brown-light);
   background: var(--cream-dark);
-  color: var(--brown);
 }
-.btn-sound-icon:active {
-  transform: scale(0.95);
-}
+.btn-sound-icon:active { transform: scale(0.93); }
 .btn-sound-icon.muted {
-  opacity: 0.55;
+  opacity: 0.45;
+  border-style: dashed;
 }
 
-/* Dropdown panel */
+/* Dropdown panel (เปิดจากกดค้าง) */
 .sound-dropdown {
   display: none;
   position: absolute;
@@ -955,12 +951,21 @@ body {
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   z-index: 200;
-  min-width: 130px;
+  min-width: 145px;
   overflow: hidden;
   animation: fadeUp 0.15s ease both;
 }
-.sound-control.open .sound-dropdown {
-  display: block;
+.sound-control.open .sound-dropdown { display: block; }
+
+.sound-dropdown-label {
+  padding: 0.38rem 0.85rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--brown-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--cream-mid);
+  border-bottom: 1px solid var(--cream-dark);
 }
 
 .sound-dropdown-item {
@@ -968,11 +973,11 @@ body {
   align-items: center;
   gap: 0.45rem;
   width: 100%;
-  padding: 0.45rem 0.85rem;
+  padding: 0.5rem 0.85rem;
   background: none;
   border: none;
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--brown-mid);
   cursor: pointer;
@@ -980,45 +985,19 @@ body {
   transition: background var(--transition), color var(--transition);
   white-space: nowrap;
 }
-.sound-dropdown-item:hover {
-  background: var(--cream-mid);
-  color: var(--brown);
-}
-.sound-dropdown-item.active {
-  background: var(--brown);
-  color: var(--white);
-}
-.sound-dropdown-item + .sound-dropdown-item {
-  border-top: 1px solid var(--cream-mid);
-}
+.sound-dropdown-item:hover { background: var(--cream-mid); color: var(--brown); }
+.sound-dropdown-item.active { background: var(--brown); color: var(--white); }
+.sound-dropdown-item + .sound-dropdown-item { border-top: 1px solid var(--cream-mid); }
 
 /* Dark mode */
-[data-theme="dark"] .btn-sound-icon {
-  background: #2a1f18;
-  border-color: var(--cream-dark);
-  color: var(--brown-mid);
-}
-[data-theme="dark"] .btn-sound-icon:hover {
-  background: #3a2a20;
-}
-[data-theme="dark"] .sound-dropdown {
-  background: #231a15;
-  border-color: var(--cream-dark);
-}
-[data-theme="dark"] .sound-dropdown-item {
-  color: var(--cream-dark);
-}
-[data-theme="dark"] .sound-dropdown-item:hover {
-  background: #2e2218;
-  color: var(--cream);
-}
-[data-theme="dark"] .sound-dropdown-item.active {
-  background: var(--brown-mid);
-  color: var(--white);
-}
-[data-theme="dark"] .sound-dropdown-item + .sound-dropdown-item {
-  border-color: #2e2218;
-}
+[data-theme="dark"] .btn-sound-icon { background: #2a1f18; border-color: var(--cream-dark); color: var(--brown-mid); }
+[data-theme="dark"] .btn-sound-icon:hover { background: #3a2a20; }
+[data-theme="dark"] .sound-dropdown { background: #231a15; border-color: var(--cream-dark); }
+[data-theme="dark"] .sound-dropdown-label { background: #1e150f; color: var(--brown-light); border-color: #2e2218; }
+[data-theme="dark"] .sound-dropdown-item { color: var(--cream-dark); }
+[data-theme="dark"] .sound-dropdown-item:hover { background: #2e2218; color: var(--cream); }
+[data-theme="dark"] .sound-dropdown-item.active { background: var(--brown-mid); color: var(--white); }
+[data-theme="dark"] .sound-dropdown-item + .sound-dropdown-item { border-color: #2e2218; }
 
 
 /* ================================================ NEW ORDER TOAST */
