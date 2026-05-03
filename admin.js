@@ -534,85 +534,6 @@ function showBatchToast(order, batchNum) {
 
 // ==================== Firebase: Actions ====================
 
-// ─── Quick payment picker — popup เลือกวิธีชำระ ─────────────────
-const PAYMENT_ICONS = { cash: '💵', qr: '📱', credit: '💳', transfer: '🏦' };
-const PAYMENT_LABELS = { cash: 'เงินสด', qr: 'QR/PromptPay', credit: 'บัตรเครดิต', transfer: 'โอนธนาคาร' };
-
-function promptPayment(orderNumber) {
-  return new Promise((resolve) => {
-    // ลบ overlay เก่าถ้ามี
-    document.getElementById('_payOverlay')?.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = '_payOverlay';
-    overlay.style.cssText = [
-      'position:fixed;inset:0;z-index:9000;background:rgba(61,43,31,0.55);',
-      'display:flex;align-items:center;justify-content:center;padding:1.5rem;',
-      'backdrop-filter:blur(3px);',
-    ].join('');
-
-    const methods = ['cash', 'qr', 'credit', 'transfer'];
-    const btnHtml = methods.map(m => `
-      <button type="button" data-pay="${m}" style="
-        display:flex;flex-direction:column;align-items:center;gap:0.35rem;
-        padding:0.75rem 1rem;border:2px solid var(--cream-dark,#e2d8cb);
-        border-radius:10px;background:var(--white,#fff);cursor:pointer;
-        font-family:'Mitr',sans-serif;font-size:0.82rem;font-weight:600;
-        color:var(--brown-mid,#5c3d2e);min-width:80px;
-        transition:border-color 0.15s,background 0.15s,color 0.15s;">
-        <span style="font-size:1.6rem">${PAYMENT_ICONS[m]}</span>
-        <span>${PAYMENT_LABELS[m]}</span>
-      </button>`).join('');
-
-    overlay.innerHTML = `
-      <div style="background:var(--white,#fff);border-radius:14px;padding:1.5rem;
-        max-width:360px;width:100%;box-shadow:0 12px 40px rgba(61,43,31,0.22);">
-        <p style="font-family:'Mitr',sans-serif;font-size:1rem;font-weight:700;
-          color:var(--brown,#3d2b1f);margin-bottom:0.25rem;">💳 วิธีชำระเงิน</p>
-        <p style="font-size:0.82rem;color:var(--brown-light,#8b6655);margin-bottom:1rem;">
-          ออเดอร์ #${escapeHtml(String(orderNumber))}</p>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-bottom:1.25rem;">
-          ${btnHtml}
-        </div>
-        <div style="display:flex;justify-content:flex-end;">
-          <button type="button" id="_payCancel" style="
-            background:none;border:1.5px solid var(--cream-dark,#e2d8cb);
-            border-radius:999px;padding:0.4rem 1rem;cursor:pointer;
-            font-family:'Mitr',sans-serif;font-size:0.82rem;
-            color:var(--brown-light,#8b6655);">ยกเลิก</button>
-        </div>
-      </div>`;
-
-    document.body.appendChild(overlay);
-
-    // hover style
-    overlay.querySelectorAll('[data-pay]').forEach(btn => {
-      btn.addEventListener('mouseenter', () => {
-        btn.style.borderColor = 'var(--accent,#c8853a)';
-        btn.style.background  = '#fff8f0';
-        btn.style.color       = 'var(--accent,#c8853a)';
-      });
-      btn.addEventListener('mouseleave', () => {
-        btn.style.borderColor = 'var(--cream-dark,#e2d8cb)';
-        btn.style.background  = 'var(--white,#fff)';
-        btn.style.color       = 'var(--brown-mid,#5c3d2e)';
-      });
-      btn.addEventListener('click', () => {
-        overlay.remove();
-        resolve(btn.dataset.pay);
-      });
-    });
-
-    document.getElementById('_payCancel').addEventListener('click', () => {
-      overlay.remove();
-      resolve(null); // null = ยกเลิก ไม่ต้องทำอะไร
-    });
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) { overlay.remove(); resolve(null); }
-    });
-  });
-}
 
 async function markOrderAsPaid(firebaseKey, paymentMethod) {
   const order = allOrders.find(o => o.firebaseKey === firebaseKey);
@@ -1067,9 +988,7 @@ function renderOrders() {
   });
   ordersList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
-      const method = await promptPayment(order?.orderNumber || '');
-      if (method) markOrderAsPaid(btn.dataset.key, method);
+      markOrderAsPaid(btn.dataset.key, null);
     });
   });
   ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
@@ -1430,10 +1349,8 @@ function renderTakeawayOrders() {
     btn.addEventListener('click', () => markOrderAsServed(btn.dataset.key));
   });
   taList.querySelectorAll('.btn-paid').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
-      const method = await promptPayment(order?.orderNumber || '');
-      if (method) markOrderAsPaid(btn.dataset.key, method);
+    btn.addEventListener('click', () => {
+      markOrderAsPaid(btn.dataset.key, null);
     });
   });
   taList.querySelectorAll('.btn-edit-order').forEach((btn) => {
