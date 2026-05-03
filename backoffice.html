@@ -2886,7 +2886,7 @@ subscribeOrders(orders => {
 });
 
 // เมนู: subscribe จาก LocalStorage
-subscribeMenuLocalBO(menuObj => {
+subscribeMenu(menuObj => {
   MOCK_MENU = Object.values(menuObj);
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
 });
