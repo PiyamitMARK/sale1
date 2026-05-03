@@ -12,7 +12,7 @@ import './darkmode.js';
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getDatabase, ref, update, remove, onValue, get, set, push
+  getDatabase, ref, update, remove, onValue, get, set
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
@@ -1485,7 +1485,8 @@ clearDataConfirm.addEventListener('click', async () => {
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
-const soundModeTabs  = document.querySelectorAll('.sound-mode-tab');
+const soundDropdown  = document.getElementById('soundDropdown');
+const soundModeTabs  = document.querySelectorAll('.sound-dropdown-item');
 
 // ตั้งค่า mode tabs ตาม localStorage
 function applySoundMode(mode) {
@@ -1497,18 +1498,55 @@ function applySoundMode(mode) {
 }
 applySoundMode(soundMode);
 
+// ปิด dropdown เมื่อคลิกนอก
+document.addEventListener('click', (e) => {
+  if (!soundControl?.contains(e.target)) {
+    soundDropdown?.classList.remove('open');
+  }
+});
+
 if (soundToggleBtn) {
-  soundToggleBtn.addEventListener('click', () => {
-    unlockIOSSpeech(); // iOS: unlock ด้วย user gesture
+  let pressTimer = null;
+
+  // click = toggle เปิด/ปิดเสียง
+  soundToggleBtn.addEventListener('click', (e) => {
+    if (pressTimer) return; // long press จัดการแล้ว
+    // ถ้า dropdown เปิดอยู่ ให้ปิดก่อน
+    if (soundDropdown?.classList.contains('open')) {
+      soundDropdown.classList.remove('open');
+      return;
+    }
+    unlockIOSSpeech();
     soundEnabled = !soundEnabled;
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
-    soundToggleBtn.textContent = soundEnabled ? '🔔 เสียงเปิด' : '🔕 เสียงปิด';
+    soundToggleBtn.textContent = soundEnabled ? '🔔' : '🔕';
     soundControl?.classList.toggle('muted', !soundEnabled);
-    // ทดสอบเสียงทันทีหลังเปิด (เพื่อให้ iOS unlock สำเร็จ)
     if (soundEnabled) {
       if (soundMode === 'beep') playBeep([880, 1047], 0.18);
       else speak('เสียงเปิดแล้วจ้า');
     }
+  });
+
+  // long press = เปิด dropdown เลือก mode
+  soundToggleBtn.addEventListener('pointerdown', () => {
+    pressTimer = setTimeout(() => {
+      soundDropdown?.classList.toggle('open');
+      pressTimer = null;
+    }, 400);
+  });
+  soundToggleBtn.addEventListener('pointerup', () => {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+  });
+  soundToggleBtn.addEventListener('pointerleave', () => {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+  });
+
+  // คลิกขวา = เปิด dropdown
+  soundToggleBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    soundDropdown?.classList.toggle('open');
   });
 }
 
@@ -1517,12 +1555,13 @@ soundModeTabs.forEach(tab => {
     unlockIOSSpeech();
     const mode = tab.dataset.mode;
     applySoundMode(mode);
-    // ทดสอบเสียงให้ฟังทันที
+    soundDropdown?.classList.remove('open');
     if (soundEnabled) {
       if (mode === 'beep') playBeep([880, 1047, 1319], 0.18);
       else speak('เสียงคนพูดจ้า');
     }
   });
+
 });
 
 // ==================== Inject batch CSS (ส่วนที่ยังคงใน JS เพราะใช้ร่วมกับ receipt popup) ====================
@@ -1563,7 +1602,6 @@ initBillFeature({
   printOrderReceipt,
   formatMoney,
   escapeHtml,
-  firebaseUtils:    { push, set, remove, get, ref, update },
 });
 // ==================== Print Receipt (admin) ====================
 /**
