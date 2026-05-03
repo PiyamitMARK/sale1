@@ -385,6 +385,28 @@ async function checkActiveOrder() {
     const snap = await get(ref(db, `tableOrders/${tableNum}`));
     if (snap.exists()) {
       const data = snap.val();
+
+      // ตรวจสอบสถานะ order จริงก่อนว่ายังค้างอยู่ (ไม่ใช่ paid/canceled)
+      const orderSnap = await get(ref(db, `orders/${data.orderKey}`));
+      if (orderSnap.exists()) {
+        const order = orderSnap.val();
+        if (order.status === 'paid' || order.status === 'canceled') {
+          // order นี้ปิดแล้ว → ล้าง tableOrders ทิ้ง
+          await set(ref(db, `tableOrders/${tableNum}`), null);
+          activeOrderKey    = null;
+          activeOrderNumber = null;
+          clearSavedCart();
+          return;
+        }
+      } else {
+        // order ถูกลบไปแล้ว → ล้างเช่นกัน
+        await set(ref(db, `tableOrders/${tableNum}`), null);
+        activeOrderKey    = null;
+        activeOrderNumber = null;
+        clearSavedCart();
+        return;
+      }
+
       activeOrderKey    = data.orderKey;
       activeOrderNumber = data.orderNumber;
       showOrderBanner();
@@ -449,6 +471,19 @@ function updateKitchenBar(status) {
   msg.textContent  = info.msg;
   bar.className    = 'cust-kitchen-bar' + (info.cls ? ' ' + info.cls : '');
   bar.classList.remove('hidden');
+
+  // เมื่อ status เป็น paid → ล้าง activeOrderKey ทันที
+  // เพื่อให้การสั่งครั้งถัดไปสร้างออเดอร์ใหม่แทนการต่อท้าย
+  if (status === 'paid' || status === 'canceled') {
+    activeOrderKey    = null;
+    activeOrderNumber = null;
+    clearSavedCart();
+    // ล้าง banner ออเดอร์เก่า
+    const banner = document.getElementById('activeBanner');
+    if (banner) banner.remove();
+    // ล้าง tableOrders ใน Firebase (background)
+    if (tableNum) set(ref(db, `tableOrders/${tableNum}`), null).catch(() => {});
+  }
 
   // อัปเดต timeline steps
   const currentIdx = STATUS_ORDER.indexOf(status);
@@ -935,21 +970,33 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
     let usedOrderNum = activeOrderNumber;
 
     if (activeOrderKey) {
-      // ─── มี order active → เพิ่ม batch ต่อท้าย ───
+      // ─── มี order active → ตรวจก่อนว่ายังไม่ได้จ่าย ───
       const orderSnap = await get(ref(db, `orders/${activeOrderKey}`));
 
       if (orderSnap.exists()) {
         const existingOrder = orderSnap.val();
-        const batches = existingOrder.batches || [existingOrder.items || []];
-        batches.push(batchItems);
-        const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
 
-        await update(ref(db, `orders/${activeOrderKey}`), {
-          batches,
-          total: newTotal,
-          status: 'pending',
-          lastBatchDate: new Date().toISOString(),
-        });
+        if (existingOrder.status === 'paid' || existingOrder.status === 'canceled') {
+          // order นี้จ่ายแล้ว / ยกเลิกแล้ว → ล้าง activeOrder แล้วสร้างใหม่
+          activeOrderKey    = null;
+          activeOrderNumber = null;
+          await set(ref(db, `tableOrders/${tableNum}`), null);
+          // ซ่อน banner ออเดอร์เก่า
+          const banner = document.getElementById('activeBanner');
+          if (banner) banner.remove();
+        } else {
+          // order ยังค้างอยู่ → เพิ่ม batch ต่อท้าย
+          const batches = existingOrder.batches || [existingOrder.items || []];
+          batches.push(batchItems);
+          const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
+
+          await update(ref(db, `orders/${activeOrderKey}`), {
+            batches,
+            total: newTotal,
+            status: 'pending',
+            lastBatchDate: new Date().toISOString(),
+          });
+        }
       } else {
         // order ถูกลบไปแล้ว → ล้าง tableOrders แล้วสร้างใหม่
         activeOrderKey    = null;
