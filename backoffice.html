@@ -1534,19 +1534,15 @@ tr.drag-over td { background: var(--cream-dark) !important; }
             <div class="bo-panel-title">🍽 จัดการเมนู</div>
             <div class="bo-panel-sub">เพิ่ม แก้ไข เรียงลำดับ และซ่อน/แสดงเมนู</div>
           </div>
-          <button class="btn btn-primary" id="menuAddBtn">＋ เพิ่มเมนู</button>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <button class="btn btn-outline btn-sm" id="manageCatsBtn">🗂 จัดการหมวด</button>
+            <button class="btn btn-primary" id="menuAddBtn">＋ เพิ่มเมนู</button>
+          </div>
         </div>
 
         <!-- Toolbar: cats + search -->
         <div class="menu-toolbar">
-          <div class="menu-cats" id="menuCatBtns">
-            <button class="menu-cat-btn active" data-cat="all">🍽 ทั้งหมด</button>
-            <button class="menu-cat-btn" data-cat="setkao">🍱 เซ็ตอาหาร</button>
-            <button class="menu-cat-btn" data-cat="kao">🍜 อาหาร</button>
-            <button class="menu-cat-btn" data-cat="nam">🥤 เครื่องดื่ม</button>
-            <button class="menu-cat-btn" data-cat="coffee">☕ กาแฟ</button>
-            <button class="menu-cat-btn" data-cat="soda">🫧 โซดา</button>
-          </div>
+          <div class="menu-cats" id="menuCatBtns"></div>
           <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
             <div class="menu-search-wrap">
               <span class="menu-search-icon">🔍</span>
@@ -1897,6 +1893,36 @@ function subscribeMenu(cb) {
   });
 }
 
+// Subscribe to categories
+let LIVE_CATEGORIES = {
+  setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
+  nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
+};
+function subscribeCategories() {
+  onValue(ref(db, 'categories'), snap => {
+    if (snap.exists()) LIVE_CATEGORIES = snap.val();
+    renderCatBtns();
+    renderMenuTable();
+    if (window._catModalRerender) window._catModalRerender();
+  });
+}
+function renderCatBtns() {
+  const wrap = document.getElementById('menuCatBtns');
+  if (!wrap) return;
+  wrap.innerHTML = `<button class="menu-cat-btn${menuCatFilter==='all'?' active':''}" data-cat="all">🍽 ทั้งหมด</button>`
+    + Object.entries(LIVE_CATEGORIES).map(([id, label]) =>
+        `<button class="menu-cat-btn${menuCatFilter===id?' active':''}" data-cat="${id}">${escHtml(label)}</button>`
+      ).join('');
+  wrap.querySelectorAll('.menu-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      menuCatFilter = btn.dataset.cat;
+      wrap.querySelectorAll('.menu-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderMenuTable();
+    });
+  });
+}
+
 
 // ============================================================
 //  UTILS
@@ -1920,10 +1946,7 @@ function dateLabel(ts) {
     + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 }
 
-const CAT_LABELS = {
-  setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
-  nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
-};
+const CAT_LABELS = () => LIVE_CATEGORIES;
 
 // LIVE_ORDERS และ LIVE_MENU ถูก declare ไว้ข้างบนแล้ว (Firebase)
 // ใช้ตัวแปรเหล่านี้แทน MOCK_ORDERS / MOCK_MENU ทุกที่
@@ -2096,7 +2119,7 @@ function renderTopSellers() {
     const rank = i + 1;
     const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
     const barPct = Math.round((item.qty / maxQty) * 100);
-    const catLabel = Object.entries(CAT_LABELS).find(([k]) => k === item.cat)?.[1] || item.cat || '—';
+    const catLabel = CAT_LABELS()[item.cat] || item.cat || '—';
     return `
       <tr>
         <td><span class="rank-badge ${rankClass}">${rank}</span></td>
@@ -2359,7 +2382,7 @@ function renderMenuTable() {
   }
   body.innerHTML = items.map(m => {
     const hasPromo = m.promo?.enabled;
-    const catLabel = CAT_LABELS[m.category] || m.category;
+    const catLabel = CAT_LABELS()[m.category] || m.category;
     return `
       <tr class="${m.enabled ? '' : 'menu-disabled'}" data-id="${m.id}" draggable="true">
         <td><span class="drag-handle" title="ลากเพื่อเรียง">⠿</span></td>
@@ -2510,6 +2533,7 @@ document.getElementById('menuPromoEnabled').addEventListener('change', function(
 });
 
 document.getElementById('menuAddBtn').addEventListener('click', () => openMenuModal());
+document.getElementById('manageCatsBtn').addEventListener('click', openCategoryModal);
 
 document.getElementById('menuSaveBtn').addEventListener('click', () => {
   const name  = document.getElementById('menuName').value.trim();
@@ -2609,6 +2633,112 @@ document.getElementById('addOptionGroupBtn').addEventListener('click', () => {
 // ============================================================
 //  INIT — subscribe Firebase live data
 // ============================================================
+
+// ==================== Category Manager Modal ====================
+function openCategoryModal() {
+  let modal = document.getElementById('categoryManagerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'categoryManagerModal';
+    modal.className = 'modal';
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.appendChild(modal);
+  }
+
+  function renderModal() {
+    const cats = LIVE_CATEGORIES;
+    modal.innerHTML = `
+      <div class="modal-content" style="max-width:480px;padding:1.5rem;display:flex;flex-direction:column;gap:1rem">
+        <h3 class="modal-title">🗂 จัดการหมวดหมู่</h3>
+        <p style="font-size:.85rem;color:var(--brown-light);margin-top:-.5rem">เพิ่ม แก้ชื่อ หรือลบหมวดหมู่เมนู</p>
+
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          ${Object.entries(cats).map(([id, label]) => `
+            <div style="display:flex;align-items:center;gap:.5rem">
+              <input type="text" class="field-input cat-label-input" data-id="${id}"
+                value="${escHtml(label)}" style="flex:1;min-width:0">
+              <button type="button" class="btn btn-outline btn-sm cat-rename-btn" data-id="${id}" title="บันทึก">💾</button>
+              <button type="button" class="btn btn-sm cat-delete-btn" data-id="${id}"
+                style="background:none;border:1.5px solid #e53e3e;color:#e53e3e;border-radius:999px;padding:.3rem .6rem;cursor:pointer"
+                title="ลบหมวด">🗑</button>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+          <p style="font-size:.82rem;font-weight:700;color:var(--brown-light)">＋ เพิ่มหมวดใหม่</p>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <input type="text" class="field-input" id="newCatId" placeholder="id เช่น dessert (a-z)" style="flex:1;min-width:100px">
+            <input type="text" class="field-input" id="newCatLabel" placeholder="ชื่อ เช่น 🍮 ของหวาน" style="flex:1;min-width:120px">
+          </div>
+          <p id="catModalError" style="color:#e53e3e;font-size:.82rem;min-height:1rem"></p>
+          <button type="button" class="btn btn-primary btn-sm" id="addCatBtn">เพิ่มหมวด</button>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="catModalClose">ปิด</button>
+        </div>
+      </div>
+    `;
+    modal.style.display = 'flex';
+
+    modal.querySelector('#catModalClose').onclick = () => { modal.style.display = 'none'; };
+
+    // บันทึกชื่อ
+    modal.querySelectorAll('.cat-rename-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const newLabel = modal.querySelector(`.cat-label-input[data-id="${id}"]`).value.trim();
+        if (!newLabel) return;
+        btn.disabled = true;
+        try {
+          await update(ref(db, 'categories'), { [id]: newLabel });
+          btn.textContent = '✅';
+          setTimeout(() => { btn.textContent = '💾'; btn.disabled = false; }, 1200);
+        } catch(e) { alert('แก้ไม่ได้: ' + e.message); btn.disabled = false; }
+      };
+    });
+
+    // ลบหมวด
+    modal.querySelectorAll('.cat-delete-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const label = LIVE_CATEGORIES[id] || id;
+        if (!confirm(`ลบหมวด "${label}" ออก?\nเมนูที่อยู่ในหมวดนี้จะยังคงอยู่`)) return;
+        btn.disabled = true;
+        try {
+          await remove(ref(db, `categories/${id}`));
+        } catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
+      };
+    });
+
+    // เพิ่มหมวดใหม่
+    modal.querySelector('#addCatBtn').onclick = async () => {
+      const idInput = modal.querySelector('#newCatId');
+      const labelInput = modal.querySelector('#newCatLabel');
+      const errEl = modal.querySelector('#catModalError');
+      errEl.textContent = '';
+      let id = idInput.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      const label = labelInput.value.trim();
+      if (!id) { errEl.textContent = 'id ต้องเป็นตัวอักษรภาษาอังกฤษ/ตัวเลขเท่านั้น'; return; }
+      if (!label) { errEl.textContent = 'กรุณาใส่ชื่อหมวด'; return; }
+      if (LIVE_CATEGORIES[id]) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
+      try {
+        await update(ref(db, 'categories'), { [id]: label });
+        idInput.value = ''; labelInput.value = '';
+      } catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
+    };
+  }
+
+  renderModal();
+
+  // re-render modal เมื่อ categories เปลี่ยน (จาก subscribeCategories)
+  const origSubscribe = window._catModalRerender;
+  window._catModalRerender = () => {
+    if (modal.style.display !== 'none') renderModal();
+  };
+}
+
 subscribeOrders(orders => {
   MOCK_ORDERS = orders;
   // re-render panels ที่เปิดอยู่
@@ -2624,6 +2754,7 @@ subscribeMenu(menuObj => {
   MOCK_MENU = Object.values(menuObj).sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
 });
+subscribeCategories();
 
 // ============================================================
 //  ===== PANEL: QR โต๊ะ =====
