@@ -12,7 +12,46 @@ import { initializeApp }      from "https://www.gstatic.com/firebasejs/10.12.0/f
 import { getDatabase, ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-import { subscribeMenu } from './menu-manager.js';
+
+// ==================== อ่านเมนูจาก LocalStorage ====================
+function _loadMenuFromLS() {
+  try {
+    const raw = localStorage.getItem('ks90-menu');
+    if (!raw) return null;
+    const menuObj = JSON.parse(raw);
+    const result = {};
+    Object.values(menuObj).forEach(item => {
+      if (!item.enabled) return;
+      const cat = item.category;
+      if (!result[cat]) result[cat] = [];
+      const promoActive = item.promo?.enabled;
+      const price = promoActive ? (item.promo.promoPrice ?? item.price) : item.price;
+      result[cat].push({
+        id: item.id, name: item.name, price,
+        img: item.imageUrl || (item.imageNum ? 'images/img' + item.imageNum + '.png' : ''),
+        productType: item.productType || 'simple',
+        options: item.options || item.optionGroups || null,
+        promoLabel: promoActive ? (item.promo.label || 'โปร') : null,
+        enabled: true,
+      });
+    });
+    Object.keys(result).forEach(cat => {
+      result[cat].sort((a,b) => (menuObj[a.id]?.sortOrder||999)-(menuObj[b.id]?.sortOrder||999));
+    });
+    return Object.keys(result).length ? result : null;
+  } catch { return null; }
+}
+
+// sync เมื่อ backoffice แก้เมนู
+window.addEventListener('storage', (e) => {
+  if (e.key === 'ks90-menu') {
+    const fresh = _loadMenuFromLS();
+    if (fresh) {
+      PRODUCTS = fresh;
+      if (document.getElementById('productGrid')) renderProducts();
+    }
+  }
+});
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -100,17 +139,9 @@ let PRODUCTS = {
   ],
 };
 
-// ==================== Subscribe เมนูจาก Firebase (real-time) ====================
-// customer.js ใช้ key 'img' แต่ menu-manager ส่งมาเป็น 'image' → remap
-subscribeMenu(db, (freshProducts) => {
-  // remap image → img ให้ตรงกับ customer.js ที่ใช้ p.img
-  const remapped = {};
-  Object.entries(freshProducts).forEach(([cat, items]) => {
-    remapped[cat] = items.map(p => ({ ...p, img: p.image }));
-  });
-  PRODUCTS = remapped;
-  if (document.getElementById('productGrid')) renderProducts(); // re-render
-});
+// ==================== โหลดเมนู (LocalStorage → fallback hardcode) ====================
+const _lsMenu = _loadMenuFromLS();
+if (_lsMenu) PRODUCTS = _lsMenu;
 
 // ==================== Option Configs แยกตาม productType ====================
 // productType: 'food' | 'drink-brew' | 'drink-ready' | 'simple'
