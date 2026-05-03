@@ -1307,3 +1307,37 @@ tr[draggable="true"]:active { cursor: grabbing; }
   `;
   document.head.appendChild(style);
 }
+// ==================== Category Management ====================
+
+/** โหลด categories จาก Firebase (fallback เป็น CATEGORY_LABELS) */
+export async function loadCategories(db) {
+  const snap = await get(ref(db, 'categories'));
+  if (snap.exists()) return snap.val(); // { setkao: 'เซ็ตอาหาร', ... }
+  return { ...CATEGORY_LABELS };
+}
+
+/** subscribe categories realtime */
+export function subscribeCategories(db, cb) {
+  return onValue(ref(db, 'categories'), snap => {
+    cb(snap.exists() ? snap.val() : { ...CATEGORY_LABELS });
+  });
+}
+
+/** บันทึก category ใหม่ */
+export async function addCategory(db, id, label) {
+  if (!id || !label) throw new Error('ต้องระบุ id และชื่อหมวด');
+  id = id.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!id) throw new Error('id ต้องเป็นตัวอักษรภาษาอังกฤษ/ตัวเลขเท่านั้น');
+  await update(ref(db, 'categories'), { [id]: label.trim() });
+  return id;
+}
+
+/** แก้ชื่อ category */
+export async function renameCategory(db, id, newLabel) {
+  await update(ref(db, 'categories'), { [id]: newLabel.trim() });
+}
+
+/** ลบ category */
+export async function deleteCategory(db, id) {
+  await remove(ref(db, `categories/${id}`));
+}
