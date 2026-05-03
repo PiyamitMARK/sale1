@@ -1970,8 +1970,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db  = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
-//try {
-  // AppCheck disabled
+// AppCheck disabled
 // signInAnonymously removed
 
 // ---- Live data from Firebase ----
@@ -3754,9 +3753,6 @@ document.getElementById('menuImgUrl').addEventListener('input', function() {
   if (this.value) {
     document.getElementById('imgUploadArea').innerHTML = `<img src="${escHtml(this.value)}" alt="" onerror="this.style.display='none'">`;
     document.getElementById('imgUploadArea').classList.add('has-image');
-  } else {
-    document.getElementById('imgUploadArea').innerHTML = '';
-    document.getElementById('imgUploadArea').classList.remove('has-image');
   }
 });
 </script>
