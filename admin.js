@@ -708,14 +708,27 @@ onValue(ref(db, 'menu'), snap => { allMenuData = snap.val() || {}; });
 
 // ==================== Products (admin add-item) ====================
 
-const ADD_ITEM_CATEGORIES = [
-  { id: 'all',    label: '🍽 ทั้งหมด' },
-  { id: 'setkao', label: '🍱 เซ็ตอาหาร' },
-  { id: 'kao',    label: '🍜 อาหาร' },
-  { id: 'nam',    label: '🥤 เครื่องดื่ม' },
-  { id: 'coffee', label: '☕ กาแฟ' },
-  { id: 'soda',   label: '🫧 โซดา' },
-];
+// ดึงหมวดหมู่จาก Firebase (sync ลง LS โดย backoffice/customer)
+function getLiveCats() {
+  try {
+    const raw = localStorage.getItem('ks90-categories');
+    if (raw) {
+      const obj = JSON.parse(raw);
+      return [{ id: 'all', label: '🍽 ทั้งหมด' },
+        ...Object.entries(obj).map(([id, label]) => ({ id, label }))];
+    }
+  } catch(_) {}
+  return [
+    { id: 'all',    label: '🍽 ทั้งหมด' },
+    { id: 'setkao', label: '🍱 เซ็ตอาหาร' },
+    { id: 'kao',    label: '🍜 อาหาร' },
+    { id: 'nam',    label: '🥤 เครื่องดื่ม' },
+    { id: 'coffee', label: '☕ กาแฟ' },
+    { id: 'soda',   label: '🫧 โซดา' },
+  ];
+}
+// backward compat alias
+const ADD_ITEM_CATEGORIES = getLiveCats();
 let addItemActiveCategory = 'all';
 
 // ==================== Add Item Modal ====================
@@ -725,14 +738,7 @@ function renderEditAddItemList() {
   if (!container) return;
 
   const liveProducts = Object.values(allMenuData).filter(p => p.enabled !== false);
-  const cats = [
-    { id: 'all',    label: '🍽 ทั้งหมด' },
-    { id: 'setkao', label: '🍱 เซ็ต' },
-    { id: 'kao',    label: '🍜 อาหาร' },
-    { id: 'nam',    label: '🥤 เครื่องดื่ม' },
-    { id: 'coffee', label: '☕ กาแฟ' },
-    { id: 'soda',   label: '🫧 โซดา' },
-  ];
+  const cats = getLiveCats();
   const activeCat = container.dataset.cat || 'all';
   const filtered  = activeCat === 'all' ? liveProducts : liveProducts.filter(p => p.category === activeCat);
   const allItems  = (editOrderBatches || []).flat();

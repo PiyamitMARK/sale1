@@ -1953,10 +1953,10 @@ function subscribeMenu(cb) {
   onValue(ref(db, 'menu'), snap => {
     LIVE_MENU = snap.val() || {};
     MOCK_MENU = Object.values(LIVE_MENU);
-    // sync LS เผื่อ POS / customer
+    // sync LS เผื่อ POS / customer / admin add-item
     try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_){}
     cb(LIVE_MENU);
-    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+    // render จัดการใน callback แล้ว ไม่ render ซ้ำที่นี่
   });
 }
 
@@ -1982,13 +1982,17 @@ function renderCatBtns() {
     + Object.entries(LIVE_CATEGORIES).map(([id, label]) =>
         `<button class="menu-cat-btn${menuCatFilter===id?' active':''}" data-cat="${id}">${escHtml(label)}</button>`
       ).join('');
-  wrap.querySelectorAll('.menu-cat-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      menuCatFilter = btn.dataset.cat;
-      wrap.querySelectorAll('.menu-cat-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderMenuTable();
-    });
+  // ใช้ event delegation บน wrap แทน bind ทีละปุ่ม
+  // ป้องกัน duplicate listener โดย clone-replace
+  const newWrap = wrap.cloneNode(true);
+  wrap.parentNode.replaceChild(newWrap, wrap);
+  newWrap.addEventListener('click', e => {
+    const btn = e.target.closest('.menu-cat-btn');
+    if (!btn) return;
+    menuCatFilter = btn.dataset.cat;
+    newWrap.querySelectorAll('.menu-cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderMenuTable();
   });
 }
 
@@ -2542,13 +2546,17 @@ function renderMenuTable() {
 async function loadMenuItems() {
   menuLoaded = true;
   MOCK_MENU = Object.values(LIVE_MENU);
-  // ถ้า LIVE_MENU ยังว่าง แสดง loading แล้วรอ Firebase callback
-  if (MOCK_MENU.length === 0) {
-    document.getElementById('menuTableBody').innerHTML =
-      '<tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนู…</div></td></tr>';
-    document.getElementById('menuCountBadge').textContent = '…';
-  } else {
+  if (MOCK_MENU.length > 0) {
     renderMenuTable();
+  } else {
+    // Firebase ยังไม่ตอบ — แสดง spinner รอ callback จาก subscribeMenu
+    document.getElementById('menuTableBody').innerHTML =
+      '<tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนูจาก Firebase…</div></td></tr>';
+    document.getElementById('menuCountBadge').textContent = '…';
+    // ตั้ง timeout fallback: ถ้า 8 วิยังว่าง แสดงว่าอาจไม่มีเมนูใน Firebase
+    setTimeout(() => {
+      if (MOCK_MENU.length === 0 && activePanelId === 'menu') renderMenuTable();
+    }, 8000);
   }
 }
 
@@ -2895,10 +2903,13 @@ subscribeOrders(orders => {
 // เมนู: subscribe จาก Firebase (real-time)
 subscribeMenu(menuObj => {
   MOCK_MENU = Object.values(menuObj);
-  // render ทุกครั้งที่ข้อมูลเปลี่ยน ไม่ว่า menuLoaded จะเป็นอะไร
-  if (activePanelId === 'menu') {
-    menuLoaded = true;
-    renderMenuTable();
+  menuLoaded = true;
+  // render เมนูทันทีถ้า panel เมนูเปิดอยู่ (ไม่ว่าจะมาจาก Firebase เมื่อไรก็ตาม)
+  if (activePanelId === 'menu') renderMenuTable();
+  // อัปเดต category select ใน modal ถ้าเปิดอยู่
+  if (document.getElementById('menuModal')?.classList.contains('open')) {
+    const curCat = document.getElementById('menuCategory')?.value;
+    rebuildCategorySelect(curCat);
   }
 });
 subscribeCategories();
