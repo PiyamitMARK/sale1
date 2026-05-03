@@ -480,20 +480,18 @@ body {
    HISTORY PANEL
    ============================================================ */
 .history-filters {
-  display: flex;
-  gap: .75rem;
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-.history-filters .field { flex: 1; min-width: 130px; }
-.history-date-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: .75rem;
-  flex: 2;
-  min-width: 260px;
+  align-items: flex-end;
 }
-.history-date-row .field { min-width: 0; flex: unset; }
+.history-filters .field { min-width: 0; }
+.history-filters .field--full { grid-column: span 2; }
+.history-filters > .btn { grid-column: span 2; justify-self: start; }
+.history-date-row {
+  display: contents;
+}
+.history-date-row .field { min-width: 0; }
 
 .history-summary-row {
   display: flex;
@@ -1454,11 +1452,11 @@ tr.drag-over td { background: var(--cream-dark) !important; }
         <div class="card">
           <div class="card-body">
             <div class="history-filters">
-              <div class="field">
+              <div class="field field--full">
                 <label class="field-label">ค้นหา (ออเดอร์/โต๊ะ)</label>
                 <input type="search" class="field-input" id="histSearchInput" placeholder="เลขออเดอร์, โต๊ะ, ชื่อเมนู…">
               </div>
-              <div class="field">
+              <div class="field field--full">
                 <label class="field-label">สถานะ</label>
                 <select class="field-input" id="histStatusFilter">
                   <option value="">ทั้งหมด</option>
