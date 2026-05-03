@@ -1943,6 +1943,21 @@ async function deleteCategoryLocal(id) {
   try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); delete c[id]; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
 }
 
+async function saveCategoryOrder(orderedIds) {
+  // บันทึก sortOrder ลง Firebase ทีเดียว (multi-path update)
+  const updates = {};
+  orderedIds.forEach((id, idx) => {
+    updates[`categories_sort/${id}`] = idx;
+  });
+  await update(ref(db), updates);
+  // sync LS
+  try {
+    const sort = JSON.parse(localStorage.getItem('ks90-categories-sort') || '{}');
+    orderedIds.forEach((id, idx) => { sort[id] = idx; });
+    localStorage.setItem('ks90-categories-sort', JSON.stringify(sort));
+  } catch(_) {}
+}
+
 function _notifyCatsLocal(cats) {
   LIVE_CATEGORIES = cats;
   renderCatBtns();
@@ -2067,14 +2082,28 @@ async function updateProductTypeLocal(value, label, desc) {
 async function deleteProductTypeLocal(value) {
   await remove(ref(db, `productTypes/${value}`));
 }
+let _rawCats = null;
+let _catSort = {};
+
+function _applyCatSort() {
+  if (!_rawCats) return;
+  const entries = Object.entries(_rawCats);
+  entries.sort(([a], [b]) => (_catSort[a] ?? 9999) - (_catSort[b] ?? 9999));
+  LIVE_CATEGORIES = Object.fromEntries(entries);
+  try { localStorage.setItem('ks90-categories', JSON.stringify(LIVE_CATEGORIES)); } catch(_){}
+  renderCatBtns();
+  if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+  if (window._catModalRerender) window._catModalRerender();
+}
+
 function subscribeCategories() {
   onValue(ref(db, 'categories'), snap => {
-    LIVE_CATEGORIES = snap.exists() ? snap.val() : { ...DEFAULT_LOCAL_CATS };
-    // sync LS เผื่อ app.js / customer.js
-    try { localStorage.setItem('ks90-categories', JSON.stringify(LIVE_CATEGORIES)); } catch(_){}
-    renderCatBtns();
-    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
-    if (window._catModalRerender) window._catModalRerender();
+    _rawCats = snap.exists() ? snap.val() : { ...DEFAULT_LOCAL_CATS };
+    _applyCatSort();
+  });
+  onValue(ref(db, 'categories_sort'), snap => {
+    _catSort = snap.exists() ? snap.val() : {};
+    _applyCatSort();
   });
 }
 function renderCatBtns() {
@@ -2956,6 +2985,8 @@ function openCategoryModal() {
 
   function renderModal() {
     const cats = LIVE_CATEGORIES;
+    const catEntries = Object.entries(cats); // already sorted by _applyCatSort
+
     modal.innerHTML = `
       <div class="bo-modal-box" style="max-width:500px">
         <div class="bo-modal-header">
@@ -2963,11 +2994,20 @@ function openCategoryModal() {
           <button class="bo-modal-close" id="catModalClose">✕</button>
         </div>
         <div class="bo-modal-body">
-          <p style="font-size:.85rem;color:var(--brown-light);margin-top:-.25rem;margin-bottom:.25rem">เพิ่ม แก้ชื่อ หรือลบหมวดหมู่เมนู</p>
+          <p style="font-size:.85rem;color:var(--brown-light);margin-top:-.25rem;margin-bottom:.75rem">
+            เพิ่ม แก้ชื่อ หรือลบหมวดหมู่เมนู — ลากแถว <strong>⠿</strong> เพื่อเรียงลำดับ
+          </p>
 
-          <div style="display:flex;flex-direction:column;gap:.45rem">
-            ${Object.entries(cats).map(([id, label]) => `
-              <div style="display:flex;align-items:center;gap:.5rem">
+          <div id="catSortList" style="display:flex;flex-direction:column;gap:.45rem">
+            ${catEntries.map(([id, label]) => `
+              <div class="cat-sort-row" data-id="${id}"
+                draggable="true"
+                style="display:flex;align-items:center;gap:.5rem;background:var(--white);
+                       border:1.5px solid var(--cream-dark);border-radius:8px;padding:.35rem .5rem;
+                       cursor:default;transition:box-shadow .15s">
+                <span class="cat-drag-handle" title="ลากเพื่อเรียง"
+                  style="font-size:1.1rem;color:var(--brown-light);cursor:grab;
+                         padding:0 .25rem;user-select:none;flex-shrink:0">⠿</span>
                 <input type="text" class="field-input cat-label-input" data-id="${id}"
                   value="${escHtml(label)}" style="flex:1;min-width:0">
                 <button type="button" class="btn btn-outline btn-sm cat-rename-btn" data-id="${id}" title="บันทึก">💾</button>
@@ -2976,7 +3016,14 @@ function openCategoryModal() {
             `).join('')}
           </div>
 
-          <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.5rem;display:flex;flex-direction:column;gap:.5rem">
+          <div id="catOrderSaveRow" style="display:none;margin-top:.6rem">
+            <button type="button" class="btn btn-primary btn-sm" id="catSaveOrderBtn" style="width:100%">
+              💾 บันทึกลำดับใหม่
+            </button>
+            <p id="catOrderSaveMsg" style="font-size:.8rem;color:var(--green);min-height:1rem;margin-top:.3rem"></p>
+          </div>
+
+          <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem">
             <p style="font-size:.82rem;font-weight:700;color:var(--brown-light)">＋ เพิ่มหมวดใหม่</p>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap">
               <input type="text" class="field-input" id="newCatId" placeholder="id เช่น dessert (a-z)" style="flex:1;min-width:100px">
@@ -2997,6 +3044,64 @@ function openCategoryModal() {
     modal.querySelector('#catModalClose').onclick = closeAll;
     modal.querySelector('#catModalCloseFooter').onclick = closeAll;
     modal.addEventListener('click', e => { if (e.target === modal) closeAll(); });
+
+    // ---- Drag & Drop reorder ----
+    const list = modal.querySelector('#catSortList');
+    const saveRow = modal.querySelector('#catOrderSaveRow');
+    const saveMsg = modal.querySelector('#catOrderSaveMsg');
+    let dragSrc = null;
+
+    list.querySelectorAll('.cat-sort-row').forEach(row => {
+      row.addEventListener('dragstart', e => {
+        dragSrc = row;
+        row.style.opacity = '.4';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragend', () => {
+        row.style.opacity = '';
+        list.querySelectorAll('.cat-sort-row').forEach(r => r.style.boxShadow = '');
+      });
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (row !== dragSrc) row.style.boxShadow = '0 0 0 2px var(--accent)';
+      });
+      row.addEventListener('dragleave', () => { row.style.boxShadow = ''; });
+      row.addEventListener('drop', e => {
+        e.preventDefault();
+        row.style.boxShadow = '';
+        if (!dragSrc || dragSrc === row) return;
+        // insert dragSrc before row, or after if dragging down
+        const rows = [...list.querySelectorAll('.cat-sort-row')];
+        const srcIdx = rows.indexOf(dragSrc);
+        const tgtIdx = rows.indexOf(row);
+        if (srcIdx < tgtIdx) row.after(dragSrc);
+        else row.before(dragSrc);
+        // show save button
+        saveRow.style.display = 'block';
+        saveMsg.textContent = '';
+      });
+    });
+
+    modal.querySelector('#catSaveOrderBtn').onclick = async () => {
+      const btn = modal.querySelector('#catSaveOrderBtn');
+      btn.disabled = true;
+      const orderedIds = [...list.querySelectorAll('.cat-sort-row')].map(r => r.dataset.id);
+      try {
+        await saveCategoryOrder(orderedIds);
+        saveMsg.textContent = '✅ บันทึกลำดับแล้ว!';
+        saveMsg.style.color = 'var(--green)';
+        setTimeout(() => {
+          saveRow.style.display = 'none';
+          saveMsg.textContent = '';
+          btn.disabled = false;
+        }, 1500);
+      } catch(e) {
+        saveMsg.textContent = '❌ ' + e.message;
+        saveMsg.style.color = 'var(--red)';
+        btn.disabled = false;
+      }
+    };
 
     // บันทึกชื่อ
     modal.querySelectorAll('.cat-rename-btn').forEach(btn => {
