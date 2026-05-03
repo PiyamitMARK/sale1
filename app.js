@@ -857,11 +857,10 @@ receiptModal.addEventListener('click', (e) => {
 
 confirmOrderOk.addEventListener('click', async () => {
   confirmOrderOk.disabled = true;
-  const selectedPayment = document.querySelector('input[name="paymentMethod"]:checked')?.value || 'cash';
   closeConfirmOrderModal();
   let receiptData;
   try {
-    receiptData = await saveOrder(selectedPayment);
+    receiptData = await saveOrder('cash');
   } catch (err) {
     console.error('saveOrder error:', err);
     alert('เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาตรวจสอบการเชื่อมต่อ');
