@@ -846,6 +846,13 @@ function renderCategoryTabs(cats) {
   renderProducts();
 }
 
+// โหลด categories จาก LocalStorage ทันที (ไม่รอ Firebase) → tabs แสดงเร็ว
+try {
+  const _lsCats = localStorage.getItem('ks90-categories');
+  if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
+} catch (_) {}
+
+// Subscribe Firebase → อัปเดต realtime เมื่อข้อมูลเปลี่ยน
 subscribeCategoriesAndSync(db, renderCategoryTabs);
 
 clearCartBtn.addEventListener('click', clearCart);

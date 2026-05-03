@@ -361,8 +361,10 @@ async function init() {
   // ─── โหลดตะกร้าที่ค้างไว้ (กรณีรีหน้า / เน็ตหลุด) ───
   loadCart();
 
-  // ตรวจ order active ของโต๊ะ
-  await checkActiveOrder();
+  // render เมนูทันที ไม่ต้องรอ Firebase
+  renderProducts();
+  initSearchBar();
+  updateCartBar();
 
   // ── Feature #1: โหลด popular items ──
   loadPopularItems();
@@ -370,13 +372,12 @@ async function init() {
   // subscribe Firebase menu realtime
   _startMenuSubscribe();
 
-  // เริ่ม watch สถานะครัว
-  if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
+  // ตรวจ order active ของโต๊ะ (background — ไม่บล็อก render)
+  checkActiveOrder().then(() => {
+    if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
+  });
 
-  renderProducts();
   bindCats();
-  initSearchBar();   // ── Feature: ค้นหาเมนู ──
-  updateCartBar(); // แสดง cart bar ถ้ามีรายการค้างอยู่
 }
 
 async function checkActiveOrder() {
@@ -616,6 +617,13 @@ function renderCategoryTabs(cats) {
   renderProducts();
 }
 
+// โหลด categories จาก LocalStorage ทันที (ไม่รอ Firebase) → tabs แสดงเร็ว
+try {
+  const _lsCats = localStorage.getItem('ks90-categories');
+  if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
+} catch (_) {}
+
+// Subscribe Firebase → อัปเดต realtime เมื่อข้อมูลเปลี่ยน
 subscribeCategoriesAndSync(db, renderCategoryTabs);
 
 // ชื่อเดิมยังคงอยู่สำหรับ backward compat (ถูกเรียกใน init())
