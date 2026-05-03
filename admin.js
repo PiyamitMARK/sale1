@@ -579,14 +579,19 @@ async function deleteOrder(firebaseKey, orderNumber) {
 let allMenuData = {};
 let _menuRawCache = null;
 let _menuDebounce = null;
-onValue(ref(db, 'menu'), snap => {
-  const raw = snap.val() || {};
-  const rawStr = JSON.stringify(raw);
-  if (rawStr === _menuRawCache) return;
-  _menuRawCache = rawStr;
-  clearTimeout(_menuDebounce);
-  _menuDebounce = setTimeout(() => { allMenuData = raw; }, 250);
-});
+let _menuUnsubscribe = null;
+
+function startMenuListener() {
+  if (_menuUnsubscribe) return;
+  _menuUnsubscribe = onValue(ref(db, 'menu'), snap => {
+    const raw = snap.val() || {};
+    const rawStr = JSON.stringify(raw);
+    if (rawStr === _menuRawCache) return;
+    _menuRawCache = rawStr;
+    clearTimeout(_menuDebounce);
+    _menuDebounce = setTimeout(() => { allMenuData = raw; }, 250);
+  });
+}
 
 // ==================== Products (admin add-item) ====================
 
@@ -1379,6 +1384,7 @@ function checkAuth() {
     showScreen(dashboardScreen);
     startRealtimeListener();
     startCallStaffListener();
+    startMenuListener();
     switchTab('recent');
   } else {
     showScreen(loginScreen);
@@ -1414,6 +1420,7 @@ loginBtn.addEventListener('click', async () => {
       showScreen(dashboardScreen);
       startRealtimeListener();
       startCallStaffListener();
+      startMenuListener();
       switchTab('recent');
     } else {
       const attempts = incrementAttempts();
@@ -1442,6 +1449,7 @@ logoutBtn.addEventListener('click', () => {
   setLoggedIn(false);
   if (unsubscribeListener) { unsubscribeListener(); unsubscribeListener = null; }
   if (callStaffUnsubscribe) { callStaffUnsubscribe(); callStaffUnsubscribe = null; }
+  if (_menuUnsubscribe) { _menuUnsubscribe(); _menuUnsubscribe = null; }
   allOrders = [];
   knownOrderKeys = new Set();
   knownCallKeys  = new Set();
