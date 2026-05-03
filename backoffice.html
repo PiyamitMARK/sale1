@@ -486,6 +486,14 @@ body {
   align-items: flex-end;
 }
 .history-filters .field { flex: 1; min-width: 130px; }
+.history-date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75rem;
+  flex: 2;
+  min-width: 260px;
+}
+.history-date-row .field { min-width: 0; flex: unset; }
 
 .history-summary-row {
   display: flex;
@@ -1460,13 +1468,15 @@ tr.drag-over td { background: var(--cream-dark) !important; }
                   <option value="served">เสิร์ฟแล้ว</option>
                 </select>
               </div>
-              <div class="field">
-                <label class="field-label">จากวันที่</label>
-                <input type="date" class="field-input" id="histDateFrom">
-              </div>
-              <div class="field">
-                <label class="field-label">ถึงวันที่</label>
-                <input type="date" class="field-input" id="histDateTo">
+              <div class="history-date-row">
+                <div class="field">
+                  <label class="field-label">จากวันที่</label>
+                  <input type="date" class="field-input" id="histDateFrom">
+                </div>
+                <div class="field">
+                  <label class="field-label">ถึงวันที่</label>
+                  <input type="date" class="field-input" id="histDateTo">
+                </div>
               </div>
               <button class="btn btn-primary btn-sm" id="histApplyFilter">กรอง</button>
             </div>
