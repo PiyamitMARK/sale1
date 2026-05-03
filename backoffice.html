@@ -1810,49 +1810,77 @@ document.querySelectorAll('.bo-modal').forEach(m => {
 });
 
 // ============================================================
-//  MENU LOCAL STORAGE HELPERS
+//  MENU FIREBASE HELPERS (single source of truth)
 // ============================================================
-const LS_MENU_KEY = 'ks90-menu';
-const LS_CAT_KEY  = 'ks90-categories';
+// เมนูและหมวดหมู่ทั้งหมดอ่าน/เขียนที่ Firebase เท่านั้น
+// LocalStorage ใช้เป็น cache เผื่อ offline fallback เท่านั้น
 
 const DEFAULT_LOCAL_CATS = {
   setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
   nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
 };
 
+// ── เมนู ──
 function getMenuLocal() {
-  try { return JSON.parse(localStorage.getItem(LS_MENU_KEY) || 'null') || {}; }
-  catch { return {}; }
+  // อ่านจาก LIVE_MENU ที่ sync มาจาก Firebase แล้ว
+  return LIVE_MENU;
 }
-function _saveMenuLocal(obj) {
-  localStorage.setItem(LS_MENU_KEY, JSON.stringify(obj));
-  _notifyMenuLocal(obj);
-}
-function saveMenuItemLocal(item) { const m = getMenuLocal(); m[item.id] = item; _saveMenuLocal(m); }
-function deleteMenuItemLocal(id) { const m = getMenuLocal(); delete m[id]; _saveMenuLocal(m); }
-function toggleMenuItemLocal(id, enabled) { const m = getMenuLocal(); if (m[id]) { m[id].enabled = enabled; _saveMenuLocal(m); } }
-function updateSortOrdersLocal(ids) { const m = getMenuLocal(); ids.forEach((id,i) => { if(m[id]) m[id].sortOrder = i+1; }); _saveMenuLocal(m); }
-function duplicateMenuItemLocal(id) { const m = getMenuLocal(); const src = m[id]; if(!src) return; const nid='m'+Date.now(); m[nid]={...JSON.parse(JSON.stringify(src)),id:nid,name:src.name+' (สำเนา)',enabled:false,sortOrder:Object.keys(m).length+1}; _saveMenuLocal(m); }
 
+async function saveMenuItemLocal(item) {
+  await set(ref(db, `menu/${item.id}`), item);
+  // sync LS ด้วยเผื่อ tab อื่น
+  try { const m = JSON.parse(localStorage.getItem('ks90-menu')||'{}'); m[item.id]=item; localStorage.setItem('ks90-menu',JSON.stringify(m)); } catch(_){}
+}
+
+async function deleteMenuItemLocal(id) {
+  await remove(ref(db, `menu/${id}`));
+  try { const m = JSON.parse(localStorage.getItem('ks90-menu')||'{}'); delete m[id]; localStorage.setItem('ks90-menu',JSON.stringify(m)); } catch(_){}
+}
+
+async function toggleMenuItemLocal(id, enabled) {
+  await update(ref(db, `menu/${id}`), { enabled });
+  try { const m = JSON.parse(localStorage.getItem('ks90-menu')||'{}'); if(m[id]){m[id].enabled=enabled; localStorage.setItem('ks90-menu',JSON.stringify(m));} } catch(_){}
+}
+
+async function updateSortOrdersLocal(ids) {
+  const updates = {};
+  ids.forEach((id, i) => { updates[`menu/${id}/sortOrder`] = i + 1; });
+  await update(ref(db), updates);
+}
+
+async function duplicateMenuItemLocal(id) {
+  const src = LIVE_MENU[id];
+  if (!src) return;
+  const nid = 'm' + Date.now();
+  const newItem = { ...JSON.parse(JSON.stringify(src)), id: nid, name: src.name + ' (สำเนา)', enabled: false, sortOrder: Object.keys(LIVE_MENU).length + 1 };
+  await set(ref(db, `menu/${nid}`), newItem);
+}
+
+// ── หมวดหมู่ ──
 function getCategoriesLocal() {
-  try { return JSON.parse(localStorage.getItem(LS_CAT_KEY) || 'null') || {...DEFAULT_LOCAL_CATS}; }
-  catch { return {...DEFAULT_LOCAL_CATS}; }
+  return { ...LIVE_CATEGORIES };
 }
-function _saveCatsLocal(cats) { localStorage.setItem(LS_CAT_KEY, JSON.stringify(cats)); _notifyCatsLocal(cats); }
-function addCategoryLocal(id, label) { const c=getCategoriesLocal(); c[id]=label; _saveCatsLocal(c); }
-function renameCategoryLocal(id, label) { const c=getCategoriesLocal(); c[id]=label; _saveCatsLocal(c); }
-function deleteCategoryLocal(id) { const c=getCategoriesLocal(); delete c[id]; _saveCatsLocal(c); }
 
-const _menuBOListeners = new Set();
-const _catBOListeners  = new Set();
-function subscribeMenuLocalBO(cb) { _menuBOListeners.add(cb); cb(getMenuLocal()); }
-function _notifyMenuLocal(obj) { _menuBOListeners.forEach(cb => cb(obj)); }
+async function addCategoryLocal(id, label) {
+  await update(ref(db, 'categories'), { [id]: label });
+  try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); c[id]=label; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
+}
+
+async function renameCategoryLocal(id, label) {
+  await update(ref(db, 'categories'), { [id]: label });
+  try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); c[id]=label; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
+}
+
+async function deleteCategoryLocal(id) {
+  await remove(ref(db, `categories/${id}`));
+  try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); delete c[id]; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
+}
+
 function _notifyCatsLocal(cats) {
   LIVE_CATEGORIES = cats;
   renderCatBtns();
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
   if (window._catModalRerender) window._catModalRerender();
-  _catBOListeners.forEach(cb => cb(cats));
 }
 
 // ============================================================
@@ -1911,7 +1939,7 @@ function subscribeOrders(cb) {
         status:        o.status || 'pending',
         total:         o.total || 0,
         items,
-        createdAt:     o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now()),
+        createdAt:     o.date ? new Date(o.date) : (o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now())),
         paymentMethod: o.paymentMethod || 'cash',
       });
     });
@@ -1920,36 +1948,31 @@ function subscribeOrders(cb) {
   });
 }
 
-// Subscribe to menu
+// Subscribe to menu — Firebase เป็น source of truth
 function subscribeMenu(cb) {
   onValue(ref(db, 'menu'), snap => {
     LIVE_MENU = snap.val() || {};
+    MOCK_MENU = Object.values(LIVE_MENU);
+    // sync LS เผื่อ POS / customer
+    try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_){}
     cb(LIVE_MENU);
+    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
   });
 }
 
-// Subscribe to categories
+// Subscribe to categories — อ่านจาก Firebase
 let LIVE_CATEGORIES = {
   setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
   nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
 };
 function subscribeCategories() {
-  // อ่านจาก LocalStorage แทน Firebase
-  LIVE_CATEGORIES = getCategoriesLocal();
-  renderCatBtns();
-  renderMenuTable();
-  // sync ถ้า storage event เกิด (แก้จาก backoffice แท็บอื่น)
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'ks90-categories') {
-      try { LIVE_CATEGORIES = JSON.parse(e.newValue) || LIVE_CATEGORIES; } catch {}
-      renderCatBtns();
-      if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
-      if (window._catModalRerender) window._catModalRerender();
-    }
-    if (e.key === 'ks90-menu') {
-      try { MOCK_MENU = Object.values(JSON.parse(e.newValue) || {}); } catch {}
-      if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
-    }
+  onValue(ref(db, 'categories'), snap => {
+    LIVE_CATEGORIES = snap.exists() ? snap.val() : { ...DEFAULT_LOCAL_CATS };
+    // sync LS เผื่อ app.js / customer.js
+    try { localStorage.setItem('ks90-categories', JSON.stringify(LIVE_CATEGORIES)); } catch(_){}
+    renderCatBtns();
+    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+    if (window._catModalRerender) window._catModalRerender();
   });
 }
 function renderCatBtns() {
@@ -1983,6 +2006,12 @@ function rebuildCategorySelect(currentVal) {
 //  UTILS
 // ============================================================
 const fmt = n => '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+
+// หา category ของรายการจาก LIVE_MENU (ใช้ใน top sellers)
+function _guessCategory(itemName) {
+  const found = Object.values(LIVE_MENU).find(m => m.name === itemName);
+  return found?.category || '';
+}
 const fmtN = n => Number(n || 0).toLocaleString('th-TH');
 function escHtml(s) {
   const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
@@ -2143,7 +2172,7 @@ function buildTopSellers(orders, days) {
   const map = {};
   filtered.forEach(o => {
     o.items.forEach(it => {
-      if (!map[it.name]) map[it.name] = { name: it.name, qty: 0, revenue: 0, cat: it.category };
+      if (!map[it.name]) map[it.name] = { name: it.name, qty: 0, revenue: 0, cat: it.category || _guessCategory(it.name) };
       map[it.name].qty += it.qty;
       map[it.name].revenue += it.price * it.qty;
     });
@@ -2470,7 +2499,7 @@ function renderMenuTable() {
   // bind events
   body.querySelectorAll('.menu-toggle').forEach(chk => {
     chk.addEventListener('change', () => {
-      toggleMenuItemLocal(chk.dataset.id, chk.checked);
+      toggleMenuItemLocal(chk.dataset.id, chk.checked).catch(e => console.error(e));
     });
   });
   body.querySelectorAll('.menu-edit').forEach(btn => {
@@ -2482,7 +2511,7 @@ function renderMenuTable() {
   body.querySelectorAll('.menu-del').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm(`ลบ "${btn.dataset.name}" ออก?`)) {
-        deleteMenuItemLocal(btn.dataset.id);
+        deleteMenuItemLocal(btn.dataset.id).catch(e => alert('ลบไม่สำเร็จ: ' + e.message));
       }
     });
   });
@@ -2505,14 +2534,14 @@ function renderMenuTable() {
       const filtered = getFilteredMenu();
       const moved = filtered.splice(fromIdx, 1)[0];
       filtered.splice(toIdx, 0, moved);
-      updateSortOrdersLocal(filtered.map(m => m.id));
+      updateSortOrdersLocal(filtered.map(m => m.id)).catch(e => console.error(e));
     });
   });
 }
 
 async function loadMenuItems() {
   menuLoaded = true;
-  MOCK_MENU = Object.values(getMenuLocal());
+  MOCK_MENU = Object.values(LIVE_MENU);
   renderMenuTable();
 }
 
@@ -2576,7 +2605,19 @@ function openMenuModal(id = null) {
       document.getElementById('menuPromoPrice').value = m.promo.promoPrice || '';
       document.getElementById('menuPromoLabel').value = m.promo.label || '';
     }
-    optionGroups = (m.optionGroups || []).map(g => ({ ...g, choices: [...(g.choices || [])] }));
+    // รองรับทั้ง options (menu-manager format) และ optionGroups (format เก่า)
+    const rawOpts = m.options || m.optionGroups || [];
+    optionGroups = rawOpts.map(g => ({
+      id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
+      name:    g.label || g.name || '',
+      label:   g.label || g.name || '',
+      type:    g.type || 'single',
+      choices: (g.choices || []).map(c =>
+        typeof c === 'string'
+          ? { value: c, label: c, price: 0 }          // format เก่า
+          : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }  // format ใหม่
+      ),
+    }));
     renderOptionGroups();
   }
   openModal('menuModal');
@@ -2610,10 +2651,21 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
     category: document.getElementById('menuCategory').value,
     productType: (optionGroups && optionGroups.length > 0) ? 'custom' : 'simple',
     price,
-    sortOrder: parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(localMenu).length + 1),
-    enabled: editingMenuId ? (localMenu[editingMenuId]?.enabled ?? true) : true,
+    sortOrder: parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
+    enabled: editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
     imageUrl: document.getElementById('menuImgUrl').value.trim() || null,
-    optionGroups: optionGroups,
+    // บันทึกในรูปแบบ menu-manager (options) — ไม่ใช้ optionGroups อีกต่อไป
+    options: optionGroups.length > 0 ? optionGroups.map(g => ({
+      id:      g.id || g.name,
+      label:   g.label || g.name,
+      type:    g.type,
+      choices: g.choices.map(c =>
+        typeof c === 'string'
+          ? { value: c, label: c }
+          : { value: c.value, label: c.label || c.value, ...(c.price ? { price: c.price } : {}) }
+      ),
+      hasNote: false,
+    })) : null,
     promo: promoEnabled ? {
       enabled: true,
       promoPrice: parseFloat(document.getElementById('menuPromoPrice').value) || price,
@@ -2622,7 +2674,7 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
   };
 
   try {
-    saveMenuItemLocal(item);
+    await saveMenuItemLocal(item);
     closeModal('menuModal');
   } catch(e) {
     alert('บันทึกไม่สำเร็จ: ' + e.message);
@@ -2633,7 +2685,7 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
 });
 
 function duplicateMenu(id) {
-  duplicateMenuItemLocal(id);
+  duplicateMenuItemLocal(id).catch(e => alert('Duplicate ไม่สำเร็จ: ' + e.message));
 }
 
 // option groups
@@ -2653,11 +2705,16 @@ function renderOptionGroups() {
         <button type="button" class="btn-icon del opts-rm-group" data-gi="${gi}" title="ลบกลุ่ม">🗑</button>
       </div>
       <div class="opts-choices">
-        ${(g.choices||[]).map((c,ci) => `
-          <div class="opts-choice-row">
-            <input type="text" class="field-input" placeholder="เช่น ไม่เผ็ด" value="${escHtml(c)}">
+        ${(g.choices||[]).map((c,ci) => {
+          const cLabel = typeof c === 'string' ? c : (c.label || c.value || '');
+          const cPrice = typeof c === 'object' ? (c.price || '') : '';
+          return `
+          <div class="opts-choice-row" style="display:flex;gap:.4rem;align-items:center">
+            <input type="text" class="field-input" placeholder="เช่น ไม่เผ็ด" value="${escHtml(cLabel)}" style="flex:1">
+            <input type="number" class="field-input" placeholder="±ราคา" value="${escHtml(String(cPrice))}" style="width:80px">
             <button type="button" class="opts-rm" data-gi="${gi}" data-ci="${ci}">✕</button>
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>
       <button type="button" class="btn btn-ghost btn-sm opts-add-choice" data-gi="${gi}" style="align-self:flex-start;margin-top:.25rem">＋ เพิ่มตัวเลือก</button>`;
 
@@ -2676,11 +2733,23 @@ function renderOptionGroups() {
         renderOptionGroups();
       });
     });
-    div.querySelectorAll('.opts-choices .field-input').forEach((inp, ci) => {
-      inp.addEventListener('input', () => { optionGroups[gi].choices[ci] = inp.value; });
+    // bind choice inputs (label + price)
+    const choiceRows = div.querySelectorAll('.opts-choices .opts-choice-row');
+    choiceRows.forEach((row, ci) => {
+      const [labelInp, priceInp] = row.querySelectorAll('input');
+      if (labelInp) labelInp.addEventListener('input', () => {
+        if (!optionGroups[gi].choices[ci]) optionGroups[gi].choices[ci] = { value: '', label: '' };
+        optionGroups[gi].choices[ci].value = labelInp.value;
+        optionGroups[gi].choices[ci].label = labelInp.value;
+      });
+      if (priceInp) priceInp.addEventListener('input', () => {
+        if (!optionGroups[gi].choices[ci]) optionGroups[gi].choices[ci] = { value: '', label: '' };
+        const p = parseFloat(priceInp.value);
+        optionGroups[gi].choices[ci].price = isNaN(p) ? undefined : p;
+      });
     });
     div.querySelector('.opts-add-choice').addEventListener('click', () => {
-      optionGroups[gi].choices.push('');
+      optionGroups[gi].choices.push({ value: '', label: '' });
       renderOptionGroups();
     });
 
@@ -2689,7 +2758,7 @@ function renderOptionGroups() {
 }
 
 document.getElementById('addOptionGroupBtn').addEventListener('click', () => {
-  optionGroups.push({ name: '', type: 'single', choices: [''] });
+  optionGroups.push({ id: 'g'+Date.now(), name: '', label: '', type: 'single', choices: [{ value: '', label: '' }] });
   renderOptionGroups();
 });
 
@@ -2759,7 +2828,7 @@ function openCategoryModal() {
         if (!newLabel) return;
         btn.disabled = true;
         try {
-          renameCategoryLocal(id, newLabel);
+          await renameCategoryLocal(id, newLabel);
           btn.textContent = '✅';
           setTimeout(() => { btn.textContent = '💾'; btn.disabled = false; }, 1200);
         } catch(e) { alert('แก้ไม่ได้: ' + e.message); btn.disabled = false; }
@@ -2774,7 +2843,7 @@ function openCategoryModal() {
         if (!confirm(`ลบหมวด "${label}" ออก?\nเมนูที่อยู่ในหมวดนี้จะยังคงอยู่`)) return;
         btn.disabled = true;
         try {
-          deleteCategoryLocal(id);
+          await deleteCategoryLocal(id);
         } catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
       };
     });
@@ -2791,7 +2860,7 @@ function openCategoryModal() {
       if (!label) { errEl.textContent = 'กรุณาใส่ชื่อหมวด'; return; }
       if (LIVE_CATEGORIES[id]) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
       try {
-        addCategoryLocal(id, label);
+        await addCategoryLocal(id, label);
         idInput.value = ''; labelInput.value = '';
       } catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
     };

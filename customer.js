@@ -13,45 +13,48 @@ import { getDatabase, ref, push, update, get, onValue, set, runTransaction } fro
 import { getAuth, signInAnonymously }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
-// ==================== อ่านเมนูจาก LocalStorage ====================
+// ==================== Parse raw Firebase menu → PRODUCTS format ====================
+function _parseMenuFromRaw(rawObj) {
+  const result = {};
+  Object.values(rawObj).forEach(item => {
+    if (item.enabled === false) return;
+    const cat = item.category;
+    if (!result[cat]) result[cat] = [];
+    const promoActive = item.promo?.enabled;
+    const effectivePrice = (() => {
+      if (!promoActive) return item.price;
+      const now = new Date();
+      const from = item.promo.dateFrom ? new Date(item.promo.dateFrom) : null;
+      const to   = item.promo.dateTo   ? new Date(item.promo.dateTo + 'T23:59:59') : null;
+      if (from && now < from) return item.price;
+      if (to   && now > to)   return item.price;
+      return item.promo.promoPrice ?? item.price;
+    })();
+    result[cat].push({
+      id:          item.id,
+      name:        item.name,
+      price:       effectivePrice,
+      img:         item.imageUrl || ('images/img' + item.imageNum + '.png'),
+      productType: item.productType || 'simple',
+      options:     item.options || null,   // custom options (menu-manager format)
+      promoLabel:  promoActive ? (item.promo?.label || 'โปร') : null,
+      enabled:     true,
+    });
+  });
+  Object.keys(result).forEach(cat => {
+    result[cat].sort((a, b) => (rawObj[a.id]?.sortOrder || 999) - (rawObj[b.id]?.sortOrder || 999));
+  });
+  return result;
+}
+
 function _loadMenuFromLS() {
   try {
     const raw = localStorage.getItem('ks90-menu');
     if (!raw) return null;
-    const menuObj = JSON.parse(raw);
-    const result = {};
-    Object.values(menuObj).forEach(item => {
-      if (!item.enabled) return;
-      const cat = item.category;
-      if (!result[cat]) result[cat] = [];
-      const promoActive = item.promo?.enabled;
-      const price = promoActive ? (item.promo.promoPrice ?? item.price) : item.price;
-      result[cat].push({
-        id: item.id, name: item.name, price,
-        img: item.imageUrl || (item.imageNum ? 'images/img' + item.imageNum + '.png' : ''),
-        productType: item.productType || 'simple',
-        options: item.options || item.optionGroups || null,
-        promoLabel: promoActive ? (item.promo.label || 'โปร') : null,
-        enabled: true,
-      });
-    });
-    Object.keys(result).forEach(cat => {
-      result[cat].sort((a,b) => (menuObj[a.id]?.sortOrder||999)-(menuObj[b.id]?.sortOrder||999));
-    });
-    return Object.keys(result).length ? result : null;
+    const parsed = _parseMenuFromRaw(JSON.parse(raw));
+    return Object.keys(parsed).length ? parsed : null;
   } catch { return null; }
 }
-
-// sync เมื่อ backoffice แก้เมนู
-window.addEventListener('storage', (e) => {
-  if (e.key === 'ks90-menu') {
-    const fresh = _loadMenuFromLS();
-    if (fresh) {
-      PRODUCTS = fresh;
-      if (document.getElementById('productGrid')) renderProducts();
-    }
-  }
-});
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -142,6 +145,20 @@ let PRODUCTS = {
 // ==================== โหลดเมนู (LocalStorage → fallback hardcode) ====================
 const _lsMenu = _loadMenuFromLS();
 if (_lsMenu) PRODUCTS = _lsMenu;
+
+// Firebase subscribe: อัปเดต PRODUCTS realtime
+function _startMenuSubscribe() {
+  onValue(ref(db, 'menu'), (snap) => {
+    if (!snap.exists()) return;
+    const raw = snap.val();
+    try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
+    const parsed = _parseMenuFromRaw(raw);
+    if (Object.keys(parsed).length) {
+      PRODUCTS = parsed;
+      if (document.getElementById('productGrid')) renderProducts();
+    }
+  });
+}
 
 // ==================== Option Configs แยกตาม productType ====================
 // productType: 'food' | 'drink-brew' | 'drink-ready' | 'simple'
@@ -386,6 +403,9 @@ async function init() {
 
   // ── Feature #1: โหลด popular items ──
   loadPopularItems();
+
+  // subscribe Firebase menu realtime
+  _startMenuSubscribe();
 
   // เริ่ม watch สถานะครัว
   if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);

@@ -113,7 +113,38 @@ export function subscribeMenu(db, callback) {
       callback(buildProductsFromDefault());
       return;
     }
-    callback(parseMenuSnapshot(snap.val()));
+    const raw = snap.val();
+    _syncMenuToLS(raw);          // ← sync ลง LocalStorage ทุกครั้ง
+    callback(parseMenuSnapshot(raw));
+  });
+}
+
+/**
+ * Sync raw Firebase menu object → LocalStorage 'ks90-menu'
+ * เพื่อให้ app.js / customer.js (fallback) และ backoffice.html อ่านได้
+ */
+export function _syncMenuToLS(rawMenuObj) {
+  try {
+    localStorage.setItem('ks90-menu', JSON.stringify(rawMenuObj));
+    // แจ้ง tab อื่น (backoffice / POS) ด้วย storage event
+    // (storage event ไม่ fire ในแท็บเดียวกัน ซึ่งโอเคอยู่แล้ว)
+  } catch (_) {}
+}
+
+/**
+ * Sync categories จาก Firebase → LocalStorage 'ks90-categories'
+ */
+export function _syncCatsToLS(catsObj) {
+  try {
+    localStorage.setItem('ks90-categories', JSON.stringify(catsObj));
+  } catch (_) {}
+}
+
+export function subscribeCategoriesAndSync(db, cb) {
+  return onValue(ref(db, 'categories'), snap => {
+    const cats = snap.exists() ? snap.val() : { ...CATEGORY_LABELS };
+    _syncCatsToLS(cats);
+    cb(cats);
   });
 }
 
@@ -216,14 +247,29 @@ export function subscribeAllMenuAdmin(db, callback) {
 
 export async function saveMenuItem(db, item) {
   await set(ref(db, `menu/${item.id}`), item);
+  // sync LS ทันที (subscribeMenu จะ sync อีกครั้งผ่าน onValue ก็ไม่เป็นไร)
+  try {
+    const m = JSON.parse(localStorage.getItem('ks90-menu') || '{}');
+    m[item.id] = item;
+    localStorage.setItem('ks90-menu', JSON.stringify(m));
+  } catch (_) {}
 }
 
 export async function toggleMenuItem(db, id, enabled) {
   await update(ref(db, `menu/${id}`), { enabled });
+  try {
+    const m = JSON.parse(localStorage.getItem('ks90-menu') || '{}');
+    if (m[id]) { m[id].enabled = enabled; localStorage.setItem('ks90-menu', JSON.stringify(m)); }
+  } catch (_) {}
 }
 
 export async function deleteMenuItem(db, id) {
   await remove(ref(db, `menu/${id}`));
+  try {
+    const m = JSON.parse(localStorage.getItem('ks90-menu') || '{}');
+    delete m[id];
+    localStorage.setItem('ks90-menu', JSON.stringify(m));
+  } catch (_) {}
 }
 
 export async function updateMenuPrice(db, id, price) {

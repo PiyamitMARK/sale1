@@ -10,46 +10,55 @@
 import './darkmode.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getDatabase, ref, push, update, get, remove, runTransaction
+  getDatabase, ref, push, update, get, remove, runTransaction, onValue
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
-// ==================== อ่านเมนูจาก LocalStorage ====================
+// ==================== Parse raw Firebase menu → products format ====================
+function _parseMenuFromRaw(rawObj) {
+  const result = {};
+  Object.values(rawObj).forEach(item => {
+    if (item.enabled === false) return;
+    const cat = item.category;
+    if (!result[cat]) result[cat] = [];
+    const promoActive = item.promo?.enabled;
+    const effectivePrice = (() => {
+      if (!promoActive) return item.price;
+      const now = new Date();
+      const from = item.promo.dateFrom ? new Date(item.promo.dateFrom) : null;
+      const to   = item.promo.dateTo   ? new Date(item.promo.dateTo + 'T23:59:59') : null;
+      if (from && now < from) return item.price;
+      if (to   && now > to)   return item.price;
+      return item.promo.promoPrice ?? item.price;
+    })();
+    result[cat].push({
+      id:          item.id,
+      name:        item.name,
+      price:       effectivePrice,
+      image:       item.imageUrl || ('images/img' + item.imageNum + '.png'),
+      productType: item.productType || 'simple',
+      // รองรับทั้ง options (menu-manager) และ optionGroups (backoffice เก่า)
+      options:     item.options || null,
+      enabled:     true,
+    });
+  });
+  Object.keys(result).forEach(cat => {
+    result[cat].sort((a, b) => (rawObj[a.id]?.sortOrder || 999) - (rawObj[b.id]?.sortOrder || 999));
+  });
+  return result;
+}
+
+// LS fallback ใช้ตอน Firebase ยังไม่ตอบ
 function _loadMenuFromLS() {
   try {
     const raw = localStorage.getItem('ks90-menu');
     if (!raw) return null;
-    const menuObj = JSON.parse(raw);
-    const result = {};
-    Object.values(menuObj).forEach(item => {
-      if (!item.enabled) return;
-      const cat = item.category;
-      if (!result[cat]) result[cat] = [];
-      const promoActive = item.promo?.enabled;
-      const price = promoActive ? (item.promo.promoPrice ?? item.price) : item.price;
-      result[cat].push({
-        id: item.id, name: item.name, price,
-        image: item.imageUrl || (item.imageNum ? 'images/img' + item.imageNum + '.png' : ''),
-        productType: item.productType || 'simple',
-        options: item.options || item.optionGroups || null,
-        enabled: true,
-      });
-    });
-    Object.keys(result).forEach(cat => {
-      result[cat].sort((a,b) => (menuObj[a.id]?.sortOrder||999)-(menuObj[b.id]?.sortOrder||999));
-    });
-    return Object.keys(result).length ? result : null;
+    const obj = JSON.parse(raw);
+    const parsed = _parseMenuFromRaw(obj);
+    return Object.keys(parsed).length ? parsed : null;
   } catch { return null; }
 }
-
-// sync เมื่อ backoffice แก้เมนู
-window.addEventListener('storage', (e) => {
-  if (e.key === 'ks90-menu') {
-    const fresh = _loadMenuFromLS();
-    if (fresh) { products = fresh; renderProducts(); }
-  }
-});
 
 // ==================== Firebase Config ====================
 const firebaseConfig = {
@@ -138,9 +147,24 @@ let products = {
   ],
 };
 
-// ==================== โหลดเมนู (LocalStorage → fallback hardcode) ====================
+// ==================== โหลดเมนู: LS ก่อน (fast) → Firebase subscribe (realtime) ====================
 const _lsMenuPOS = _loadMenuFromLS();
 if (_lsMenuPOS) products = _lsMenuPOS;
+
+// Firebase subscribe: อัปเดต products realtime ทุกครั้งที่เมนูเปลี่ยน
+function _startMenuSubscribe() {
+  onValue(ref(db, 'menu'), (snap) => {
+    if (!snap.exists()) return;
+    const raw = snap.val();
+    // sync LS เผื่อ tab อื่น
+    try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
+    const parsed = _parseMenuFromRaw(raw);
+    if (Object.keys(parsed).length) {
+      products = parsed;
+      renderProducts();
+    }
+  });
+}
 
 // ==================== Option Configs แยกตาม productType ====================
 const OPTION_CONFIGS = {
@@ -436,7 +460,9 @@ function openOptionModal(dataset) {
   if (!product) return;
 
   pendingProduct = product;
-  const config = OPTION_CONFIGS[product.productType] || OPTION_CONFIGS['simple'];
+
+  // ── Priority: custom options จาก Firebase ก่อน, fallback OPTION_CONFIGS legacy ──
+  const config = _resolveOptionConfig(product);
 
   // reset state
   currentOptionValues = {};
@@ -446,6 +472,19 @@ function openOptionModal(dataset) {
 
   renderOptionModalBody(product, config);
   optionModal.setAttribute('aria-hidden', 'false');
+}
+
+function _resolveOptionConfig(product) {
+  // 1. custom options ที่ตั้งใน admin (menu-manager format)
+  if (product.options && Array.isArray(product.options) && product.options.length > 0) {
+    return { groups: product.options, hasNote: true };
+  }
+  // 2. productType === 'custom' แต่ options ว่าง → note only
+  if (product.productType === 'custom') {
+    return { groups: [], hasNote: true };
+  }
+  // 3. legacy productType → OPTION_CONFIGS
+  return OPTION_CONFIGS[product.productType] || OPTION_CONFIGS['simple'];
 }
 
 function renderOptionModalBody(product, config) {
@@ -516,7 +555,7 @@ function renderOptionModalBody(product, config) {
   box.querySelector('#optionCancel').addEventListener('click', closeOptionModal);
   box.querySelector('#optionConfirm').addEventListener('click', () => {
     if (!pendingProduct) return;
-    const cfg2  = OPTION_CONFIGS[pendingProduct.productType] || OPTION_CONFIGS['simple'];
+    const cfg2 = _resolveOptionConfig(pendingProduct);
     const note  = document.getElementById('optionNote')?.value.trim() || '';
     const parts = [];
     let extraPrice = 0;
@@ -988,3 +1027,4 @@ setDate();
 renderProducts();
 renderCart();
 loadOrderNumber();
+_startMenuSubscribe(); // ← subscribe Firebase menu realtime
