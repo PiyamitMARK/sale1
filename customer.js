@@ -71,10 +71,12 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db   = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
-initializeAppCheck(firebaseApp, {
-  provider: new ReCaptchaV3Provider('6LdcccksAAAAAIU2DAOVbhc0yao-zcNxHWyApA17'),
-  isTokenAutoRefreshEnabled: true,
-});
+try {
+  initializeAppCheck(firebaseApp, {
+    provider: new ReCaptchaV3Provider('6Ld-WdcsAAAAAJ0vQaIXgRe4QgRO0EFiC_k2rQmB'),
+    isTokenAutoRefreshEnabled: true,
+  });
+} catch(e) { console.warn('AppCheck:', e.message); }
 
 signInAnonymously(auth).catch(err => console.error('Auth:', err));
 
