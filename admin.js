@@ -10,36 +10,10 @@
 
 import './darkmode.js';
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { db } from './firebase-config.js';
 import {
-  getDatabase, ref, update, remove, onValue, get, set, push
+  ref, update, remove, onValue, get, set, push
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
-
-// ==================== Firebase Config ====================
-const firebaseConfig = {
-  apiKey:            "AIzaSyDStC4nTnL38Wndrmm_Nn8ufJ-8KFo1BdM",
-  authDomain:        "kaosoi2.firebaseapp.com",
-  databaseURL:       "https://kaosoi2-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "kaosoi2",
-  storageBucket:     "kaosoi2.firebasestorage.app",
-  messagingSenderId: "389832285290",
-  appId:             "1:389832285290:web:1f69a33761125c4a44fe13",
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
-const db      = getDatabase(firebaseApp);
-const auth    = getAuth(firebaseApp);
-
-try {
-  initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaV3Provider('6Ld-WdcsAAAAAJ0vQaIXgRe4QgRO0EFiC_k2rQmB'),
-    isTokenAutoRefreshEnabled: true,
-  });
-} catch(e) { console.warn('AppCheck:', e.message); }
-
-signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
 
 // ==================== Config ====================
 const ADMIN_USER = 'Piyamit';

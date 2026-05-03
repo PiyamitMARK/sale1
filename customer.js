@@ -8,77 +8,19 @@
  */
 
 import './darkmode.js';
-import { initializeApp }      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getAuth, signInAnonymously }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
+import { db } from './firebase-config.js';
+import { ref, push, update, get, onValue, set, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { parseMenuFromRaw } from './menu-manager.js';
 
-// ==================== Parse raw Firebase menu → PRODUCTS format ====================
-function _parseMenuFromRaw(rawObj) {
-  const result = {};
-  Object.values(rawObj).forEach(item => {
-    if (item.enabled === false) return;
-    const cat = item.category;
-    if (!result[cat]) result[cat] = [];
-    const promoActive = item.promo?.enabled;
-    const effectivePrice = (() => {
-      if (!promoActive) return item.price;
-      const now = new Date();
-      const from = item.promo.dateFrom ? new Date(item.promo.dateFrom) : null;
-      const to   = item.promo.dateTo   ? new Date(item.promo.dateTo + 'T23:59:59') : null;
-      if (from && now < from) return item.price;
-      if (to   && now > to)   return item.price;
-      return item.promo.promoPrice ?? item.price;
-    })();
-    result[cat].push({
-      id:          item.id,
-      name:        item.name,
-      price:       effectivePrice,
-      img:         item.imageUrl || ('images/img' + item.imageNum + '.png'),
-      productType: item.productType || 'simple',
-      options:     item.options || null,   // custom options (menu-manager format)
-      promoLabel:  promoActive ? (item.promo?.label || 'โปร') : null,
-      enabled:     true,
-    });
-  });
-  Object.keys(result).forEach(cat => {
-    result[cat].sort((a, b) => (rawObj[a.id]?.sortOrder || 999) - (rawObj[b.id]?.sortOrder || 999));
-  });
-  return result;
-}
-
+// LS fallback ใช้ตอน Firebase ยังไม่ตอบ
 function _loadMenuFromLS() {
   try {
     const raw = localStorage.getItem('ks90-menu');
     if (!raw) return null;
-    const parsed = _parseMenuFromRaw(JSON.parse(raw));
+    const parsed = parseMenuFromRaw(JSON.parse(raw), 'img');
     return Object.keys(parsed).length ? parsed : null;
   } catch { return null; }
 }
-
-// ==================== Firebase Config ====================
-const firebaseConfig = {
-  apiKey:            "AIzaSyDStC4nTnL38Wndrmm_Nn8ufJ-8KFo1BdM",
-  authDomain:        "kaosoi2.firebaseapp.com",
-  databaseURL:       "https://kaosoi2-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "kaosoi2",
-  storageBucket:     "kaosoi2.firebasestorage.app",
-  messagingSenderId: "389832285290",
-  appId:             "1:389832285290:web:1f69a33761125c4a44fe13",
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
-const db   = getDatabase(firebaseApp);
-const auth = getAuth(firebaseApp);
-
-try {
-  initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaV3Provider('6Ld-WdcsAAAAAJ0vQaIXgRe4QgRO0EFiC_k2rQmB'),
-    isTokenAutoRefreshEnabled: true,
-  });
-} catch(e) { console.warn('AppCheck:', e.message); }
-
-signInAnonymously(auth).catch(err => console.error('Auth:', err));
 
 // ==================== เมนู (โหลดจาก Firebase) ====================
 const IMG = (n) => 'images/img' + n + '.png';
@@ -154,7 +96,7 @@ function _startMenuSubscribe() {
     if (!snap.exists()) return;
     const raw = snap.val();
     try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
-    const parsed = _parseMenuFromRaw(raw);
+    const parsed = parseMenuFromRaw(raw, 'img');
     if (Object.keys(parsed).length) {
       PRODUCTS = parsed;
       if (document.getElementById('productGrid')) renderProducts();

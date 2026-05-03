@@ -77,6 +77,44 @@ export const DEFAULT_MENU = {
   ],
 };
 
+// ==================== Shared: Parse raw Firebase menu → products format ====================
+// ใช้ร่วมกันทั้ง app.js และ customer.js ผ่าน import จากไฟล์นี้
+// field ที่ต่างกัน: app.js ใช้ `image`, customer.js ใช้ `img`
+// ส่ง fieldName = 'image' หรือ 'img' ตามต้องการ (default: 'image')
+export function parseMenuFromRaw(rawObj, imageField = 'image') {
+  const result = {};
+  Object.values(rawObj).forEach(item => {
+    if (item.enabled === false) return;
+    const cat = item.category;
+    if (!result[cat]) result[cat] = [];
+    const promoActive = item.promo?.enabled;
+    const effectivePrice = (() => {
+      if (!promoActive) return item.price;
+      const now  = new Date();
+      const from = item.promo.dateFrom ? new Date(item.promo.dateFrom)              : null;
+      const to   = item.promo.dateTo   ? new Date(item.promo.dateTo + 'T23:59:59') : null;
+      if (from && now < from) return item.price;
+      if (to   && now > to)   return item.price;
+      return item.promo.promoPrice ?? item.price;
+    })();
+    const entry = {
+      id:          item.id,
+      name:        item.name,
+      price:       effectivePrice,
+      productType: item.productType || 'simple',
+      options:     item.options || null,
+      promoLabel:  promoActive ? (item.promo?.label || 'โปร') : null,
+      enabled:     true,
+    };
+    entry[imageField] = item.imageUrl || ('images/img' + item.imageNum + '.png');
+    result[cat].push(entry);
+  });
+  Object.keys(result).forEach(cat => {
+    result[cat].sort((a, b) => (rawObj[a.id]?.sortOrder || 999) - (rawObj[b.id]?.sortOrder || 999));
+  });
+  return result;
+}
+
 export const CATEGORY_LABELS = {
   setkao: 'เซ็ตอาหาร',
   kao:    'อาหาร',
