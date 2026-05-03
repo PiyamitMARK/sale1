@@ -3568,7 +3568,7 @@ function openProductTypeModal() {
   };
 }
 
-subscribePtToppings();
+if (typeof subscribePtToppings === 'function') subscribePtToppings();
 
 subscribeOrders(orders => {
   MOCK_ORDERS = orders;
