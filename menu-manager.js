@@ -772,9 +772,36 @@ function _openOptionsEditor(existingOptions) {
       });
     });
 
+    // sync ค่าจาก DOM → groups ก่อน re-render ทุกครั้ง
+    function syncFromDom() {
+      container.querySelectorAll('[data-f]').forEach(inp => {
+        const gi = parseInt(inp.dataset.gi);
+        const fld = inp.dataset.f;
+        if (!groups[gi]) return;
+        if (fld === 'type')  groups[gi].type  = inp.value;
+        if (fld === 'id')    groups[gi].id    = inp.value.trim();
+        if (fld === 'label') groups[gi].label = inp.value.trim();
+      });
+      container.querySelectorAll('.opts-group-hasnote').forEach(chk => {
+        const gi = parseInt(chk.dataset.gi);
+        if (groups[gi]) groups[gi].hasNote = chk.checked;
+      });
+      container.querySelectorAll('[data-cf]').forEach(inp => {
+        const gi = parseInt(inp.dataset.gi), ci = parseInt(inp.dataset.ci), cf = inp.dataset.cf;
+        if (!groups[gi]?.choices?.[ci]) return;
+        if (cf === 'price') {
+          const v = parseFloat(inp.value);
+          groups[gi].choices[ci].price = isNaN(v) ? undefined : v;
+        } else {
+          groups[gi].choices[ci][cf] = inp.value.trim();
+        }
+      });
+    }
+
     // remove group
     container.querySelectorAll('.opts-rm-group').forEach(btn => {
       btn.addEventListener('click', () => {
+        syncFromDom();
         groups.splice(parseInt(btn.dataset.gi), 1);
         renderEditor();
       });
@@ -783,6 +810,7 @@ function _openOptionsEditor(existingOptions) {
     // remove choice
     container.querySelectorAll('.opts-rm-choice').forEach(btn => {
       btn.addEventListener('click', () => {
+        syncFromDom();
         groups[parseInt(btn.dataset.gi)].choices.splice(parseInt(btn.dataset.ci), 1);
         renderEditor();
       });
@@ -791,6 +819,7 @@ function _openOptionsEditor(existingOptions) {
     // add choice
     container.querySelectorAll('.opts-add-choice').forEach(btn => {
       btn.addEventListener('click', () => {
+        syncFromDom();
         const gi = parseInt(btn.dataset.gi);
         if (!groups[gi].choices) groups[gi].choices = [];
         groups[gi].choices.push({ value: '', label: '' });
@@ -803,6 +832,7 @@ function _openOptionsEditor(existingOptions) {
 
     // add group
     document.getElementById('opts-add-group')?.addEventListener('click', () => {
+      syncFromDom();
       groups.push({ id: 'group' + (groups.length + 1), label: 'กลุ่มใหม่', type: 'single', choices: [], hasNote: false });
       renderEditor();
     });
