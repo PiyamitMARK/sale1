@@ -47,7 +47,13 @@ export function bindBillButtons(container) {
     card.classList.toggle('order-card--merge-selectable', mergeMode);
     if (mergeMode) {
       card.classList.toggle('order-card--merge-selected', mergeSelected.has(key));
-      card.addEventListener('click', _onMergeCardClick, { once: true });
+      // ลบ listener เก่าก่อน (ถ้ามี) แล้วค่อยใส่ใหม่ เพื่อป้องกัน duplicate
+      card.removeEventListener('click', _onMergeCardClick);
+      card.addEventListener('click', _onMergeCardClick);
+    } else {
+      // ออกจาก merge mode — เอา class และ listener ออกให้หมด
+      card.classList.remove('order-card--merge-selectable', 'order-card--merge-selected');
+      card.removeEventListener('click', _onMergeCardClick);
     }
 
     // หา actions div และใส่ปุ่มแยกบิล
@@ -100,6 +106,7 @@ function _cancelMergeMode() {
   mergeMode = false;
   mergeSelected.clear();
   document.getElementById('mergeBillBar')?.classList.add('hidden');
+  // rebind หลังจาก mergeMode = false แล้ว เพื่อให้ bindBillButtons เอา class/listener ออกได้ถูกต้อง
   _rebindOrderCards();
 }
 function _rebindOrderCards() {
@@ -246,6 +253,9 @@ function _renderMergeBody(orders) {
       for (const o of orders) {
         await _cfg.markOrderAsPaid(o.firebaseKey, selectedPayment);
       }
+      // ปิด merge mode ก่อน close modal เพื่อให้ Firebase re-render ได้ state ที่ถูกต้องทันที
+      mergeMode = false;
+      mergeSelected.clear();
       _closeBillModal();
       _cancelMergeMode();
       _showToast(`✅ ชำระรวม ${orders.length} โต๊ะ เรียบร้อย`);
