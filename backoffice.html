@@ -2007,14 +2007,22 @@ function subscribeOrders(cb) {
 }
 
 // Subscribe to menu — Firebase เป็น source of truth
+let _menuRawCache = null;
+let _menuDebounce = null;
+
 function subscribeMenu(cb) {
   onValue(ref(db, 'menu'), snap => {
-    LIVE_MENU = snap.val() || {};
+    const raw = snap.val() || {};
+    const rawStr = JSON.stringify(raw);
+    if (rawStr === _menuRawCache) return;
+    _menuRawCache = rawStr;
+
+    LIVE_MENU = raw;
     MOCK_MENU = Object.values(LIVE_MENU);
-    // sync LS เผื่อ POS / customer / admin add-item
-    try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_){}
-    cb(LIVE_MENU);
-    // render จัดการใน callback แล้ว ไม่ render ซ้ำที่นี่
+    try { localStorage.setItem('ks90-menu', rawStr); } catch(_){}
+
+    clearTimeout(_menuDebounce);
+    _menuDebounce = setTimeout(() => cb(LIVE_MENU), 250);
   });
 }
 

@@ -94,17 +94,30 @@ const _lsMenuPOS = _loadMenuFromLS();
 if (_lsMenuPOS) products = _lsMenuPOS;
 
 // Firebase subscribe: อัปเดต products realtime ทุกครั้งที่เมนูเปลี่ยน
+let _menuRawCache = null;
+let _menuDebounce = null;
+
 function _startMenuSubscribe() {
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
     const raw = snap.val();
-    // sync LS เผื่อ tab อื่น
-    try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
-    const parsed = parseMenuFromRaw(raw, 'image');
-    if (Object.keys(parsed).length) {
-      products = parsed;
-      renderProducts();
-    }
+
+    // ถ้าข้อมูลไม่เปลี่ยน ไม่ต้อง re-parse / re-render
+    const rawStr = JSON.stringify(raw);
+    if (rawStr === _menuRawCache) return;
+    _menuRawCache = rawStr;
+
+    try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
+
+    // debounce 250ms กันการ re-render ถี่เกินไป
+    clearTimeout(_menuDebounce);
+    _menuDebounce = setTimeout(() => {
+      const parsed = parseMenuFromRaw(raw, 'image');
+      if (Object.keys(parsed).length) {
+        products = parsed;
+        renderProducts();
+      }
+    }, 250);
   });
 }
 

@@ -90,17 +90,31 @@ let PRODUCTS = {
 const _lsMenu = _loadMenuFromLS();
 if (_lsMenu) PRODUCTS = _lsMenu;
 
+let _menuRawCache = null;
+let _menuDebounce = null;
+
 // Firebase subscribe: อัปเดต PRODUCTS realtime
 function _startMenuSubscribe() {
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
     const raw = snap.val();
-    try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
-    const parsed = parseMenuFromRaw(raw, 'img');
-    if (Object.keys(parsed).length) {
-      PRODUCTS = parsed;
-      if (document.getElementById('productGrid')) renderProducts();
-    }
+
+    // ถ้าข้อมูลไม่เปลี่ยน ไม่ต้อง re-parse / re-render
+    const rawStr = JSON.stringify(raw);
+    if (rawStr === _menuRawCache) return;
+    _menuRawCache = rawStr;
+
+    try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
+
+    // debounce 250ms กันการ re-render ถี่เกินไป
+    clearTimeout(_menuDebounce);
+    _menuDebounce = setTimeout(() => {
+      const parsed = parseMenuFromRaw(raw, 'img');
+      if (Object.keys(parsed).length) {
+        PRODUCTS = parsed;
+        if (document.getElementById('productGrid')) renderProducts();
+      }
+    }, 250);
   });
 }
 
