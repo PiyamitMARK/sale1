@@ -5,10 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>ข้าวซอย 90 — สั่งอาหาร</title>
   <link rel="stylesheet" href="customer.css">
+  <!-- Preconnect ทุก domain ที่ใช้ → ลด latency ครั้งแรก -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Mitr:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com">
+  <link rel="dns-prefetch" href="https://kaosoi2-default-rtdb.asia-southeast1.firebasedatabase.app">
+  <!-- โหลดเฉพาะ weight ที่ใช้จริง → ลดขนาด font download -->
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=Mitr:wght@600;700&display=swap" rel="stylesheet">
   <script>/* prevent flash */(function(){var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);})();</script>
+  <style>
+    /* ── Critical inline CSS: skeleton + img fade-in (โหลดก่อน render) ── */
+    .cust-product-img-wrap { position: relative; background: var(--cream-mid, #f0e9de); }
+    .cust-product-img {
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      will-change: opacity;
+    }
+    .cust-product-img.loaded { opacity: 1; }
+    /* shimmer skeleton สำหรับรูปที่ยังไม่โหลด */
+    .img-loading::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, #ede8e0 25%, #f5f2ec 50%, #ede8e0 75%);
+      background-size: 400% 100%;
+      animation: img-shimmer 1.2s ease infinite;
+    }
+    @keyframes img-shimmer {
+      0%   { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    [data-theme="dark"] .img-loading::after {
+      background: linear-gradient(90deg, #2a1f18 25%, #3a2d24 50%, #2a1f18 75%);
+      background-size: 400% 100%;
+    }
+    /* ── Product card เพิ่ม content-visibility เพื่อให้ browser skip รูปนอก screen ── */
+    .cust-products { contain: layout style; }
+  </style>
 </head>
 <body>
 

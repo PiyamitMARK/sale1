@@ -26,12 +26,23 @@ const firebaseApp = getApps().length ? getApps()[0] : initializeApp(FIREBASE_CON
 const db   = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
-try {
-  initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaV3Provider(RECAPTCHA_KEY),
-    isTokenAutoRefreshEnabled: true,
-  });
-} catch (e) { console.warn("AppCheck:", e.message); }
+// AppCheck + Auth: defer ออกจาก critical path → ไม่บล็อก render
+// ใช้ requestIdleCallback เพื่อรัน หลังจาก browser render หน้าเสร็จแล้ว
+function _initAppCheck() {
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (e) { console.warn("AppCheck:", e.message); }
+}
+
+// รัน AppCheck หลัง browser ว่าง (ไม่บล็อก first render)
+if (typeof requestIdleCallback !== 'undefined') {
+  requestIdleCallback(_initAppCheck, { timeout: 3000 });
+} else {
+  setTimeout(_initAppCheck, 500);
+}
 
 signInAnonymously(auth).catch(err => console.error("Auth error:", err));
 

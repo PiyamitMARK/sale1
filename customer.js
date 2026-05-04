@@ -42,15 +42,17 @@ let PRODUCTS = {
     { id:'setkao12', name:'ข้าวหมูทอด + มะพร้าวปั่น',            price:95, img:IMG(10011),   productType:'setkao' },
   ],
   kao: [
-    { id:'kao1', name:'ข้าวซอยน่องไก่',      price:70, img:IMG(111),   productType:'kaosoi' },
-    { id:'kao2', name:'ข้าวซอยหมูทอด',       price:70, img:IMG(1007),  productType:'kaosoi' },
+    { id:'kao1', name:'ข้าวซอยน่องไก่',      price:65, img:IMG(111),   productType:'kaosoi' },
+    { id:'kao2', name:'ข้าวซอยหมูทอด',       price:65, img:IMG(1007),  productType:'kaosoi' },
     { id:'kao3', name:'น้ำเงี้ยว',            price:60, img:IMG(555),   productType:'namngiao' },
     { id:'kao4', name:'ข้าวหมูทอด',           price:50, img:IMG(7667),  productType:'kaomutod' },
     { id:'kao7', name:'ลาบเหนือ',           price:60, img:IMG(10001),  productType:'kaomutod' },
+    { id:'kao10', name:'ข้าวกะเพรา',               price:50, img:IMG(1090),  productType:'simple' },
     { id:'kao8', name:'ข้าวเหนียว',           price:10, img:IMG(10002),  productType:'simple' },
     { id:'kao9', name:'ข้าวสวย',           price:10, img:IMG(10003),  productType:'simple' },
     { id:'kao5', name:'แคบหมู',               price:15, img:IMG(98789), productType:'simple' },
     { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
+    { id:'kao11', name:'ไข่ดาว',               price:10, img:IMG(1090),  productType:'simple' },
   ],
   nam: [
     { id:'nam1',  name:'น้ำเปล่า',       price:10, img:IMG(60),  productType:'drink-ready' },
@@ -388,12 +390,11 @@ async function init() {
   // ─── โหลดตะกร้าที่ค้างไว้ (กรณีรีหน้า / เน็ตหลุด) ───
   loadCart();
 
-  // render เมนูทันที ไม่ต้องรอ Firebase
-  // ถ้ายังไม่มีเมนูใน LS → แสดง skeleton ก่อน (Firebase จะ replace เมื่อตอบ)
+  // แสดง skeleton ทันทีทุกกรณี → ไม่รู้สึกว่ารอ
   const grid = document.getElementById('productGrid');
-  if (!localStorage.getItem('ks90-menu') && grid) {
-    _renderSkeleton(grid, 8);
-  }
+  if (grid) _renderSkeleton(grid, 8);
+
+  // render จาก cache ถ้ามี (จะ replace skeleton ทันที < 16ms)
   renderProducts();
   initSearchBar();
   updateCartBar();
@@ -628,9 +629,11 @@ function loadPopularItems() {
 }
 
 // ==================== Products ====================
-function _renderSkeleton(grid, count = 6) {
-  grid.innerHTML = Array.from({ length: count }, () =>
-    `<div class="cust-product-card cust-product-skeleton" aria-hidden="true">
+function _renderSkeleton(grid, count = 8) {
+  // skeleton เต็มหน้าจอมือถือ (8 card = 4 แถว x 2 คอลัมน์)
+  grid.innerHTML = Array.from({ length: count }, (_, i) =>
+    `<div class="cust-product-card cust-product-skeleton" aria-hidden="true"
+          style="animation-delay:${i * 0.05}s">
       <div class="cust-product-img-wrap skel-img"></div>
       <div class="cust-product-info">
         <div class="skel-line skel-name"></div>
@@ -649,21 +652,24 @@ function renderProducts() {
     : (PRODUCTS[currentCat] || []);
   const list = allList;
   const QUICKADD_TYPES = ['simple', 'drink-ready'];
-  grid.innerHTML = list.map(p => {
+  grid.innerHTML = list.map((p, idx) => {
     const isDisabled = p.enabled === false;
-    // quick-add ถ้า productType เป็น simple/drink-ready และไม่มี custom options
     const hasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
     const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType) && !hasOptions;
     const isPopular  = !isDisabled && popularItems.includes(p.name);
+    // 4 รูปแรกโหลดทันที (eager) ที่เหลือ lazy — ลดเวลา render ครั้งแรก
+    const loadAttr   = idx < 4 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
     return `
     <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}${isDisabled ? ' cust-product-card--disabled' : ''}"
       data-id="${p.id}" type="button" ${isDisabled ? 'disabled aria-disabled="true"' : ''}>
       ${isDisabled ? '<span class="cust-soldout-badge">หมดชั่วคราว</span>' : ''}
       ${isPopular ? '<span class="cust-popular-badge">🔥 ยอดนิยม</span>' : ''}
       ${isQuick && !isPopular ? '<span class="cust-quick-badge">+</span>' : ''}
-      <div class="cust-product-img-wrap">
-        <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}" loading="lazy"
-             onerror="this.parentNode.innerHTML='<span class=cust-product-img-fallback>🍽</span>'">
+      <div class="cust-product-img-wrap img-loading">
+        <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}"
+             ${loadAttr} decoding="async"
+             onload="this.classList.add('loaded');this.parentNode.classList.remove('img-loading')"
+             onerror="this.parentNode.classList.remove('img-loading');this.parentNode.innerHTML='<span class=cust-product-img-fallback>🍽</span>'">
       </div>
       <div class="cust-product-info">
         <div class="cust-product-name">${esc(p.name)}</div>
