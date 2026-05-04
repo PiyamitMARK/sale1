@@ -1,33 +1,32 @@
 {
-  "name": "kaosoi2",
-  "compatibility_date": "2026-05-03",
-  "assets": {
-    "directory": "./",
-    "headers": [
-      {
-        "match": "/images/*",
-        "headers": {
-          "Cache-Control": "public, max-age=31536000, immutable"
-        }
-      },
-      {
-        "match": "/*.js",
-        "headers": {
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600"
-        }
-      },
-      {
-        "match": "/*.css",
-        "headers": {
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600"
-        }
-      },
-      {
-        "match": "/*.html",
-        "headers": {
-          "Cache-Control": "public, max-age=0, must-revalidate"
-        }
-      }
-    ]
-  }
+	"name": "kaosoi2",
+	"compatibility_date": "2026-05-03",
+	"main": "worker.js",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "kaosoi2-db",
+			"database_id": "d2dc51af-1016-420a-8c70-03c84f9c20df"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "f024484385b14bcab0807febb167b3f4"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "TABLE_ROOM",
+				"class_name": "TableRoom"
+			}
+		]
+	},
+	"migrations": [
+  { "tag": "v1", "new_sqlite_classes": ["TableRoom"] }
+	],
+	"assets": {
+		"directory": "./"
+	}
 }

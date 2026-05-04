@@ -1,24 +1,18 @@
 /**
  * ข้าวซอย 90 — Admin
- * Firebase Realtime Database
+ * Cloudflare Worker REST API + WebSocket
  *
  * ระบบใหม่ batch:
  *   - order มี batches: [ [...items], [...items], ... ]
  *   - แต่ละ batch = การสั่งแต่ละรอบ
- *   - จ่ายแล้ว → ลบ tableOrders/{table} เพื่อให้โต๊ะนั้นได้ order number ใหม่
+ *   - จ่ายแล้ว → clearTable เพื่อให้โต๊ะนั้นได้ order number ใหม่
  */
 
 import './darkmode.js';
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
-import { db } from './firebase-config.js';
-import {
-  ref, update, remove, onValue, get, set, push
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout } from './api-client.js';
 
 // ==================== Config ====================
-const ADMIN_USER = 'Piyamit';
-const ADMIN_PASS_HASH = 'bfa474b7bef2a64f28c6d8ec0c668174f381bdfc7ad5e0736fb0a9fadf681be0'; 
-
 const AUTH_KEY = 'krua-khun-mae-auth';
 
 // ==================== Rate Limiting ====================
@@ -47,16 +41,6 @@ function isLockedOut() {
   return false;
 }
 
-// ==================== Password Hashing ====================
-async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data    = encoder.encode(password);
-  const hashBuf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 // ==================== DOM ====================
 const loginScreen      = document.getElementById('loginScreen');
 const dashboardScreen  = document.getElementById('dashboardScreen');
@@ -71,18 +55,17 @@ const todayOrderCount  = document.getElementById('todayOrderCount');
 const todayTotal       = document.getElementById('todayTotal');
 const tabRecent        = document.getElementById('tabRecent');
 
-
 // ==================== State ====================
 let allOrders = [];
-let unsubscribeListener = null;
-let tableFilter = '';   // ── Feature #4: กรองตามโต๊ะ ──
+let _wsConn   = null;
+let tableFilter = '';
 
 // ==================== Auth ====================
 function isLoggedIn()     { return localStorage.getItem(AUTH_KEY) === 'true'; }
 function setLoggedIn(val) {
   if (val) {
     localStorage.setItem(AUTH_KEY, 'true');
-    sessionStorage.setItem(AUTH_KEY, 'true');  // สำหรับ index.html, backoffice.html, qr.html
+    sessionStorage.setItem(AUTH_KEY, 'true');
   } else {
     localStorage.removeItem(AUTH_KEY);
     sessionStorage.removeItem(AUTH_KEY);
@@ -104,7 +87,6 @@ function escapeHtml(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-// sanitizeNum — ยอมรับเฉพาะตัวเลข (ป้องกัน XSS จาก Firebase data)
 function sanitizeNum(val) {
   const n = parseInt(val, 10);
   return isNaN(n) ? '' : n;
@@ -121,44 +103,31 @@ function getDateKey(isoString) { return new Date(isoString).toISOString().slice(
 function isToday(isoString) {
   return getDateKey(isoString) === new Date().toISOString().slice(0, 10);
 }
-/**
- * ดึง flat items จาก order ที่อาจมี batches หรือ items (รองรับทั้งสองรูปแบบ)
- */
 function getAllItems(order) {
-  if (order.batches) {
-    return order.batches.flat();
-  }
+  if (order.batches) return order.batches.flat();
   return order.items || [];
 }
 
-// ==================== Sound Alert (Text-to-Speech + AudioContext fallback) ====================
+// ==================== Sound Alert ====================
 let soundEnabled = true;
-let knownOrderKeys = new Set();
+let knownOrderIds = new Set();
 let isFirstLoad = true;
 
-// ข้อความที่ใช้พูด (ปรับได้)
 const TTS_ORDER_TEXT  = 'มีออเดอร์ใหม่จ้า';
 const TTS_BATCH_TEXT  = 'ลูกค้าสั่งเพิ่มจ้า';
 const TTS_CALL_TEXT   = 'ลูกค้าเรียกพนักงานจ้า';
 
-// ---- AudioContext (beep fallback สำหรับ iOS ที่ TTS ใช้ไม่ได้) ----
 let _audioCtx = null;
 function getAudioCtx() {
   if (!_audioCtx) {
     try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
   }
-  // iOS: resume ถ้า suspended (ต้องอยู่ใน user-gesture context)
   if (_audioCtx && _audioCtx.state === 'suspended') {
     _audioCtx.resume().catch(() => {});
   }
   return _audioCtx;
 }
 
-/**
- * เล่นเสียง beep ผ่าน AudioContext
- * @param {number[]} freqs - อาร์เรย์ของ Hz ที่จะเล่นต่อเนื่อง
- * @param {number} dur - ความยาวแต่ละโน้ต (วินาที)
- */
 function playBeep(freqs = [880], dur = 0.18) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -179,12 +148,9 @@ function playBeep(freqs = [880], dur = 0.18) {
   });
 }
 
-// ---- iOS Audio unlock ----
 let iosUnlocked = false;
 function unlockIOSSpeech() {
   const ctx = getAudioCtx();
-
-  // iOS: ต้องเล่น silent buffer จริงๆ ใน gesture context ถึงจะ unlock AudioContext ได้
   if (ctx) {
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     try {
@@ -195,7 +161,6 @@ function unlockIOSSpeech() {
       source.start(0);
     } catch(e) {}
   }
-
   if (iosUnlocked || !window.speechSynthesis) return;
   try {
     const utter  = new SpeechSynthesisUtterance('\u200B');
@@ -206,58 +171,37 @@ function unlockIOSSpeech() {
   } catch(e) {}
 }
 
-// ---- iOS Safari bug: speechSynthesis หยุดเองหลัง ~30 วิ ----
-// วิธีแก้: cancel + re-speak ถ้า paused ขณะกำลังพูด
 let _ttsWatchdog = null;
 function _startTTSWatchdog(utter) {
   clearInterval(_ttsWatchdog);
   _ttsWatchdog = setInterval(() => {
     if (!window.speechSynthesis) { clearInterval(_ttsWatchdog); return; }
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
   }, 5000);
   utter.onend = utter.onerror = () => clearInterval(_ttsWatchdog);
 }
 
-/**
- * พูดข้อความด้วย Web Speech API พร้อม beep fallback
- * @param {string} text - ข้อความที่ต้องการพูด
- * @param {object} [opts] - { rate, pitch, volume, beep }
- */
 function speak(text, opts = {}) {
   if (!soundEnabled) return;
-
-  // เล่น beep ก่อนเสมอ (ช่วยให้ AudioContext active บน iOS)
   if (opts.beep !== false) playBeep(opts.beep || [880, 1100], 0.15);
-
   if (!window.speechSynthesis) return;
   try {
     window.speechSynthesis.cancel();
-
     const utter    = new SpeechSynthesisUtterance(text);
     utter.lang     = 'th-TH';
     utter.rate     = opts.rate   ?? 0.85;
     utter.pitch    = opts.pitch  ?? 1.1;
     utter.volume   = opts.volume ?? 1.0;
-
-    // เลือก voice ภาษาไทยถ้ามี, fallback default voice
     const voices  = window.speechSynthesis.getVoices();
     const thVoice = voices.find(v => v.lang === 'th-TH' || v.lang.startsWith('th'));
     if (thVoice) utter.voice = thVoice;
-
-    // เริ่ม watchdog แก้บัก iOS pause
     _startTTSWatchdog(utter);
-
-    // iOS: ต้อง delay เล็กน้อยหลัง cancel() ไม่งั้น speak() ถูกกลืน
     setTimeout(() => {
       try { window.speechSynthesis.speak(utter); } catch(e) {}
     }, 120);
-
   } catch (e) { console.warn('TTS error:', e); }
 }
 
-// โหลด voice list ก่อน (บางเบราว์เซอร์ต้องรอ event)
 if (window.speechSynthesis) {
   window.speechSynthesis.getVoices();
   window.speechSynthesis.addEventListener('voiceschanged', () => {
@@ -265,7 +209,6 @@ if (window.speechSynthesis) {
   });
 }
 
-// 'tts' = เสียงคนพูด (+ beep นำ), 'beep' = เสียง effect อย่างเดียว
 let soundMode = localStorage.getItem('soundMode') || 'tts';
 
 function playOrderAlert() {
@@ -281,16 +224,14 @@ function playCallAlert() {
   else { speak(TTS_CALL_TEXT, { rate: 0.8, pitch: 0.95, beep: [660, 784, 880] }); }
 }
 
-
-// ==================== Popular Items (Feature #1) ====================
-// throttle: เขียน Firebase max 1 ครั้งต่อ 5 นาที เพื่อลด Downloads/Writes
+// ==================== Popular Items ====================
 let _popularLastWrite = 0;
 let _popularDebounce  = null;
-const POPULAR_THROTTLE_MS = 5 * 60 * 1000; // 5 นาที
+const POPULAR_THROTTLE_MS = 5 * 60 * 1000;
 
 async function updatePopularItems(orders) {
   const now = Date.now();
-  if (now - _popularLastWrite < POPULAR_THROTTLE_MS) return; // throttle
+  if (now - _popularLastWrite < POPULAR_THROTTLE_MS) return;
   clearTimeout(_popularDebounce);
   _popularDebounce = setTimeout(async () => {
     try {
@@ -305,56 +246,138 @@ async function updatePopularItems(orders) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([name]) => name);
-      await update(ref(db, 'meta'), { popularItems: top5 });
+      await api.updateMeta({ popularItems: top5 });
       _popularLastWrite = Date.now();
     } catch (_) {}
-  }, 2000); // debounce 2 วิ กันกระตุก
+  }, 2000);
 }
 
-// ==================== Firebase: Real-time Listener ====================
-let callStaffUnsubscribe = null;
-let knownCallKeys = new Set();
+// ==================== WebSocket: Real-time Listener ====================
+let callLogEntries = [];
+let knownCallIds   = new Set();
+
+function startRealtimeListener() {
+  if (_wsConn) { _wsConn.close(); _wsConn = null; }
+
+  const isReconnect = knownOrderIds.size > 0;
+  if (!isReconnect) {
+    knownOrderIds = new Set();
+    isFirstLoad   = true;
+  }
+
+  // โหลด orders ครั้งแรกผ่าน REST
+  _loadOrders();
+
+  // Subscribe realtime ผ่าน WebSocket
+  _wsConn = ws.connect('admin', (msg) => {
+    if (msg.type === 'order_created' || msg.type === 'order_updated' || msg.type === 'order_deleted') {
+      _loadOrders();
+    }
+    if (msg.type === 'call_staff') {
+      _handleCallStaffMsg(msg);
+    }
+  });
+}
+
+async function _loadOrders() {
+  try {
+    const orders = await api.getOrders({ today: true });
+    const newOrders = (orders || []).map(o => ({
+      ...o,
+      firebaseKey: o.id, // alias สำหรับ compatibility กับ render functions
+    }));
+    newOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (!isFirstLoad) {
+      let hasNewOrder = false;
+      let hasNewBatch = false;
+      newOrders.forEach((o) => {
+        if (!knownOrderIds.has(o.id) && o.status === 'pending') {
+          hasNewOrder = true;
+          showOrderToast(o);
+        } else if (knownOrderIds.has(o.id) && o.last_batch_at) {
+          const old = allOrders.find(x => x.id === o.id);
+          if (old) {
+            const oldBatchCount = (old.batches || [old.items || []]).length;
+            const newBatchCount = (o.batches || [o.items || []]).length;
+            if (newBatchCount > oldBatchCount) {
+              hasNewBatch = true;
+              showBatchToast(o, newBatchCount);
+            }
+          }
+        }
+      });
+      if (hasNewOrder) playOrderAlert();
+      else if (hasNewBatch) playBatchAlert();
+    }
+
+    knownOrderIds = new Set(newOrders.map(o => o.id));
+    isFirstLoad   = false;
+    allOrders     = newOrders;
+
+    // map date field: created_at → date (สำหรับ render functions ที่ใช้ order.date)
+    allOrders = allOrders.map(o => ({ ...o, date: o.date || o.created_at, table: o.table || o.table_num, orderNumber: o.orderNumber || o.order_num }));
+
+    updatePopularItems(allOrders);
+    renderDailySummary();
+    renderOrders();
+    renderTakeawayOrders();
+  } catch (err) {
+    console.error('_loadOrders error:', err);
+  }
+}
 
 function startCallStaffListener() {
-  if (callStaffUnsubscribe) callStaffUnsubscribe();
-  knownCallKeys = new Set();
+  // โหลด call log ครั้งแรก
+  _loadCallLog();
+}
 
-  callStaffUnsubscribe = onValue(ref(db, 'callStaff'), snap => {
-    if (!snap.exists()) { knownCallKeys = new Set(); callLogEntries = []; updateCallLogBadge(); return; }
-    // rebuild log entries
-    callLogEntries = [];
-    snap.forEach(child => {
-      callLogEntries.push({ tableKey: child.key, ...child.val() });
-    });
+async function _loadCallLog() {
+  try {
+    const entries = await api.getCallLog();
+    callLogEntries = entries || [];
     updateCallLogBadge();
-    // toast เฉพาะ pending ที่ยังไม่เคยเห็น
-    snap.forEach(child => {
-      const key  = child.key;
-      const data = child.val();
-      if (!data.done && !knownCallKeys.has(key)) {
-        knownCallKeys.add(key);
-        showCallStaffToast(data, key);
+
+    callLogEntries.forEach(e => {
+      if (!e.done && !knownCallIds.has(e.id)) {
+        knownCallIds.add(e.id);
+        showCallStaffToast(e, e.id);
         playCallAlert();
       }
     });
     if (!document.getElementById('tabCallLog')?.classList.contains('hidden')) renderCallLog();
-  });
+  } catch (err) {
+    console.error('_loadCallLog error:', err);
+  }
 }
 
-function showCallStaffToast(data, tableKey) {
+function _handleCallStaffMsg(msg) {
+  const e = msg.data;
+  if (!e) return;
+  callLogEntries = callLogEntries.filter(x => x.id !== e.id);
+  callLogEntries.push(e);
+  updateCallLogBadge();
+  if (!e.done && !knownCallIds.has(e.id)) {
+    knownCallIds.add(e.id);
+    showCallStaffToast(e, e.id);
+    playCallAlert();
+  }
+  if (!document.getElementById('tabCallLog')?.classList.contains('hidden')) renderCallLog();
+}
+
+function showCallStaffToast(data, callId) {
   const toast = document.createElement('div');
   toast.className = 'new-order-toast call-staff-toast';
 
-  // ใช้ DOM API แทน innerHTML เพื่อป้องกัน XSS
   const icon   = document.createElement('strong');
   icon.textContent = '🔔 เรียกพนักงาน!';
   const tableText = document.createTextNode(
-    ` โต๊ะ ${sanitizeNum(data.table)}` +
-    (data.orderNumber ? ` (ออเดอร์ #${sanitizeNum(data.orderNumber)})` : '')
+    ` โต๊ะ ${sanitizeNum(data.table_num || data.table)}` +
+    (data.order_num || data.orderNumber ? ` (ออเดอร์ #${sanitizeNum(data.order_num || data.orderNumber)})` : '')
   );
   const ackBtn = document.createElement('button');
   ackBtn.type = 'button'; ackBtn.className = 'toast-ack';
-  ackBtn.setAttribute('data-key', tableKey);
+  ackBtn.setAttribute('data-key', callId);
   ackBtn.textContent = '✓ รับทราบ';
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button'; closeBtn.className = 'toast-close';
@@ -365,8 +388,8 @@ function showCallStaffToast(data, tableKey) {
   closeBtn.addEventListener('click', () => toast.remove());
   ackBtn.addEventListener('click', async () => {
     try {
-      await update(ref(db, `callStaff/${tableKey}`), { done: true });
-      const entry = callLogEntries.find(e => e.tableKey === tableKey);
+      await api.markCallDone(callId);
+      const entry = callLogEntries.find(e => e.id === callId);
       if (entry) entry.done = true;
       updateCallLogBadge();
       if (!document.getElementById('tabCallLog')?.classList.contains('hidden')) renderCallLog();
@@ -375,10 +398,7 @@ function showCallStaffToast(data, tableKey) {
   });
 }
 
-
 // ==================== Call Log ====================
-let callLogEntries = [];
-
 function updateCallLogBadge() {
   const badge = document.getElementById('callLogBadge');
   if (!badge) return;
@@ -393,8 +413,8 @@ function renderCallLog() {
   if (!list) return;
   const todayStr = new Date().toDateString();
   const todayEntries = callLogEntries
-    .filter(e => new Date(e.time).toDateString() === todayStr)
-    .sort((a, b) => new Date(b.time) - new Date(a.time));
+    .filter(e => new Date(e.created_at || e.time).toDateString() === todayStr)
+    .sort((a, b) => new Date(b.created_at || b.time) - new Date(a.created_at || a.time));
   if (todayEntries.length === 0) {
     list.innerHTML = '';
     empty.classList.remove('hidden');
@@ -402,29 +422,30 @@ function renderCallLog() {
   }
   empty.classList.add('hidden');
   list.innerHTML = todayEntries.map(e => {
-    const timeStr = new Date(e.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const ts      = e.created_at || e.time;
+    const timeStr = new Date(ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const cls   = e.done ? 'call-log-item done' : 'call-log-item pending';
     const badge = e.done
       ? '<span class="call-log-status done">✓ รับทราบแล้ว</span>'
       : '<span class="call-log-status pending">🔔 รอรับทราบ</span>';
+    const tableNum = e.table_num || e.table;
     return `
       <div class="${cls}">
         <div class="call-log-item-left">
-          <span class="call-log-table">โต๊ะ ${sanitizeNum(e.table)}</span>
-          ${e.orderNumber ? `<span class="call-log-order">#${sanitizeNum(e.orderNumber)}</span>` : ''}
+          <span class="call-log-table">โต๊ะ ${sanitizeNum(tableNum)}</span>
         </div>
         <div class="call-log-item-right">
           ${badge}
           <span class="call-log-time">${timeStr}</span>
-          ${!e.done ? `<button class="call-log-ack-btn" data-key="${e.tableKey}">✓ รับทราบ</button>` : ''}
+          ${!e.done ? `<button class="call-log-ack-btn" data-key="${e.id}">✓ รับทราบ</button>` : ''}
         </div>
       </div>`;
   }).join('');
   list.querySelectorAll('.call-log-ack-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       try {
-        await update(ref(db, `callStaff/${btn.dataset.key}`), { done: true });
-        const entry = callLogEntries.find(e => e.tableKey === btn.dataset.key);
+        await api.markCallDone(btn.dataset.key);
+        const entry = callLogEntries.find(e => e.id === btn.dataset.key);
         if (entry) entry.done = true;
         renderCallLog();
         updateCallLogBadge();
@@ -436,172 +457,61 @@ function renderCallLog() {
 document.getElementById('clearCallLogBtn')?.addEventListener('click', async () => {
   if (!confirm('ล้างประวัติการเรียกพนักงานทั้งหมด?')) return;
   try {
-    await set(ref(db, 'callStaff'), null);
+    await api.clearCallLog();
     callLogEntries = [];
-    knownCallKeys  = new Set();
+    knownCallIds   = new Set();
     renderCallLog();
     updateCallLogBadge();
   } catch(err) { console.error(err); }
 });
 
-function startRealtimeListener() {
-  if (unsubscribeListener) unsubscribeListener();
-  // ไม่ reset knownOrderKeys และ isFirstLoad ถ้าเคย load แล้ว
-  // เพื่อให้ยังได้เสียงแจ้งเตือนออเดอร์ที่เข้ามาขณะ reconnect
-  const isReconnect = knownOrderKeys.size > 0;
-  if (!isReconnect) {
-    knownOrderKeys = new Set();
-    isFirstLoad    = true;
-  }
-
-  unsubscribeListener = onValue(ref(db, 'orders'), (snapshot) => {
-    const newOrders = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((child) => {
-        newOrders.push({ firebaseKey: child.key, ...child.val() });
-      });
-      newOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
-    }
-
-    if (!isFirstLoad) {
-      let hasNewOrder = false;
-      let hasNewBatch = false;
-      newOrders.forEach((o) => {
-        if (!knownOrderKeys.has(o.firebaseKey) && o.status === 'pending') {
-          hasNewOrder = true;
-          showOrderToast(o);
-        } else if (knownOrderKeys.has(o.firebaseKey) && o.lastBatchDate) {
-          // batch ใหม่ถูกเพิ่มเข้า order เดิม — ตรวจด้วย batch count เปรียบเทียบ
-          // ไม่สนใจ status เพราะ status อาจถูก reset หลัง admin รับออเดอร์แล้ว
-          const old = allOrders.find(x => x.firebaseKey === o.firebaseKey);
-          if (old) {
-            const oldBatchCount  = (old.batches  || [old.items  || []]).length;
-            const newBatchCount  = (o.batches    || [o.items    || []]).length;
-            if (newBatchCount > oldBatchCount) {
-              hasNewBatch = true;
-              showBatchToast(o, newBatchCount);
-            }
-          }
-        }
-      });
-      if (hasNewOrder) playOrderAlert();
-      else if (hasNewBatch) playBatchAlert();
-    }
-
-    knownOrderKeys = new Set(newOrders.map(o => o.firebaseKey));
-    isFirstLoad    = false;
-    allOrders      = newOrders;
-
-    updatePopularItems(newOrders); // ── Feature #1: อัปเดต popular stats ──
-    renderDailySummary();
-    renderOrders();
-    renderTakeawayOrders();
-  });
-}
-
-function showOrderToast(order) {
-  document.querySelectorAll('.new-order-toast:not(.call-staff-toast)').forEach(t => t.remove());
-  const toast = document.createElement('div');
-  toast.className = 'new-order-toast';
-
-  const icon = document.createElement('strong');
-  icon.textContent = '🔔 ออเดอร์ใหม่!';
-  const info = document.createTextNode(
-    ` #${sanitizeNum(order.orderNumber)} โต๊ะ ${sanitizeNum(order.table) || '-'}`
-  );
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button'; closeBtn.className = 'toast-close';
-  closeBtn.textContent = '✕';
-
-  toast.append(icon, info, ' ', closeBtn);
-  document.body.appendChild(toast);
-  closeBtn.addEventListener('click', () => toast.remove());
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 6000);
-}
-
-function showBatchToast(order, batchNum) {
-  const toast = document.createElement('div');
-  toast.className = 'new-order-toast';
-
-  const icon = document.createElement('strong');
-  icon.textContent = '🍽 สั่งเพิ่ม!';
-  const info = document.createTextNode(
-    ` #${sanitizeNum(order.orderNumber)} โต๊ะ ${sanitizeNum(order.table) || '-'} (รอบที่ ${parseInt(batchNum, 10) || '?'})`
-  );
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button'; closeBtn.className = 'toast-close';
-  closeBtn.textContent = '✕';
-
-  toast.append(icon, info, ' ', closeBtn);
-  document.body.appendChild(toast);
-  closeBtn.addEventListener('click', () => toast.remove());
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 6000);
-}
-
-// ==================== Firebase: Actions ====================
-
-
-async function markOrderAsPaid(firebaseKey, paymentMethod) {
-  const order = allOrders.find(o => o.firebaseKey === firebaseKey);
-  const updateData = { status: 'paid' };
-  if (paymentMethod) updateData.paymentMethod = paymentMethod;
-  await update(ref(db, `orders/${firebaseKey}`), updateData);
-  // ลบ tableOrders เพื่อให้โต๊ะนั้นได้ order number ใหม่ครั้งต่อไป
-  if (order && order.table) {
-    try {
-      const tableSnap = await get(ref(db, `tableOrders/${order.table}`));
-      if (tableSnap.exists() && tableSnap.val().orderKey === firebaseKey) {
-        await remove(ref(db, `tableOrders/${order.table}`));
-      }
-    } catch (err) {
-      console.error('tableOrders remove error:', err);
-    }
-  }
-}
-
-async function markOrderAsCooking(firebaseKey) {
-  await update(ref(db, `orders/${firebaseKey}`), { status: 'cooking' });
-}
-
-async function markOrderAsServed(firebaseKey) {
-  await update(ref(db, `orders/${firebaseKey}`), { status: 'served' });
-}
-
-async function deleteOrder(firebaseKey, orderNumber) {
-  if (!confirm(`ลบออเดอร์ #${orderNumber} ?`)) return;
-  const order = allOrders.find(o => o.firebaseKey === firebaseKey);
-  await remove(ref(db, `orders/${firebaseKey}`));
-  if (order && order.table) {
-    try {
-      const tableSnap = await get(ref(db, `tableOrders/${order.table}`));
-      if (tableSnap.exists() && tableSnap.val().orderKey === firebaseKey) {
-        await remove(ref(db, `tableOrders/${order.table}`));
-      }
-    } catch (err) { /* ignore */ }
-  }
-}
-
 // ==================== Menu Data (for add-item modal) ====================
 let allMenuData = {};
-let _menuRawCache = null;
-let _menuDebounce = null;
-let _menuUnsubscribe = null;
 
-function startMenuListener() {
-  if (_menuUnsubscribe) return; // ป้องกัน subscribe ซ้ำ
-  // ใช้ get() ครั้งเดียวแทน onValue realtime
-  // admin ไม่ต้องการ menu realtime — โหลดครั้งเดียวต่อ session เพียงพอ
-  get(ref(db, 'menu')).then(snap => {
-    const raw = snap.val() || {};
-    allMenuData = raw;
-    try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
-  }).catch(() => {});
-  _menuUnsubscribe = true; // mark ว่าโหลดแล้ว (ไม่ให้โหลดซ้ำ)
+async function startMenuListener() {
+  try {
+    const menuData = await api.getMenu();
+    allMenuData = menuData || {};
+    try { localStorage.setItem('ks90-menu', JSON.stringify(allMenuData)); } catch (_) {}
+  } catch (_) {}
+}
+
+// ==================== API: Actions ====================
+async function markOrderAsPaid(orderId, paymentMethod) {
+  const order = allOrders.find(o => o.id === orderId || o.firebaseKey === orderId);
+  const updateData = { status: 'paid' };
+  if (paymentMethod) updateData.payment = paymentMethod;
+  await api.updateOrder(orderId, updateData);
+  // clear table เพื่อให้โต๊ะนั้นได้ order number ใหม่
+  const tableNum = order?.table_num || order?.table;
+  if (tableNum) {
+    try { await api.clearTable(String(tableNum)); } catch (_) {}
+  }
+  _loadOrders();
+}
+
+async function markOrderAsCooking(orderId) {
+  await api.updateOrder(orderId, { status: 'cooking' });
+  _loadOrders();
+}
+
+async function markOrderAsServed(orderId) {
+  await api.updateOrder(orderId, { status: 'served' });
+  _loadOrders();
+}
+
+async function deleteOrder(orderId, orderNumber) {
+  if (!confirm(`ลบออเดอร์ #${orderNumber} ?`)) return;
+  const order = allOrders.find(o => o.id === orderId || o.firebaseKey === orderId);
+  await api.deleteOrder(orderId);
+  const tableNum = order?.table_num || order?.table;
+  if (tableNum) {
+    try { await api.clearTable(String(tableNum)); } catch (_) {}
+  }
+  _loadOrders();
 }
 
 // ==================== Products (admin add-item) ====================
-
-// ดึงหมวดหมู่จาก Firebase (sync ลง LS โดย backoffice/customer)
 function getLiveCats() {
   try {
     const raw = localStorage.getItem('ks90-categories');
@@ -620,6 +530,7 @@ function getLiveCats() {
     { id: 'soda',   label: '🫧 โซดา' },
   ];
 }
+
 // ==================== Edit-modal inline Add Item ====================
 function renderEditAddItemList() {
   const container = document.getElementById('editAddItemProductList');
@@ -673,7 +584,6 @@ function addItemToEditOrder({ name, price }) {
   }
   editOrderBatches[editOrderBatches.length - 1] = lastBatch;
 
-  // toast
   const toast = document.getElementById('editAddItemToastMsg');
   if (toast) {
     toast.textContent = `✅ เพิ่ม "${name}" แล้ว`;
@@ -682,13 +592,13 @@ function addItemToEditOrder({ name, price }) {
     toast._timer = setTimeout(() => { toast.className = 'add-item-toast'; }, 2000);
   }
 
-  renderEditAddItemList();   // refresh badge
-  renderEditOrderBatches();  // update order view ทันที
+  renderEditAddItemList();
+  renderEditOrderBatches();
 }
 
 // ==================== Edit Order Modal ====================
 let editOrderKey     = null;
-let editOrderBatches = null; // deep copy ที่ user กำลังแก้
+let editOrderBatches = null;
 
 const editOrderModal  = document.getElementById('editOrderModal');
 const editOrderDesc   = document.getElementById('editOrderDesc');
@@ -698,12 +608,12 @@ const editOrderError  = document.getElementById('editOrderError');
 const editOrderCancel = document.getElementById('editOrderCancel');
 const editOrderSave   = document.getElementById('editOrderSave');
 
-function openEditOrderModal(firebaseKey, order) {
-  editOrderKey     = firebaseKey;
+function openEditOrderModal(orderId, order) {
+  editOrderKey     = orderId;
   editOrderBatches = JSON.parse(JSON.stringify(
     order.batches || [order.items || []]
   ));
-  const label = `ออเดอร์ #${order.orderNumber} — โต๊ะ ${order.table || '-'}`;
+  const label = `ออเดอร์ #${order.order_num || order.orderNumber} — โต๊ะ ${order.table_num || order.table || '-'}`;
   editOrderDesc.textContent = label;
   const editAddItemDesc = document.getElementById('editAddItemDesc');
   if (editAddItemDesc) editAddItemDesc.textContent = label;
@@ -775,18 +685,15 @@ function renderEditOrderBatches() {
       </div>`;
   }).join('');
 
-  // grand total
   editOrderTotEl.innerHTML =
     `<span>รวมทั้งหมด</span><span class="edit-total-amt">${formatMoney(calcEditTotal())}</span>`;
 
-  // bind buttons
   editBatchesEl.querySelectorAll('.edit-qty-dec').forEach(btn => {
     btn.addEventListener('click', () => {
       const b = +btn.dataset.batch, i = +btn.dataset.item;
       if (editOrderBatches[b][i].qty > 1) {
         editOrderBatches[b][i].qty -= 1;
       } else {
-        // qty เป็น 0 → ลบออก
         editOrderBatches[b].splice(i, 1);
       }
       renderEditOrderBatches();
@@ -812,7 +719,6 @@ function renderEditOrderBatches() {
 editOrderSave?.addEventListener('click', async () => {
   if (!editOrderKey) return;
 
-  // ตรวจ: ต้องมีอย่างน้อย 1 รายการ
   const totalItems = editOrderBatches.flat().length;
   if (totalItems === 0) {
     editOrderError.textContent = '⚠️ ต้องมีอย่างน้อย 1 รายการ — ใช้ปุ่ม "ลบออเดอร์" แทน';
@@ -825,11 +731,12 @@ editOrderSave?.addEventListener('click', async () => {
 
   try {
     const newTotal = calcEditTotal();
-    await update(ref(db, `orders/${editOrderKey}`), {
+    await api.updateOrder(editOrderKey, {
       batches: editOrderBatches,
       total:   newTotal,
     });
     closeEditOrderModal();
+    _loadOrders();
   } catch (err) {
     console.error('editOrderSave error:', err);
     editOrderError.textContent = '❌ บันทึกไม่สำเร็จ: ' + err.message;
@@ -845,19 +752,15 @@ editOrderModal?.addEventListener('click', (e) => { if (e.target === editOrderMod
 document.getElementById('editOpenAddView')?.addEventListener('click', () => showEditView('add'));
 document.getElementById('editBackToOrder')?.addEventListener('click', () => showEditView('order'));
 
-// ──────────────────────────────────────────────────────────────────────────────
-
-
 // ==================== Render Summary ====================
 function renderDailySummary() {
-  const paidToday    = allOrders.filter((o) => o.status === 'paid' && isToday(o.date));
+  const paidToday    = allOrders.filter((o) => o.status === 'paid' && isToday(o.created_at || o.date));
   const pendingCount = allOrders.filter((o) => o.status === 'pending').length;
   const cookingCount = allOrders.filter((o) => o.status === 'cooking').length;
 
   todayOrderCount.textContent = paidToday.length;
   todayTotal.textContent      = formatMoney(paidToday.reduce((sum, o) => sum + o.total, 0));
 
-  // ── Feature #5: Live status chips ──
   let liveChips = document.getElementById('liveSummaryChips');
   if (!liveChips) {
     liveChips = document.createElement('div');
@@ -873,11 +776,10 @@ function renderDailySummary() {
   liveChips.innerHTML = chips.join('');
 }
 
-// ==================== Render Orders (with batch display) ====================
+// ==================== Render Orders ====================
 function getTakeawayIdsAdmin() { return getTakeawaySlots(); }
 
 function renderOrders() {
-  // ── Feature #4: inject filter bar (ครั้งแรก) ──
   if (!document.getElementById('tableFilterBar')) {
     const bar = document.createElement('div');
     bar.id = 'tableFilterBar';
@@ -902,9 +804,12 @@ function renderOrders() {
     });
   }
 
-  const baseOrders = allOrders.filter(o => !getTakeawayIdsAdmin().includes(String(o.table)) && !o.takeaway);
+  const baseOrders = allOrders.filter(o => {
+    const tbl = String(o.table_num || o.table || '');
+    return !getTakeawayIdsAdmin().includes(tbl) && !o.takeaway;
+  });
   const nonTaOrders = tableFilter
-    ? baseOrders.filter(o => String(o.table).includes(tableFilter))
+    ? baseOrders.filter(o => String(o.table_num || o.table).includes(tableFilter))
     : baseOrders;
 
   if (nonTaOrders.length === 0) {
@@ -927,21 +832,24 @@ function renderOrders() {
   ordersList.innerHTML = nonTaOrders.map((order) => {
     const s = order.status || 'pending';
     const { label: statusLabel, cls: statusCls } = statusMap[s] || statusMap.pending;
-    const fromQR = order.source === 'qr';
+    const fromQR   = order.source === 'qr';
+    const tableNum = order.table_num || order.table;
+    const orderNum = order.order_num || order.orderNumber;
+    const dateStr  = order.created_at || order.date;
+    const orderId  = order.id || order.firebaseKey;
 
     let actionBtns = '';
     if (s === 'pending') {
-      actionBtns = `<button type="button" class="btn-cooking" data-key="${order.firebaseKey}">👨‍🍳 รับออเดอร์</button>`;
+      actionBtns = `<button type="button" class="btn-cooking" data-key="${orderId}">👨‍🍳 รับออเดอร์</button>`;
     } else if (s === 'cooking') {
-      actionBtns = `<button type="button" class="btn-served" data-key="${order.firebaseKey}">🍽 เสิร์ฟแล้ว</button>`;
+      actionBtns = `<button type="button" class="btn-served" data-key="${orderId}">🍽 เสิร์ฟแล้ว</button>`;
     } else if (s === 'served') {
-      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button><button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
+      actionBtns = `<button type="button" class="btn-paid" data-key="${orderId}">✅ จ่ายแล้ว</button><button type="button" class="btn-print-receipt" data-key="${orderId}">🖨 ปริ้น</button>`;
     } else if (s === 'paid') {
-      actionBtns = `<button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
+      actionBtns = `<button type="button" class="btn-print-receipt" data-key="${orderId}">🖨 ปริ้น</button>`;
     }
 
-    // ─── Render batches ───
-    const batches = order.batches || [order.items || []]; // รองรับ format เดิม
+    const batches = order.batches || [order.items || []];
     const batchesHtml = batches.map((batchItems, bIdx) => {
       const batchTotal = batchItems.reduce((s, i) => s + i.price * i.qty, 0);
       const batchLabel = batches.length > 1 ? `รอบที่ ${bIdx + 1}` : 'รายการ';
@@ -961,24 +869,24 @@ function renderOrders() {
     }).join('');
 
     return `
-      <article class="order-card order-card--${statusCls}" data-key="${order.firebaseKey}">
+      <article class="order-card order-card--${statusCls}" data-key="${orderId}">
         <div class="order-card-header">
           <div class="order-card-header-row">
             <h3 class="order-card-title">
-              ออเดอร์ #${escapeHtml(String(order.orderNumber))}
-              ${order.table ? `<span class="order-table-chip">โต๊ะ ${escapeHtml(String(order.table))}</span>` : ''}
+              ออเดอร์ #${escapeHtml(String(orderNum))}
+              ${tableNum ? `<span class="order-table-chip">โต๊ะ ${escapeHtml(String(tableNum))}</span>` : ''}
               ${batches.length > 1 ? `<span class="order-batch-chip">${batches.length} รอบ</span>` : ''}
               ${fromQR ? `<span class="order-qr-badge">📱 QR</span>` : ''}
-              ${order.paymentMethod ? `<span class="order-payment-badge">${{ cash:'💵 เงินสด', qr:'📱 QR', credit:'💳 บัตร', transfer:'🏦 โอน' }[order.paymentMethod] || order.paymentMethod}</span>` : ''}
+              ${order.payment ? `<span class="order-payment-badge">${{ cash:'💵 เงินสด', qr:'📱 QR', credit:'💳 บัตร', transfer:'🏦 โอน' }[order.payment] || order.payment}</span>` : ''}
             </h3>
             <span class="status-badge ${statusCls}">${statusLabel}</span>
           </div>
           <div class="order-card-header-row">
-            <span class="order-card-date">${formatDate(order.date)}</span>
+            <span class="order-card-date">${formatDate(dateStr)}</span>
             <div class="order-actions">
               ${actionBtns}
-              <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
-              <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
+              <button type="button" class="btn-edit-order" data-key="${orderId}">✏️ แก้ไข</button>
+              <button type="button" class="btn-delete" data-key="${orderId}" data-num="${escapeHtml(String(orderNum))}">ลบ</button>
             </div>
           </div>
         </div>
@@ -999,19 +907,17 @@ function renderOrders() {
     btn.addEventListener('click', () => markOrderAsServed(btn.dataset.key));
   });
   ordersList.querySelectorAll('.btn-paid').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      markOrderAsPaid(btn.dataset.key, null);
-    });
+    btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key, null));
   });
   ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
       if (order) openEditOrderModal(btn.dataset.key, order);
     });
   });
   ordersList.querySelectorAll('.btn-print-receipt').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
       if (order) printOrderReceipt(order);
     });
   });
@@ -1068,8 +974,6 @@ let qrInstances = {};
 function renderTakeawayQrPanel() {
   const container = document.getElementById('takeawayQrSlots');
   if (!container) return;
-
-  // ถ้า render แล้ว ไม่ต้องสร้าง UI ซ้ำ (update ทำผ่านปุ่ม)
   if (container.dataset.rendered === '1') return;
   container.dataset.rendered = '1';
 
@@ -1096,7 +1000,6 @@ function renderTakeawayQrPanel() {
 
   renderTaSlots();
 
-  // ปุ่ม − เพิ่ม/ลดจำนวน slot
   document.getElementById('taCountMinus').addEventListener('click', () => {
     const cur = getTaCount();
     if (cur <= TA_MIN_SLOTS) return;
@@ -1117,7 +1020,6 @@ function renderTakeawayQrPanel() {
     if (!val) return;
     localStorage.setItem(TA_STORAGE_KEY, val);
 
-    // อัปเดต QR แต่ละ slot ใน-place (ไม่ rebuild DOM ทั้งหมด)
     getTakeawaySlots().forEach((slotId) => {
       const url   = getTakeawayUrl(slotId);
       const boxEl = document.getElementById(`taQrBox_${slotId}`);
@@ -1125,11 +1027,9 @@ function renderTakeawayQrPanel() {
       const copyBtn = boxEl?.closest('.ta-qr-card')?.querySelector('.ta-copy-btn');
       const printBtn = boxEl?.closest('.ta-qr-card')?.querySelector('.ta-print-btn');
 
-      // อัปเดต URL text
       if (urlEl) urlEl.textContent = url;
       if (copyBtn) copyBtn.dataset.url = url;
 
-      // ล้าง QR เก่าแล้วสร้างใหม่
       if (boxEl) {
         boxEl.innerHTML = '';
         try {
@@ -1146,9 +1046,7 @@ function renderTakeawayQrPanel() {
         }
       }
 
-      // อัปเดต print button ด้วย URL ใหม่
       if (printBtn) {
-        // rebind print event: clone & replace
         const newPrintBtn = printBtn.cloneNode(true);
         printBtn.parentNode.replaceChild(newPrintBtn, printBtn);
         newPrintBtn.addEventListener('click', () => {
@@ -1158,7 +1056,6 @@ function renderTakeawayQrPanel() {
         });
       }
 
-      // rebind copy event
       if (copyBtn) {
         const newCopyBtn = copyBtn.cloneNode(true);
         copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
@@ -1167,7 +1064,6 @@ function renderTakeawayQrPanel() {
       }
     });
 
-    // flash ปุ่มให้รู้ว่า update แล้ว
     const applyBtn = document.getElementById('taApplyBtn');
     const orig = applyBtn.textContent;
     applyBtn.textContent = '✅ อัปเดตแล้ว!';
@@ -1187,7 +1083,7 @@ function _copyUrl(btn) {
 
 function _openPrintWindow(url, idx) {
   const win = window.open('', '_blank', 'width=400,height=580');
-  const safeUrl = JSON.stringify(url); // ป้องกัน quote injection ใน inline script
+  const safeUrl = JSON.stringify(url);
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
     <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@600;700&display=swap" rel="stylesheet">
     <style>
@@ -1236,7 +1132,6 @@ function renderTaSlots() {
     `;
     grid.appendChild(card);
 
-    // Generate QR
     try {
       const qr = new QRCode(document.getElementById(boxId), {
         text:         url,
@@ -1253,12 +1148,9 @@ function renderTaSlots() {
     }
   });
 
-  // bind copy buttons
   grid.querySelectorAll('.ta-copy-btn').forEach(btn => {
     btn.addEventListener('click', () => _copyUrl(btn));
   });
-
-  // bind print buttons
   grid.querySelectorAll('.ta-print-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const url = getTakeawayUrl(btn.dataset.slot);
@@ -1273,7 +1165,10 @@ function renderTakeawayOrders() {
   const taEmpty = document.getElementById('takeawayOrdersEmpty');
   if (!taList || !taEmpty) return;
 
-  const taOrders = allOrders.filter(o => getTakeawaySlots().includes(String(o.table)) || o.takeaway === true);
+  const taOrders = allOrders.filter(o => {
+    const tbl = String(o.table_num || o.table || '');
+    return getTakeawaySlots().includes(tbl) || o.takeaway === true || o.is_takeaway;
+  });
 
   if (taOrders.length === 0) {
     taList.innerHTML = '';
@@ -1295,15 +1190,20 @@ function renderTakeawayOrders() {
   taList.innerHTML = taOrders.map((order) => {
     const s = order.status || 'pending';
     const { label: statusLabel, cls: statusCls } = statusMap[s] || statusMap.pending;
+    const tableNum = order.table_num || order.table;
+    const orderNum = order.order_num || order.orderNumber;
+    const dateStr  = order.created_at || order.date;
+    const orderId  = order.id || order.firebaseKey;
+
     let actionBtns = '';
     if (s === 'pending') {
-      actionBtns = `<button type="button" class="btn-cooking" data-key="${order.firebaseKey}">👨‍🍳 รับออเดอร์</button>`;
+      actionBtns = `<button type="button" class="btn-cooking" data-key="${orderId}">👨‍🍳 รับออเดอร์</button>`;
     } else if (s === 'cooking') {
-      actionBtns = `<button type="button" class="btn-served" data-key="${order.firebaseKey}">📦 พร้อมส่ง</button>`;
+      actionBtns = `<button type="button" class="btn-served" data-key="${orderId}">📦 พร้อมส่ง</button>`;
     } else if (s === 'served') {
-      actionBtns = `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">✅ จ่ายแล้ว</button><button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
+      actionBtns = `<button type="button" class="btn-paid" data-key="${orderId}">✅ จ่ายแล้ว</button><button type="button" class="btn-print-receipt" data-key="${orderId}">🖨 ปริ้น</button>`;
     } else if (s === 'paid') {
-      actionBtns = `<button type="button" class="btn-print-receipt" data-key="${order.firebaseKey}">🖨 ปริ้น</button>`;
+      actionBtns = `<button type="button" class="btn-print-receipt" data-key="${orderId}">🖨 ปริ้น</button>`;
     }
 
     const batches = order.batches || [order.items || []];
@@ -1324,25 +1224,25 @@ function renderTakeawayOrders() {
         </div>`;
     }).join('');
 
-    const slotNum = String(order.table).replace('takeaway', '') || '-';
+    const slotNum = String(tableNum).replace('takeaway', '') || '-';
 
     return `
-      <article class="order-card order-card--${statusCls} order-card--takeaway" data-key="${order.firebaseKey}">
+      <article class="order-card order-card--${statusCls} order-card--takeaway" data-key="${orderId}">
         <div class="order-card-header">
           <div class="order-card-header-row">
             <h3 class="order-card-title">
-              ออเดอร์ #${escapeHtml(String(order.orderNumber))}
+              ออเดอร์ #${escapeHtml(String(orderNum))}
               <span class="order-table-chip order-table-chip--takeaway">📦 กลับบ้าน (ลิงก์ ${escapeHtml(slotNum)})</span>
               ${batches.length > 1 ? `<span class="order-batch-chip">${batches.length} รอบ</span>` : ''}
             </h3>
             <span class="status-badge ${statusCls}">${statusLabel}</span>
           </div>
           <div class="order-card-header-row">
-            <span class="order-card-date">${formatDate(order.date)}</span>
+            <span class="order-card-date">${formatDate(dateStr)}</span>
             <div class="order-actions">
               ${actionBtns}
-              <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
-              <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
+              <button type="button" class="btn-edit-order" data-key="${orderId}">✏️ แก้ไข</button>
+              <button type="button" class="btn-delete" data-key="${orderId}" data-num="${escapeHtml(String(orderNum))}">ลบ</button>
             </div>
           </div>
         </div>
@@ -1363,18 +1263,16 @@ function renderTakeawayOrders() {
     btn.addEventListener('click', () => markOrderAsServed(btn.dataset.key));
   });
   taList.querySelectorAll('.btn-paid').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      markOrderAsPaid(btn.dataset.key, null);
-    });
+    btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key, null));
   });
   taList.querySelectorAll('.btn-print-receipt').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+      const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
       if (order) printOrderReceipt(order);
     });
   });
   taList.querySelectorAll('.btn-edit-order').forEach((btn) => {
-    const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
+    const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
     btn.addEventListener('click', () => { if (order) openEditOrderModal(btn.dataset.key, order); });
   });
   taList.querySelectorAll('.btn-delete').forEach((btn) => {
@@ -1385,7 +1283,6 @@ function renderTakeawayOrders() {
 // ==================== Auth Events ====================
 function checkAuth() {
   if (isLoggedIn()) {
-    // sync sessionStorage ด้วย เผื่อ page reload ล้าง session
     sessionStorage.setItem(AUTH_KEY, 'true');
     showScreen(dashboardScreen);
     startRealtimeListener();
@@ -1418,8 +1315,9 @@ loginBtn.addEventListener('click', async () => {
   loginBtn.textContent = 'กำลังตรวจสอบ...';
 
   try {
-    const hash = await hashPassword(pass);
-    if (user === ADMIN_USER && hash === ADMIN_PASS_HASH) {
+    // ส่ง username:password ไปตรวจกับ Worker ผ่าน api-client.js
+    const ok = await adminLogin(user, pass);
+    if (ok) {
       resetAttempts();
       setLoggedIn(true);
       unlockIOSSpeech();
@@ -1452,13 +1350,12 @@ loginBtn.addEventListener('click', async () => {
 });
 
 logoutBtn.addEventListener('click', () => {
+  adminLogout();
   setLoggedIn(false);
-  if (unsubscribeListener) { unsubscribeListener(); unsubscribeListener = null; }
-  if (callStaffUnsubscribe) { callStaffUnsubscribe(); callStaffUnsubscribe = null; }
-  if (_menuUnsubscribe) { _menuUnsubscribe(); _menuUnsubscribe = null; }
+  if (_wsConn) { _wsConn.close(); _wsConn = null; }
   allOrders = [];
-  knownOrderKeys = new Set();
-  knownCallKeys  = new Set();
+  knownOrderIds = new Set();
+  knownCallIds  = new Set();
   showScreen(loginScreen);
   usernameInput.value    = '';
   passwordInput.value    = '';
@@ -1473,7 +1370,6 @@ document.querySelectorAll('.tab-btn').forEach((tab) => {
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
 
-// ── update label + icon บนปุ่ม ──
 function updateSoundBtnLabel() {
   if (!soundToggleBtn) return;
   if (!soundEnabled) {
@@ -1488,7 +1384,6 @@ function updateSoundBtnLabel() {
   }
 }
 
-// ── ตั้งค่า mode ──
 function applySoundMode(mode) {
   soundMode = mode;
   localStorage.setItem('soundMode', mode);
@@ -1500,9 +1395,8 @@ function applySoundMode(mode) {
 applySoundMode(soundMode);
 updateSoundBtnLabel();
 
-// ── Long press + right-click logic ──
 let _longPressTimer = null;
-let _didOpenDropdown = false;  // flag: long-press เปิด dropdown แล้ว ห้าม toggle
+let _didOpenDropdown = false;
 const LONG_PRESS_MS = 400;
 
 function openSoundDropdown(e) {
@@ -1511,21 +1405,16 @@ function openSoundDropdown(e) {
   _didOpenDropdown = true;
   soundControl?.classList.add('open');
 
-  // คำนวณตำแหน่งจาก button rect เพื่อป้องกัน overflow บนมือถือ
   const dropdown = document.getElementById('soundDropdown');
   const btn = soundToggleBtn;
   if (!dropdown || !btn) return;
   const rect = btn.getBoundingClientRect();
   const dropW = 145;
   const gap = 6;
-
-  // วางใต้ปุ่ม
   let top = rect.bottom + gap;
-  // พยายามชิดขวาของปุ่ม แต่ถ้าล้นขวาหน้าจอให้ชิดซ้ายแทน
   let left = rect.right - dropW;
-  if (left < 8) left = rect.left; // ถ้าล้นซ้ายให้ชิดซ้ายของปุ่ม
+  if (left < 8) left = rect.left;
   if (left + dropW > window.innerWidth - 8) left = window.innerWidth - dropW - 8;
-
   dropdown.style.top  = `${top}px`;
   dropdown.style.left = `${left}px`;
 }
@@ -1535,15 +1424,13 @@ function closeSoundDropdown() {
 }
 
 if (soundToggleBtn) {
-  // ── คลิกขวา → เปิด dropdown ──
   soundToggleBtn.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     openSoundDropdown(e);
   });
 
-  // ── mouse: กดค้าง → เปิด dropdown, กดสั้น → toggle ──
   soundToggleBtn.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return; // เฉพาะคลิกซ้าย
+    if (e.button !== 0) return;
     _didOpenDropdown = false;
     _longPressTimer = setTimeout(() => {
       _longPressTimer = null;
@@ -1556,9 +1443,8 @@ if (soundToggleBtn) {
     const wasShortClick = !!_longPressTimer;
     clearTimeout(_longPressTimer);
     _longPressTimer = null;
-    if (_didOpenDropdown) return; // long-press เปิดแล้ว → ไม่ toggle
+    if (_didOpenDropdown) return;
     if (!wasShortClick) return;
-    // short click → toggle on/off
     unlockIOSSpeech();
     soundEnabled = !soundEnabled;
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
@@ -1572,10 +1458,8 @@ if (soundToggleBtn) {
   soundToggleBtn.addEventListener('mouseleave', () => {
     clearTimeout(_longPressTimer);
     _longPressTimer = null;
-    // ไม่ปิด dropdown เมื่อเมาส์ออก — ให้ผู้ใช้เลือกได้
   });
 
-  // ── touch: กดค้าง → เปิด dropdown, tap → toggle ──
   soundToggleBtn.addEventListener('touchstart', (e) => {
     _didOpenDropdown = false;
     _longPressTimer = setTimeout(() => {
@@ -1606,7 +1490,6 @@ if (soundToggleBtn) {
   });
 }
 
-// ── เลือก mode จาก dropdown ──
 document.querySelectorAll('.sound-dropdown-item').forEach(item => {
   item.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1620,7 +1503,6 @@ document.querySelectorAll('.sound-dropdown-item').forEach(item => {
   });
 });
 
-// ── คลิกนอก → ปิด dropdown (แต่ไม่ปิดถ้าคลิกที่ปุ่มหรือ dropdown เอง) ──
 document.addEventListener('click', (e) => {
   if (!soundControl?.contains(e.target)) closeSoundDropdown();
 });
@@ -1629,24 +1511,23 @@ document.addEventListener('click', (e) => {
 checkAuth();
 initBillFeature({
   getOrders:        () => allOrders,
-  db,
   markOrderAsPaid,
   printOrderReceipt,
   formatMoney,
   escapeHtml,
-  firebaseUtils:    { ref, update, remove, get, set, push },
+  // ส่ง api แทน firebaseUtils
+  apiUtils: { api },
 });
+
 // ==================== Print Receipt (admin) ====================
-/**
- * เปิดหน้าต่างใหม่ พิมพ์ใบเสร็จ 58mm พร้อม QR ธนาคาร
- * วางไฟล์ qr-bank.png ในโฟลเดอร์เดียวกับ admin.html
- */
 function printOrderReceipt(order) {
   const batches  = order.batches || [order.items || []];
-  const dateStr  = new Date(order.date).toLocaleString('th-TH', {
+  const dateStr  = new Date(order.created_at || order.date).toLocaleString('th-TH', {
     day: 'numeric', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+  const tableNum = order.table_num || order.table;
+  const orderNum = order.order_num || order.orderNumber;
 
   const itemsHtml = batches.map((batchItems, bIdx) => {
     const rows = batchItems.map(i => {
@@ -1672,125 +1553,67 @@ function printOrderReceipt(order) {
   win.document.write(`<!DOCTYPE html>
 <html lang="th"><head>
 <meta charset="UTF-8">
-<title>ใบเสร็จ #${escapeHtml(String(order.orderNumber))}</title>
+<title>ใบเสร็จ #${escapeHtml(String(orderNum))}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  @page {
-    size: 58mm auto;
-    margin: 1mm 4mm 1mm 3mm;
-  }
+  @page { size: 58mm auto; margin: 1mm 4mm 1mm 3mm; }
   *{ box-sizing:border-box; margin:0; padding:0; }
-  html{
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
+  html{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body{
-    /* Courier New — bitmap monospace คมที่สุดบน thermal */
     font-family: 'Courier New', Courier, monospace;
-    font-size: 9pt;
-    font-weight: normal;
-    color: #000 !important;
-    background: #fff;
-    width: 51mm;
-    /* ปิด anti-aliasing ทุกรูปแบบ */
-    -webkit-font-smoothing: none;
-    -moz-osx-font-smoothing: unset;
-    font-smooth: never;
-    /* render เส้นให้คมที่สุด */
-    text-rendering: optimizeSpeed;
-    /* บังคับ black เต็ม 100% */
-    -webkit-text-stroke: 0px;
+    font-size: 9pt; font-weight: normal; color: #000 !important;
+    background: #fff; width: 51mm;
+    -webkit-font-smoothing: none; -moz-osx-font-smoothing: unset;
+    font-smooth: never; text-rendering: optimizeSpeed;
   }
-  /* บังคับทุก element ให้สี #000 จริง ไม่ใช่ gray */
-  *, *::before, *::after {
-    color: #000 !important;
-    border-color: #000 !important;
-  }
+  *, *::before, *::after { color: #000 !important; border-color: #000 !important; }
   .r-header{ text-align:center; margin-bottom:3pt; }
   .r-shop{ font-size:11.5pt; font-weight:bold; margin-bottom:1pt; }
   .r-sub{ font-size:8pt; }
-  hr.r-div{
-    border:none;
-    /* ใช้ border-top สีดำแท้ ไม่ใช่ gray */
-    border-top: 1px solid #000 !important;
-    margin:3pt 0;
-  }
+  hr.r-div{ border:none; border-top: 1px solid #000 !important; margin:3pt 0; }
   .r-meta{ font-size:8.5pt; }
   .r-meta-row{ display:flex; justify-content:space-between; padding:1pt 0; }
   table{ width:100%; border-collapse:collapse; font-size:8.5pt; }
   .col-name{ width:65%; padding:1.5pt 0; vertical-align:top; word-break:break-word; }
   .col-price{ width:35%; text-align:right; padding:1.5pt 0; vertical-align:top; white-space:nowrap; }
   .batch-sep{ text-align:center; font-size:7.5pt; padding:2pt 0 1pt; }
-  .r-total{
-    display:flex; justify-content:space-between;
-    font-size:11pt; font-weight:bold;
-    margin:3pt 0 2pt; padding-top:3pt;
-    border-top: 1.5px solid #000 !important;
-  }
+  .r-total{ display:flex; justify-content:space-between; font-size:11pt; font-weight:bold; margin:3pt 0 2pt; padding-top:3pt; border-top: 1.5px solid #000 !important; }
   .r-qr-section{ text-align:center; margin:5pt 0 2pt; }
   .r-qr-label{ font-size:8.5pt; font-weight:bold; margin-bottom:3pt; }
-  .r-qr-img{
-    /* QR: render แบบ pixel-perfect ห้าม browser blur เด็ดขาด */
-    width:40mm; height:40mm;
-    object-fit:contain;
-    display:block; margin:0 auto;
-    image-rendering: pixelated !important;
-    image-rendering: -moz-crisp-edges !important;
-    image-rendering: crisp-edges !important;
-    /* ป้องกัน Edge ลด opacity */
-    opacity: 1 !important;
-    filter: none !important;
-    /* scale up จาก source ให้ชัด ถ้า source QR เล็กกว่า 40mm */
-    transform: translateZ(0);
-  }
+  .r-qr-img{ width:40mm; height:40mm; object-fit:contain; display:block; margin:0 auto; image-rendering: pixelated !important; image-rendering: -moz-crisp-edges !important; image-rendering: crisp-edges !important; opacity: 1 !important; filter: none !important; transform: translateZ(0); }
   .r-qr-hint{ font-size:8pt; margin-top:3pt; }
   .r-footer{ text-align:center; font-size:8pt; margin-top:3pt; }
   .no-print{ display:flex; justify-content:center; gap:8px; margin-top:12pt; }
-  .no-print button{
-    font-family:'Sarabun',sans-serif; font-size:10pt;
-    padding:6px 18px; border-radius:6px; cursor:pointer;
-    border:1.5px solid #333 !important; background:#fff; color:#000 !important;
-  }
+  .no-print button{ font-family:'Sarabun',sans-serif; font-size:10pt; padding:6px 18px; border-radius:6px; cursor:pointer; border:1.5px solid #333 !important; background:#fff; color:#000 !important; }
   .no-print .btn-doit{ background:#3d2b1f !important; color:#fff !important; border-color:#3d2b1f !important; }
   @media print{ .no-print{ display:none !important; } }
 </style>
 </head><body>
-
 <div class="r-header">
   <div class="r-shop">&#127835; ข้าวซอย 90</div>
   <div class="r-sub">ใบเสร็จรับเงิน</div>
 </div>
-
 <hr class="r-div">
-
 <div class="r-meta">
-  <div class="r-meta-row"><span class="r-meta-label">ออเดอร์</span><span><strong>#${escapeHtml(String(order.orderNumber))}</strong></span></div>
-  <div class="r-meta-row"><span class="r-meta-label">โต๊ะ</span><span>${escapeHtml(String(order.table || '-'))}</span></div>
+  <div class="r-meta-row"><span class="r-meta-label">ออเดอร์</span><span><strong>#${escapeHtml(String(orderNum))}</strong></span></div>
+  <div class="r-meta-row"><span class="r-meta-label">โต๊ะ</span><span>${escapeHtml(String(tableNum || '-'))}</span></div>
   <div class="r-meta-row"><span class="r-meta-label">วันที่</span><span>${escapeHtml(dateStr)}</span></div>
 </div>
-
 <hr class="r-div">
-
 <table><tbody>${itemsHtml}</tbody></table>
-
 <hr class="r-div">
-
 <div class="r-total">
   <span>รวมทั้งหมด</span>
   <span>&#3647;${totalStr}</span>
 </div>
-
 <div class="r-qr-section">
   <div class="r-qr-label">&#128179; สแกนจ่าย K Bank</div>
   <img class="r-qr-img" src="${qrSrc}" alt="QR ธนาคาร"
     onerror="this.outerHTML='<div style=\\'font-size:8pt;color:#c00;margin:4pt 0;text-align:center\\'>&#9888; ไม่พบไฟล์ qr-bank.png</div>'">
   <div class="r-qr-hint">ขอบคุณที่ใช้บริการ &#128591;</div>
 </div>
-
 <hr class="r-div">
-
 <div class="r-footer">ข้าวซอย 90</div>
-
 <div class="no-print">
   <button class="btn-doit" onclick="window.print()">&#128424; พิมพ์</button>
   <button onclick="window.close()">&#10005; ปิด</button>

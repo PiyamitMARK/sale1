@@ -1,17 +1,16 @@
 /**
  * ข้าวซอย 90 — Menu Manager (Enhanced)
- * ✅ อัปโหลดรูปจากเครื่อง → Firebase Storage
+ * ✅ อัปโหลดรูปจากเครื่อง → รองรับ URL โดยตรง (Firebase Storage ถูกแทนที่)
  * ✅ Drag & drop เรียงลำดับ
  * ✅ แก้ไข options/topping
  * ✅ Duplicate เมนู
  * ✅ ราคาพิเศษ/โปรโมชั่น
  * ✅ Preview ก่อนบันทึก
+ *
+ * ใช้ api-client.js แทน Firebase SDK
  */
 
-import { getDatabase, ref, set, update, remove, get, onValue }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+import { api, ws } from './api-client.js';
 
 // ==================== Default Menu (seed data) ====================
 const IMG = (n) => 'images/img' + n + '.png';
@@ -134,63 +133,92 @@ export const PRODUCT_TYPES = [
   { value: 'simple',      label: '🍽 เมนูเดี่ยว' },
 ];
 
-// ==================== Firebase helpers ====================
+// ==================== API helpers (แทน Firebase) ====================
 
-export async function loadMenuFromFirebase(db) {
-  const snap = await get(ref(db, 'menu'));
-  if (!snap.exists()) {
-    await seedDefaultMenu(db);
-    return buildProductsFromDefault();
-  }
-  return parseMenuSnapshot(snap.val());
+/**
+ * Sync raw menu object → LocalStorage 'ks90-menu'
+ * เพื่อให้ customer.js (LS fallback) อ่านได้
+ */
+function _syncMenuToLS(rawMenuObj) {
+  try { localStorage.setItem('ks90-menu', JSON.stringify(rawMenuObj)); } catch (_) {}
 }
 
-export function subscribeMenu(db, callback) {
-  return onValue(ref(db, 'menu'), (snap) => {
-    if (!snap.exists()) {
+function _syncCatsToLS(catsObj) {
+  try { localStorage.setItem('ks90-categories', JSON.stringify(catsObj)); } catch (_) {}
+}
+
+/**
+ * โหลดเมนูจาก Worker API
+ * คืน products format (เหมือนเดิม)
+ */
+export async function loadMenuFromFirebase(_db) {
+  const raw = await api.getMenu(); // { [id]: menuItem }
+  if (!raw || Object.keys(raw).length === 0) return buildProductsFromDefault();
+  _syncMenuToLS(raw);
+  return parseMenuSnapshot(raw);
+}
+
+/**
+ * Subscribe เมนู realtime ผ่าน WebSocket
+ * ส่งคืน unsubscribe function (เหมือน onValue เดิม)
+ */
+export function subscribeMenu(_db, callback) {
+  // โหลดครั้งแรกทันที
+  api.getMenu().then(raw => {
+    if (!raw || Object.keys(raw).length === 0) {
       callback(buildProductsFromDefault());
       return;
     }
-    const raw = snap.val();
-    _syncMenuToLS(raw);          // ← sync ลง LocalStorage ทุกครั้ง
+    _syncMenuToLS(raw);
     callback(parseMenuSnapshot(raw));
+  }).catch(() => callback(buildProductsFromDefault()));
+
+  // subscribe realtime updates จาก WebSocket
+  const socket = ws.connect('admin', (msg) => {
+    if (msg.type === 'menu_updated') {
+      api.getMenu().then(raw => {
+        if (!raw) return;
+        _syncMenuToLS(raw);
+        callback(parseMenuSnapshot(raw));
+      }).catch(() => {});
+    }
   });
+
+  // คืน unsubscribe function (interface เดิม)
+  return () => socket.close();
 }
 
 /**
- * Sync raw Firebase menu object → LocalStorage 'ks90-menu'
- * เพื่อให้ app.js / customer.js (fallback) และ backoffice.html อ่านได้
+ * บันทึก defaultCat ลง Worker meta
  */
-function _syncMenuToLS(rawMenuObj) {
-  try {
-    localStorage.setItem('ks90-menu', JSON.stringify(rawMenuObj));
-    // แจ้ง tab อื่น (backoffice / POS) ด้วย storage event
-    // (storage event ไม่ fire ในแท็บเดียวกัน ซึ่งโอเคอยู่แล้ว)
-  } catch (_) {}
+export async function saveDefaultCat(_db, catId) {
+  await api.updateMeta({ defaultCat: catId });
 }
 
 /**
- * Sync categories จาก Firebase → LocalStorage 'ks90-categories'
+ * Subscribe defaultCat — โหลดครั้งเดียวจาก meta (ไม่ realtime เพราะเปลี่ยนน้อยมาก)
+ * ถ้า meta เปลี่ยน → Worker จะ broadcast ผ่าน ws ซึ่ง admin จะ reload เองอยู่แล้ว
  */
-function _syncCatsToLS(catsObj) {
-  try {
-    localStorage.setItem('ks90-categories', JSON.stringify(catsObj));
-  } catch (_) {}
+export function subscribeDefaultCat(_db, cb) {
+  // ดึงจาก LS cache ก่อน (เร็ว, ไม่ block render)
+  const lsMeta = (() => {
+    try { return JSON.parse(localStorage.getItem('ks90-meta') || '{}'); } catch { return {}; }
+  })();
+  if (lsMeta.defaultCat) cb(lsMeta.defaultCat);
+
+  // ดึงจาก API (background)
+  api.getMeta().then(meta => {
+    if (!meta) return;
+    try { localStorage.setItem('ks90-meta', JSON.stringify(meta)); } catch (_) {}
+    cb(meta.defaultCat || null);
+  }).catch(() => {});
 }
 
-/** บันทึก defaultCat ลง Firebase meta/defaultCat */
-export async function saveDefaultCat(db, catId) {
-  await update(ref(db, 'meta'), { defaultCat: catId });
-}
-
-/** Subscribe defaultCat จาก Firebase — cb(catId: string|null) */
-export function subscribeDefaultCat(db, cb) {
-  onValue(ref(db, 'meta/defaultCat'), snap => {
-    cb(snap.exists() ? snap.val() : null);
-  });
-}
-
-export function subscribeCategoriesAndSync(db, cb) {
+/**
+ * Subscribe categories + sort ผ่าน API (แทน Firebase onValue)
+ * คืน unsubscribe function
+ */
+export function subscribeCategoriesAndSync(_db, cb) {
   let _lastEmitted = null;
 
   function _buildAndEmit(rawCats, sortMap) {
@@ -198,44 +226,39 @@ export function subscribeCategoriesAndSync(db, cb) {
     entries.sort(([a], [b]) => ((sortMap || {})[a] ?? 9999) - ((sortMap || {})[b] ?? 9999));
     const sorted = Object.fromEntries(entries);
     const key = JSON.stringify(sorted);
-    if (key === _lastEmitted) return; // dedup: ไม่ re-render ถ้าข้อมูลไม่เปลี่ยน
+    if (key === _lastEmitted) return;
     _lastEmitted = key;
     _syncCatsToLS(sorted);
     cb(sorted);
   }
 
-  // โหลดครั้งแรกด้วย get() ก่อนเสมอ (เร็ว + ลด download)
-  Promise.all([
-    get(ref(db, 'categories')),
-    get(ref(db, 'categories_sort')),
-  ]).then(([catSnap, sortSnap]) => {
-    const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
-    const sortMap = sortSnap.exists() ? sortSnap.val() : {};
+  // LS cache → render ทันที
+  const lsCats = (() => {
+    try { return JSON.parse(localStorage.getItem('ks90-categories') || ''); } catch { return null; }
+  })();
+  if (lsCats) _buildAndEmit(lsCats, {});
+
+  // ดึงข้อมูลจาก meta (categories + categories_sort เก็บใน meta)
+  api.getMeta().then(meta => {
+    if (!meta) return;
+    const rawCats = meta.categories || { ...CATEGORY_LABELS };
+    const sortMap = meta.categoriesSort || {};
     _buildAndEmit(rawCats, sortMap);
-
-    // ถ้ามี LS cache อยู่แล้ว และ categories ไม่เปลี่ยน → ไม่ต้อง subscribe realtime
-    // เพราะ categories เปลี่ยนน้อยมาก (แก้ทาง backoffice เท่านั้น)
-    const lsCats = localStorage.getItem('ks90-categories');
-    if (lsCats && JSON.stringify(rawCats) === JSON.stringify(JSON.parse(lsCats || '{}'))) {
-      return; // ไม่ subscribe realtime ถ้าข้อมูลเหมือนกัน
-    }
-
-    // subscribe เฉพาะเมื่อจำเป็น (categories ต่างจาก LS)
-    onValue(ref(db, 'categories'), catSnap2 => {
-      const rc = catSnap2.exists() ? catSnap2.val() : { ...CATEGORY_LABELS };
-      get(ref(db, 'categories_sort')).then(ss => {
-        _buildAndEmit(rc, ss.exists() ? ss.val() : {});
-      }).catch(() => _buildAndEmit(rc, {}));
-    });
   }).catch(() => {
-    // fallback: subscribe realtime
-    onValue(ref(db, 'categories'), catSnap => {
-      const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
-      get(ref(db, 'categories_sort')).then(sortSnap => {
-        _buildAndEmit(rawCats, sortSnap.exists() ? sortSnap.val() : {});
-      }).catch(() => _buildAndEmit(rawCats, {}));
-    });
+    if (!lsCats) _buildAndEmit({ ...CATEGORY_LABELS }, {});
   });
+
+  // subscribe realtime ผ่าน WebSocket — เมื่อ menu/meta อัปเดต
+  const socket = ws.connect('admin', (msg) => {
+    if (msg.type === 'meta_updated' || msg.type === 'categories_updated') {
+      api.getMeta().then(meta => {
+        if (!meta) return;
+        _buildAndEmit(meta.categories || { ...CATEGORY_LABELS }, meta.categoriesSort || {});
+      }).catch(() => {});
+    }
+  });
+
+  return () => socket.close();
 }
 
 function parseMenuSnapshot(data) {
@@ -293,7 +316,135 @@ function buildProductsFromDefault() {
   return result;
 }
 
-async function seedDefaultMenu(db) {
+// (seedDefaultMenu ย้ายเข้า _buildDefaultMenuRaw แล้ว)
+
+// ==================== Admin CRUD (ใช้ api-client แทน Firebase) ====================
+
+/**
+ * โหลดเมนูทั้งหมดในรูปแบบ raw { [id]: item } สำหรับ admin
+ */
+export async function loadAllMenuAdmin(_db) {
+  const raw = await api.getMenu();
+  if (!raw || Object.keys(raw).length === 0) {
+    // seed default แล้ว save ขึ้น Worker
+    const defaultRaw = _buildDefaultMenuRaw();
+    await api.putMenu(defaultRaw);
+    return defaultRaw;
+  }
+  return raw;
+}
+
+/**
+ * Subscribe เมนู admin realtime ผ่าน WebSocket
+ * คืน unsubscribe function
+ */
+export function subscribeAllMenuAdmin(_db, callback) {
+  // โหลดครั้งแรก
+  api.getMenu().then(raw => {
+    if (!raw || Object.keys(raw).length === 0) {
+      const defaultRaw = _buildDefaultMenuRaw();
+      api.putMenu(defaultRaw).then(() => callback(defaultRaw)).catch(() => callback(defaultRaw));
+    } else {
+      callback(raw);
+    }
+  }).catch(() => {});
+
+  // realtime ผ่าน WebSocket
+  const socket = ws.connect('admin', (msg) => {
+    if (msg.type === 'menu_updated') {
+      api.getMenu().then(raw => { if (raw) callback(raw); }).catch(() => {});
+    }
+  });
+
+  return () => socket.close();
+}
+
+/**
+ * บันทึก menu item เดี่ยว
+ * กลยุทธ์: GET เมนูทั้งหมด → แก้ item → PUT กลับขึ้น Worker
+ */
+export async function saveMenuItem(_db, item) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  raw[item.id] = item;
+  await api.putMenu(raw);
+  // sync LS ทันที
+  _syncMenuToLS(raw);
+}
+
+export async function toggleMenuItem(_db, id, enabled) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  if (raw[id]) raw[id].enabled = enabled;
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+export async function deleteMenuItem(_db, id) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  delete raw[id];
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+export async function updateMenuPrice(_db, id, price) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  if (raw[id]) raw[id].price = Number(price);
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+export async function updateMenuName(_db, id, name) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  if (raw[id]) raw[id].name = name;
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+export function generateMenuId(category) {
+  return category + '_' + Date.now().toString(36);
+}
+
+/** อัปเดต sortOrder หลาย items พร้อมกัน (สำหรับ drag & drop) */
+export async function updateSortOrders(_db, orderedIds) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  orderedIds.forEach((id, idx) => {
+    if (raw[id]) raw[id].sortOrder = idx;
+  });
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+/** Duplicate เมนู */
+export async function duplicateMenuItem(_db, item) {
+  const newId   = generateMenuId(item.category);
+  const newItem = {
+    ...JSON.parse(JSON.stringify(item)),
+    id:        newId,
+    name:      item.name + ' (สำเนา)',
+    sortOrder: (item.sortOrder ?? 999) + 0.5,
+    enabled:   false,
+  };
+  await saveMenuItem(_db, newItem);
+  return newId;
+}
+
+/** บันทึกโปรโมชั่น */
+export async function savePromo(_db, id, promo) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  if (raw[id]) raw[id].promo = promo;
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+/** บันทึก options/toppings */
+export async function saveMenuOptions(_db, id, options) {
+  const raw = await api.getMenu().catch(() => ({})) || {};
+  if (raw[id]) raw[id].options = options;
+  await api.putMenu(raw);
+  _syncMenuToLS(raw);
+}
+
+/** สร้าง raw menu object จาก DEFAULT_MENU สำหรับ seed */
+function _buildDefaultMenuRaw() {
   const writes = {};
   let sortOrder = 0;
   Object.entries(DEFAULT_MENU).forEach(([cat, items]) => {
@@ -310,151 +461,25 @@ async function seedDefaultMenu(db) {
       };
     });
   });
-  await set(ref(db, 'menu'), writes);
+  return writes;
 }
 
-// ==================== Admin CRUD ====================
-
-export async function loadAllMenuAdmin(db) {
-  const snap = await get(ref(db, 'menu'));
-  if (!snap.exists()) {
-    await seedDefaultMenu(db);
-    const snap2 = await get(ref(db, 'menu'));
-    return snap2.val() || {};
-  }
-  return snap.val();
-}
-
-export function subscribeAllMenuAdmin(db, callback) {
-  return onValue(ref(db, 'menu'), async (snap) => {
-    if (!snap.exists()) {
-      await seedDefaultMenu(db);
-      return;
-    }
-    callback(snap.val());
-  });
-}
-
-export async function saveMenuItem(db, item) {
-  await set(ref(db, `menu/${item.id}`), item);
-  // sync LS ทันที (subscribeMenu จะ sync อีกครั้งผ่าน onValue ก็ไม่เป็นไร)
-  try {
-    const m = JSON.parse(localStorage.getItem('ks90-menu') || '{}');
-    m[item.id] = item;
-    localStorage.setItem('ks90-menu', JSON.stringify(m));
-  } catch (_) {}
-}
-
-export async function toggleMenuItem(db, id, enabled) {
-  await update(ref(db, `menu/${id}`), { enabled });
-  try {
-    const m = JSON.parse(localStorage.getItem('ks90-menu') || '{}');
-    if (m[id]) { m[id].enabled = enabled; localStorage.setItem('ks90-menu', JSON.stringify(m)); }
-  } catch (_) {}
-}
-
-export async function deleteMenuItem(db, id) {
-  await remove(ref(db, `menu/${id}`));
-  try {
-    const m = JSON.parse(localStorage.getItem('ks90-menu') || '{}');
-    delete m[id];
-    localStorage.setItem('ks90-menu', JSON.stringify(m));
-  } catch (_) {}
-}
-
-export async function updateMenuPrice(db, id, price) {
-  await update(ref(db, `menu/${id}`), { price: Number(price) });
-}
-
-export async function updateMenuName(db, id, name) {
-  await update(ref(db, `menu/${id}`), { name });
-}
-
-export function generateMenuId(category) {
-  return category + '_' + Date.now().toString(36);
-}
-
-/** อัปเดต sortOrder หลาย items พร้อมกัน (สำหรับ drag & drop) */
-export async function updateSortOrders(db, orderedIds) {
-  const updates = {};
-  orderedIds.forEach((id, idx) => {
-    updates[`menu/${id}/sortOrder`] = idx;
-  });
-  await update(ref(db), updates);
-}
-
-/** Duplicate เมนู */
-export async function duplicateMenuItem(db, item) {
-  const newId   = generateMenuId(item.category);
-  const newItem = {
-    ...JSON.parse(JSON.stringify(item)),
-    id:        newId,
-    name:      item.name + ' (สำเนา)',
-    sortOrder: (item.sortOrder ?? 999) + 0.5,
-    enabled:   false, // ซ่อนไว้ก่อน ให้ admin เปิดเองเมื่อพร้อม
-  };
-  await saveMenuItem(db, newItem);
-  return newId;
-}
-
-/** บันทึกโปรโมชั่น */
-export async function savePromo(db, id, promo) {
-  await update(ref(db, `menu/${id}`), { promo });
-}
-
-/** บันทึก options/toppings */
-export async function saveMenuOptions(db, id, options) {
-  await update(ref(db, `menu/${id}`), { options });
-}
-
-// ==================== Firebase Storage Upload ====================
+// ==================== Image Upload ====================
+// Firebase Storage ถูกแทนที่แล้ว
+// ตอนนี้รองรับเฉพาะ:
+//   1. imageNum (ใช้ images/imgN.png ที่ serve จาก static files)
+//   2. imageUrl (URL โดยตรง เช่น CDN หรือ external hosting)
+// ถ้าต้องการ upload ไฟล์ ให้ host รูปภาพที่อื่น แล้วใส่ URL ใน imageUrl
 
 /**
- * อัปโหลดรูปไปยัง Firebase Storage
- * @param {object} storageInstance - Firebase Storage instance
- * @param {File}   file            - File object จาก <input type="file">
- * @param {string} menuId          - menu item id (ใช้เป็น filename)
- * @param {function} onProgress    - callback(percent: number)
- * @returns {Promise<string>}      - download URL
+ * uploadMenuImage — ใน Firebase version นี้ถูกแทนที่แล้ว
+ * ฟังก์ชันนี้เหลือไว้เพื่อ backward compat แต่ throw error ถ้ายังถูกเรียก
+ * @deprecated ใช้ imageUrl field แทน
  */
-export async function uploadMenuImage(storageInstance, file, menuId, onProgress) {
-  // ตรวจสอบประเภทไฟล์
-  if (!file.type.startsWith('image/')) {
-    throw new Error('กรุณาเลือกไฟล์รูปภาพเท่านั้น');
-  }
-  // จำกัดขนาด 5MB
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('ขนาดไฟล์ต้องไม่เกิน 5MB');
-  }
-
-  // บีบอัดรูปก่อนอัปโหลด
-  const compressedBlob = await compressImage(file, 800, 0.82);
-
-  const ext      = file.name.split('.').pop().toLowerCase() || 'jpg';
-  const path     = `menu-images/${menuId}.${ext}`;
-  const sRef     = storageRef(storageInstance, path);
-  const uploadTask = uploadBytesResumable(sRef, compressedBlob, {
-    contentType: compressedBlob.type,
-    cacheControl: 'public,max-age=31536000',
-  });
-
-  return new Promise((resolve, reject) => {
-    uploadTask.on('state_changed',
-      (snapshot) => {
-        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        if (onProgress) onProgress(pct);
-      },
-      (error) => reject(error),
-      async () => {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(url);
-        } catch (err) {
-          reject(err);
-        }
-      }
-    );
-  });
+export async function uploadMenuImage(_storageInstance, _file, _menuId, _onProgress) {
+  throw new Error(
+    'Firebase Storage ถูกปิดแล้ว กรุณาใส่ URL รูปภาพใน imageUrl field โดยตรง'
+  );
 }
 
 /** บีบอัดรูปด้วย Canvas */
@@ -485,14 +510,12 @@ async function compressImage(file, maxSize = 800, quality = 0.82) {
 // สร้าง Modal UI ทั้งหมดรวมไว้ที่นี่ เพื่อให้ admin.js เรียกใช้งานได้
 
 let _db         = null;
-let _storage    = null;
 let _allMenuData = {};
 let _onSaved    = null;   // callback หลังบันทึก
 
 /** เรียก init ก่อนใช้งาน openMenuFormModal */
-export function initMenuFormHelper(db, storageInstance, allMenuDataRef, onSaved) {
-  _db          = db;
-  _storage     = storageInstance;
+export function initMenuFormHelper(_db, allMenuDataRef, onSaved) {
+  _db          = db;        // ยังรับไว้เพื่อ backward compat (ไม่ถูกใช้งานจริง)
   _allMenuData = allMenuDataRef; // object reference — จะ sync อัตโนมัติ
   _onSaved     = onSaved;
   _injectStyles();
@@ -813,17 +836,14 @@ async function _handleSave(isEdit, product, uploadProgress, progressFill, progre
   saveBtn.textContent = 'กำลังบันทึก...';
 
   try {
-    // ---- อัปโหลดรูปถ้ามีไฟล์ใหม่ ----
+    // ---- รูปภาพ: ตอนนี้รองรับเฉพาะ imageNum หรือ imageUrl (URL โดยตรง) ----
+    // ถ้า user เลือกไฟล์จากเครื่อง → แสดงคำแนะนำ (Firebase Storage ถูกปิดแล้ว)
     const file = fileInput?.files[0];
-    if (file && _storage) {
-      const itemId = isEdit ? product.id : generateMenuId(document.getElementById('mfCategory')?.value || 'kao');
-      uploadProgress.classList.remove('hidden');
-      const url = await uploadMenuImage(_storage, file, itemId, (pct) => {
-        progressFill.style.width = pct + '%';
-        progressText.textContent = pct + '%';
-      });
-      imageUrlInput.value = url;
-      uploadProgress.classList.add('hidden');
+    if (file) {
+      errEl.textContent = '⚠️ การอัปโหลดไฟล์โดยตรงถูกปิดแล้ว กรุณาใส่ URL รูปภาพใน imageUrl แทน';
+      saveBtn.disabled = false;
+      saveBtn.textContent = isEdit ? '💾 บันทึก' : '＋ เพิ่มเมนู';
+      return;
     }
 
     const item = _collectFormData(isEdit ? product : null);
@@ -1460,35 +1480,50 @@ tr[draggable="true"]:active { cursor: grabbing; }
 }
 // ==================== Category Management ====================
 
-/** โหลด categories จาก Firebase (fallback เป็น CATEGORY_LABELS) */
-export async function loadCategories(db) {
-  const snap = await get(ref(db, 'categories'));
-  if (snap.exists()) return snap.val(); // { setkao: 'เซ็ตอาหาร', ... }
-  return { ...CATEGORY_LABELS };
+/** โหลด categories จาก Worker meta (fallback เป็น CATEGORY_LABELS) */
+export async function loadCategories(_db) {
+  const meta = await api.getMeta().catch(() => null);
+  return (meta?.categories) || { ...CATEGORY_LABELS };
 }
 
-/** subscribe categories realtime */
-export function subscribeCategories(db, cb) {
-  return onValue(ref(db, 'categories'), snap => {
-    cb(snap.exists() ? snap.val() : { ...CATEGORY_LABELS });
+/** subscribe categories realtime ผ่าน WebSocket */
+export function subscribeCategories(_db, cb) {
+  api.getMeta().then(meta => {
+    cb((meta?.categories) || { ...CATEGORY_LABELS });
+  }).catch(() => cb({ ...CATEGORY_LABELS }));
+
+  const socket = ws.connect('admin', (msg) => {
+    if (msg.type === 'meta_updated' || msg.type === 'categories_updated') {
+      api.getMeta().then(meta => cb((meta?.categories) || { ...CATEGORY_LABELS })).catch(() => {});
+    }
   });
+  return () => socket.close();
 }
 
 /** บันทึก category ใหม่ */
-export async function addCategory(db, id, label) {
+export async function addCategory(_db, id, label) {
   if (!id || !label) throw new Error('ต้องระบุ id และชื่อหมวด');
   id = id.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   if (!id) throw new Error('id ต้องเป็นตัวอักษรภาษาอังกฤษ/ตัวเลขเท่านั้น');
-  await update(ref(db, 'categories'), { [id]: label.trim() });
+  const meta = await api.getMeta().catch(() => ({})) || {};
+  const cats = meta.categories || { ...CATEGORY_LABELS };
+  cats[id] = label.trim();
+  await api.updateMeta({ categories: cats });
   return id;
 }
 
 /** แก้ชื่อ category */
-export async function renameCategory(db, id, newLabel) {
-  await update(ref(db, 'categories'), { [id]: newLabel.trim() });
+export async function renameCategory(_db, id, newLabel) {
+  const meta = await api.getMeta().catch(() => ({})) || {};
+  const cats = meta.categories || { ...CATEGORY_LABELS };
+  cats[id] = newLabel.trim();
+  await api.updateMeta({ categories: cats });
 }
 
 /** ลบ category */
-export async function deleteCategory(db, id) {
-  await remove(ref(db, `categories/${id}`));
+export async function deleteCategory(_db, id) {
+  const meta = await api.getMeta().catch(() => ({})) || {};
+  const cats = meta.categories || { ...CATEGORY_LABELS };
+  delete cats[id];
+  await api.updateMeta({ categories: cats });
 }

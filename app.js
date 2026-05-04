@@ -1,6 +1,6 @@
 /**
  * ข้าวซอย 90 — POS System
- * Firebase Realtime Database — sync real-time
+ * Cloudflare Worker REST API + WebSocket
  *
  * ระบบใหม่: 1 โต๊ะ = 1 Order Number จนกว่าจะจ่ายเงิน
  *   - สั่งเพิ่มในโต๊ะเดิม → ต่อท้าย order เดิม (แยก batch)
@@ -8,13 +8,10 @@
  */
 
 import './darkmode.js';
-import { db } from './firebase-config.js';
-import {
-  ref, push, update, get, remove, runTransaction, onValue
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { api, ws } from './api-client.js';
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
-// LS fallback ใช้ตอน Firebase ยังไม่ตอบ
+// LS fallback ใช้ตอน API ยังไม่ตอบ
 function _loadMenuFromLS() {
   try {
     const raw = localStorage.getItem('ks90-menu');
@@ -27,7 +24,7 @@ function _loadMenuFromLS() {
 // ==================== รูปสินค้า ====================
 const IMG = (n) => 'images/img' + n + '.png';
 
-// ==================== เมนูสินค้า (โหลดจาก Firebase) ====================
+// ==================== เมนูสินค้า (โหลดจาก API) ====================
 let products = {
   setkao: [
     { id: 'setkao13', name: 'เซ็ตอิ่มคุ้มคู่❗',            price: 129, image: IMG(10021),   productType: 'setkao' },
@@ -89,53 +86,30 @@ let products = {
   ],
 };
 
-// ==================== โหลดเมนู: LS ก่อน (fast) → Firebase subscribe (realtime) ====================
+// ==================== โหลดเมนู: LS ก่อน (fast) → API + WebSocket (realtime) ====================
 const _lsMenuPOS = _loadMenuFromLS();
 if (_lsMenuPOS) products = _lsMenuPOS;
 
-// Firebase subscribe: อัปเดต products realtime เมื่อเมนูเปลี่ยน
-// ลดการดาวน์โหลด: ถ้ามี LS แล้ว → get() ตรวจ hash ก่อน ไม่ subscribe realtime ถ้าข้อมูลเดิม
 let _menuRawCache = null;
 let _menuDebounce = null;
 
-function _startMenuSubscribe() {
+async function _startMenuSubscribe() {
   const lsRaw = localStorage.getItem('ks90-menu');
-  if (lsRaw) {
-    // มี cache อยู่แล้ว → get() ครั้งเดียวเพื่อ check ว่าเมนูเปลี่ยนไหม
-    get(ref(db, 'menu')).then(snap => {
-      if (!snap.exists()) return;
-      const raw = snap.val();
-      const rawStr = JSON.stringify(raw);
-      if (rawStr === lsRaw) {
-        _menuRawCache = rawStr; // เมนูไม่เปลี่ยน → ไม่ต้อง subscribe realtime
-        return;
-      }
-      // เมนูเปลี่ยน → อัปเดต + subscribe realtime
+  try {
+    const menuData = await api.getMenu();
+    if (!menuData) return;
+    const rawStr = JSON.stringify(menuData);
+    if (rawStr === lsRaw) {
       _menuRawCache = rawStr;
-      try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
-      const parsed = parseMenuFromRaw(raw, 'image');
-      if (Object.keys(parsed).length) { products = parsed; renderProducts(); }
-      _subscribeMenuRealtimePOS();
-    }).catch(() => { _subscribeMenuRealtimePOS(); });
-  } else {
-    _subscribeMenuRealtimePOS();
-  }
-}
-
-function _subscribeMenuRealtimePOS() {
-  onValue(ref(db, 'menu'), (snap) => {
-    if (!snap.exists()) return;
-    const raw = snap.val();
-    const rawStr = JSON.stringify(raw);
-    if (rawStr === _menuRawCache) return;
+      return;
+    }
     _menuRawCache = rawStr;
     try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
-    clearTimeout(_menuDebounce);
-    _menuDebounce = setTimeout(() => {
-      const parsed = parseMenuFromRaw(raw, 'image');
-      if (Object.keys(parsed).length) { products = parsed; renderProducts(); }
-    }, 300);
-  });
+    const parsed = parseMenuFromRaw(menuData, 'image');
+    if (Object.keys(parsed).length) { products = parsed; renderProducts(); }
+  } catch (err) {
+    console.warn('menu load error:', err);
+  }
 }
 
 // ==================== Option Configs แยกตาม productType ====================
@@ -268,15 +242,18 @@ let cart = [];
 let orderNumber = 1001;
 let currentCategory = 'setkao';
 
-// subscribe defaultCat จาก Firebase — set เป็นค่าเริ่มต้นก่อน categories โหลด
-subscribeDefaultCat(db, catId => {
+// subscribe defaultCat จาก menu-manager — set เป็นค่าเริ่มต้นก่อน categories โหลด
+subscribeDefaultCat(null, catId => {
   if (catId) currentCategory = catId;
 });
 let selectedTable = null;
 
 // สถานะ order ปัจจุบันของโต๊ะที่เลือก
-let currentTableOrderKey = null; // Firebase key ของ order ที่กำลัง active
+let currentTableOrderId = null;     // id ของ order ที่กำลัง active
 let currentTableOrderNumber = null; // order number ที่ active
+
+// WebSocket connection
+let _wsConn = null;
 
 // ==================== DOM ====================
 const currentDateEl    = document.getElementById('currentDate');
@@ -338,34 +315,30 @@ async function selectTable(tableNum) {
   productsOverlay.classList.add('hidden');
   tableChipEl.textContent = ` · โต๊ะ ${tableNum}`;
 
-  // ตรวจว่าโต๊ะนี้มี order ค้างอยู่หรือเปล่า
   await checkTableActiveOrder(tableNum);
   renderProducts();
 }
 
 /**
- * ตรวจสอบ order ที่ active อยู่สำหรับโต๊ะ
- * โครงสร้าง Firebase: tableOrders/{table} = { orderKey, orderNumber }
+ * ตรวจสอบ order ที่ active อยู่สำหรับโต๊ะ ผ่าน REST API
  */
 async function checkTableActiveOrder(tableNum) {
   try {
-    const snap = await get(ref(db, `tableOrders/${tableNum}`));
-    if (snap.exists()) {
-      const data = snap.val();
-      currentTableOrderKey    = data.orderKey;
-      currentTableOrderNumber = data.orderNumber;
-      orderNumber             = data.orderNumber;
+    const data = await api.getTableOrder(tableNum);
+    if (data && data.id) {
+      currentTableOrderId     = data.id;
+      currentTableOrderNumber = data.order_num;
+      orderNumber             = data.order_num;
       orderNumberEl.textContent = orderNumber;
       showTableOrderBanner(tableNum, orderNumber);
     } else {
-      currentTableOrderKey    = null;
+      currentTableOrderId     = null;
       currentTableOrderNumber = null;
       hideTableOrderBanner();
-      // order number จะได้ตอน saveOrder
     }
   } catch (err) {
-    console.error('checkTableActiveOrder error:', err);
-    currentTableOrderKey    = null;
+    // 404 = ไม่มี active order
+    currentTableOrderId     = null;
     currentTableOrderNumber = null;
     hideTableOrderBanner();
   }
@@ -426,12 +399,7 @@ const optionModal = document.getElementById('optionModal');
 let pendingProduct = null;
 let currentOptionValues = {};
 
-function getProductTypeLabel(type) {
-  return { mapraopun: 'เมนูพิเศษ', kaomutod: '🍚 ข้าวหมูทอด', namngiao: '🍜 น้ำเงี้ยว', kaosoi: '🍜 ข้าวซอย', food: '🍽 อาหาร', 'drink-brew': '☕ เครื่องดื่มชง', 'drink-ready': '🥤 เครื่องดื่ม', simple: '' }[type] || '';
-}
-
 function openOptionModal(dataset) {
-  // หา product object จากทุก category
   let product = null;
   for (const cat of Object.values(products)) {
     product = cat.find(p => p.id === dataset.id);
@@ -441,10 +409,8 @@ function openOptionModal(dataset) {
 
   pendingProduct = product;
 
-  // ── Priority: custom options จาก Firebase ก่อน, fallback OPTION_CONFIGS legacy ──
   const config = _resolveOptionConfig(product);
 
-  // reset state
   currentOptionValues = {};
   config.groups.forEach(g => {
     currentOptionValues[g.id] = g.type === 'single' ? (g.defaultValue ?? '') : [];
@@ -455,15 +421,12 @@ function openOptionModal(dataset) {
 }
 
 function _resolveOptionConfig(product) {
-  // 1. custom options ที่ตั้งใน admin (menu-manager format)
   if (product.options && Array.isArray(product.options) && product.options.length > 0) {
     return { groups: product.options, hasNote: true };
   }
-  // 2. productType === 'custom' แต่ options ว่าง → note only
   if (product.productType === 'custom') {
     return { groups: [], hasNote: true };
   }
-  // 3. legacy productType → OPTION_CONFIGS
   return OPTION_CONFIGS[product.productType] || OPTION_CONFIGS['simple'];
 }
 
@@ -512,7 +475,6 @@ function renderOptionModalBody(product, config) {
     </div>
   `;
 
-  // bind pill events
   box.querySelectorAll('.option-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       const gid   = btn.dataset.group;
@@ -531,7 +493,6 @@ function renderOptionModalBody(product, config) {
     });
   });
 
-  // bind cancel & confirm
   box.querySelector('#optionCancel').addEventListener('click', closeOptionModal);
   box.querySelector('#optionConfirm').addEventListener('click', () => {
     if (!pendingProduct) return;
@@ -545,7 +506,6 @@ function renderOptionModalBody(product, config) {
       if (g.type === 'single') {
         if (val) {
           parts.push(val);
-          // ✅ Fix: บวกราคาของ single choice ด้วย (เช่น ปั่น +฿10)
           const choice = g.choices.find(c => c.value === val);
           if (choice?.price) extraPrice += choice.price;
         }
@@ -645,8 +605,7 @@ function clearCart() {
   renderCart();
 }
 
-// ==================== Firebase: Order Number ====================
-// วันที่ตามเวลาไทย (UTC+7) สำหรับ reset order number รายวัน
+// ==================== API: Order Number ====================
 function getTodayTH() {
   const now = new Date();
   const th = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -655,13 +614,11 @@ function getTodayTH() {
 
 async function loadOrderNumber() {
   try {
+    const meta = await api.getMeta();
+    if (!meta) return;
     const today = getTodayTH();
-    const metaSnap = await get(ref(db, 'meta'));
-    const meta = metaSnap.exists() ? metaSnap.val() : {};
-
     if (meta.lastOrderDate !== today) {
       orderNumber = 1001;
-      await update(ref(db, 'meta'), { orderNumber: 1001, lastOrderDate: today });
     } else {
       orderNumber = meta.orderNumber || 1001;
     }
@@ -671,10 +628,8 @@ async function loadOrderNumber() {
   }
 }
 
-// ==================== Firebase: Save Order (batch-aware) ====================
-// คืนค่า { allBatches, grandTotal } เพื่อให้ receipt แสดงยอดรวมทั้ง order
+// ==================== API: Save Order (batch-aware) ====================
 async function saveOrder() {
-  const today = getTodayTH();
   const batchItems = cart.map((i) => ({
     name: i.name,
     price: i.price,
@@ -682,88 +637,53 @@ async function saveOrder() {
     ...(i.optionLabel ? { option: i.optionLabel } : {}),
   }));
 
-  // ─── Fix 2: อ่าน snap ครั้งเดียว แล้ว reuse ───
-  let existingSnap = null;
-  if (currentTableOrderKey) {
-    existingSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
-    if (!existingSnap.exists()) {
-      // order ถูกลบไปแล้ว → สร้างใหม่
-      currentTableOrderKey = null;
-      existingSnap = null;
-    }
-  }
-
-  if (!currentTableOrderKey) {
-    // ─── สร้าง order ใหม่ โดยจอง order number แบบ atomic ด้วย Transaction ───
-    let newOrderNum;
-    const txResult = await runTransaction(ref(db, 'meta'), (meta) => {
-      if (!meta) meta = {};
-      if (meta.lastOrderDate !== today) {
-        meta.orderNumber   = 1001;
-        meta.lastOrderDate = today;
-      } else {
-        meta.orderNumber = (meta.orderNumber || 1000) + 1;
-      }
-      return meta;
-    });
-    if (!txResult.committed || !txResult.snapshot.exists()) {
-      throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
-    }
-    newOrderNum = txResult.snapshot.val().orderNumber;
-    if (!newOrderNum) throw new Error('Transaction failed: ไม่สามารถจอง order number ได้');
-
+  if (!currentTableOrderId) {
+    // สร้าง order ใหม่
     const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const order = {
-      orderNumber: newOrderNum,
-      table: selectedTable,
-      date: new Date().toISOString(),
+    const newOrder = await api.createOrder({
+      table_num: String(selectedTable),
       batches: [batchItems],
       total,
       status: 'pending',
-    };
-
-    const newRef = await push(ref(db, 'orders'), order);
-    currentTableOrderKey    = newRef.key;
-    currentTableOrderNumber = newOrderNum;
-    orderNumber             = newOrderNum;
-
-    // บันทึก tableOrders (meta อัปเดตไปแล้วใน transaction)
-    await update(ref(db, `tableOrders/${selectedTable}`), {
-      orderKey:    newRef.key,
-      orderNumber: newOrderNum,
     });
 
+    currentTableOrderId     = newOrder.id;
+    currentTableOrderNumber = newOrder.order_num;
+    orderNumber             = newOrder.order_num;
     orderNumberEl.textContent = orderNumber;
-    // ─── Fix 1: คืนข้อมูลสำหรับ receipt (order ใหม่) ───
+
     return { allBatches: [batchItems], grandTotal: total };
 
   } else {
-    // ─── Fix 2: reuse snap ที่อ่านแล้ว ไม่ต้อง get ซ้ำ ───
-    const existingOrder = existingSnap.val();
+    // เพิ่ม batch เข้า order เดิม
+    const existingOrder = await api.getOrder(currentTableOrderId);
+    if (!existingOrder) {
+      // order หายไปแล้ว → สร้างใหม่
+      currentTableOrderId = null;
+      return saveOrder();
+    }
+
     const batches = existingOrder.batches || [existingOrder.items || []];
     batches.push(batchItems);
-
     const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
 
-    await update(ref(db, `orders/${currentTableOrderKey}`), {
+    await api.updateOrder(currentTableOrderId, {
       batches,
       total: newTotal,
-      status: 'pending', // reset เป็น pending เพื่อให้ admin เห็น batch ใหม่
-      lastBatchDate: new Date().toISOString(),
+      status: 'pending',
+      last_batch_at: new Date().toISOString(),
     });
-    // ─── Fix 1: คืนข้อมูลสำหรับ receipt (เพิ่ม batch) ───
+
     return { allBatches: batches, grandTotal: newTotal };
   }
 }
 
 // ==================== Receipt ====================
-// Fix 1: รับ allBatches + grandTotal จาก saveOrder เพื่อแสดงยอดรวมทั้ง order
 function showReceipt({ allBatches, grandTotal }) {
   receiptOrderNum.textContent = currentTableOrderNumber || orderNumber;
   receiptTableEl.textContent  = `โต๊ะ ${selectedTable}`;
   receiptDate.textContent     = new Date().toLocaleString('th-TH');
 
-  // แสดงทุก item จากทุก batch (ยอดรวมทั้ง order)
   const allItems = allBatches.flat();
   receiptItemsEl.innerHTML = allItems.map((i) =>
     `<div class="receipt-item">
@@ -784,8 +704,7 @@ function closeReceipt() {
 function openConfirmOrderModal() {
   const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
 
-  // แสดงว่าเป็น order ใหม่หรือสั่งเพิ่ม
-  if (currentTableOrderKey) {
+  if (currentTableOrderId) {
     confirmTableLabel.innerHTML = `โต๊ะ ${selectedTable} · <span style="color:var(--accent)">เพิ่มในออเดอร์ #${currentTableOrderNumber}</span>`;
   } else {
     confirmTableLabel.textContent = `โต๊ะ ${selectedTable} · ออเดอร์ใหม่`;
@@ -807,28 +726,21 @@ function closeConfirmOrderModal() {
 
 // ==================== New Order (after payment) ====================
 async function startNewOrder() {
-  // ลบ tableOrders เฉพาะกรณีที่ order จ่ายแล้ว (paid) หรือถูกลบไปแล้ว
-  // ถ้า order ยังไม่ paid → คง tableOrders ไว้ เพื่อให้ครั้งต่อไป append batch เข้าออเดอร์เดิม
-  if (currentTableOrderKey && selectedTable) {
+  if (currentTableOrderId && selectedTable) {
     try {
-      const tableSnap = await get(ref(db, `tableOrders/${selectedTable}`));
-      if (tableSnap.exists() && tableSnap.val().orderKey === currentTableOrderKey) {
-        const orderSnap = await get(ref(db, `orders/${currentTableOrderKey}`));
-        const orderStatus = orderSnap.exists() ? orderSnap.val().status : null;
-        if (!orderSnap.exists() || orderStatus === 'paid') {
-          // order หายไปแล้ว หรือ paid แล้ว → ลบได้
-          await remove(ref(db, `tableOrders/${selectedTable}`));
-        }
-        // ถ้า order ยังค้างอยู่ (pending/cooking/served) → ไม่ลบ tableOrders
+      const order = await api.getOrder(currentTableOrderId).catch(() => null);
+      if (!order || order.status === 'paid') {
+        // order จ่ายแล้วหรือหายไป → clear table
+        await api.clearTable(String(selectedTable)).catch(() => {});
       }
     } catch (err) {
-      console.error('startNewOrder tableOrders remove error:', err);
+      console.error('startNewOrder error:', err);
     }
   }
 
   cart = [];
   selectedTable = null;
-  currentTableOrderKey    = null;
+  currentTableOrderId     = null;
   currentTableOrderNumber = null;
   tableChipEl.textContent = '';
   document.querySelectorAll('.table-btn').forEach(b => b.classList.remove('active'));
@@ -837,7 +749,6 @@ async function startNewOrder() {
   renderCart();
   closeReceipt();
 
-  // โหลด order number ล่าสุดจาก meta
   await loadOrderNumber();
 }
 
@@ -848,7 +759,6 @@ const _categoriesNav = document.getElementById('categoriesNav');
 
 function renderCategoryTabs(cats) {
   if (!_categoriesNav) return;
-  // รักษา currentCategory ถ้ายังมีอยู่ใน cats ใหม่ ไม่งั้น reset เป็นตัวแรก
   const ids = Object.keys(cats);
   if (!ids.includes(currentCategory)) currentCategory = ids[0] || 'setkao';
 
@@ -867,14 +777,14 @@ function renderCategoryTabs(cats) {
   renderProducts();
 }
 
-// โหลด categories จาก LocalStorage ทันที (ไม่รอ Firebase) → tabs แสดงเร็ว
+// โหลด categories จาก LocalStorage ทันที
 try {
   const _lsCats = localStorage.getItem('ks90-categories');
   if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
 } catch (_) {}
 
-// Subscribe Firebase → อัปเดต realtime เมื่อข้อมูลเปลี่ยน
-subscribeCategoriesAndSync(db, renderCategoryTabs);
+// Subscribe categories ผ่าน menu-manager (จะ fetch จาก API แทน Firebase)
+subscribeCategoriesAndSync(null, renderCategoryTabs);
 
 clearCartBtn.addEventListener('click', clearCart);
 
@@ -908,7 +818,6 @@ confirmOrderOk.addEventListener('click', async () => {
     return;
   }
   confirmOrderOk.disabled = false;
-  // หลังบันทึกสำเร็จ → ล้าง cart แต่คง tableOrderKey ไว้
   cart = [];
   renderCart();
   showTableOrderBanner(selectedTable, currentTableOrderNumber);
@@ -1060,4 +969,4 @@ setDate();
 renderProducts();
 renderCart();
 loadOrderNumber();
-_startMenuSubscribe(); // ← subscribe Firebase menu realtime
+_startMenuSubscribe();
