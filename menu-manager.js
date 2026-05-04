@@ -197,16 +197,14 @@ export function subscribeCategoriesAndSync(db, cb) {
     const entries = Object.entries(rawCats || CATEGORY_LABELS);
     entries.sort(([a], [b]) => ((sortMap || {})[a] ?? 9999) - ((sortMap || {})[b] ?? 9999));
     const sorted = Object.fromEntries(entries);
-    // ไม่ re-render ถ้าข้อมูลไม่เปลี่ยน
     const key = JSON.stringify(sorted);
-    if (key === _lastEmitted) return;
+    if (key === _lastEmitted) return; // dedup: ไม่ re-render ถ้าข้อมูลไม่เปลี่ยน
     _lastEmitted = key;
     _syncCatsToLS(sorted);
     cb(sorted);
   }
 
-  // โหลดครั้งแรกด้วย get() (เร็วกว่า onValue เพราะไม่ต้องรอ realtime handshake)
-  // แล้วค่อย subscribe เพื่อ realtime updates
+  // โหลดครั้งแรกด้วย get() ก่อนเสมอ (เร็ว + ลด download)
   Promise.all([
     get(ref(db, 'categories')),
     get(ref(db, 'categories_sort')),
@@ -214,16 +212,29 @@ export function subscribeCategoriesAndSync(db, cb) {
     const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
     const sortMap = sortSnap.exists() ? sortSnap.val() : {};
     _buildAndEmit(rawCats, sortMap);
-  }).catch(() => {});
 
-  // subscribe ต่อเนื่อง แต่ merge ทั้ง 2 paths ไว้ใน 1 listener บน /categories_meta
-  // (ใช้ get ซ้ำเมื่อ categories เปลี่ยน เพื่อดึง sort ไปพร้อมกัน)
-  onValue(ref(db, 'categories'), catSnap => {
-    const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
-    get(ref(db, 'categories_sort')).then(sortSnap => {
-      const sortMap = sortSnap.exists() ? sortSnap.val() : {};
-      _buildAndEmit(rawCats, sortMap);
-    }).catch(() => _buildAndEmit(rawCats, {}));
+    // ถ้ามี LS cache อยู่แล้ว และ categories ไม่เปลี่ยน → ไม่ต้อง subscribe realtime
+    // เพราะ categories เปลี่ยนน้อยมาก (แก้ทาง backoffice เท่านั้น)
+    const lsCats = localStorage.getItem('ks90-categories');
+    if (lsCats && JSON.stringify(rawCats) === JSON.stringify(JSON.parse(lsCats || '{}'))) {
+      return; // ไม่ subscribe realtime ถ้าข้อมูลเหมือนกัน
+    }
+
+    // subscribe เฉพาะเมื่อจำเป็น (categories ต่างจาก LS)
+    onValue(ref(db, 'categories'), catSnap2 => {
+      const rc = catSnap2.exists() ? catSnap2.val() : { ...CATEGORY_LABELS };
+      get(ref(db, 'categories_sort')).then(ss => {
+        _buildAndEmit(rc, ss.exists() ? ss.val() : {});
+      }).catch(() => _buildAndEmit(rc, {}));
+    });
+  }).catch(() => {
+    // fallback: subscribe realtime
+    onValue(ref(db, 'categories'), catSnap => {
+      const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
+      get(ref(db, 'categories_sort')).then(sortSnap => {
+        _buildAndEmit(rawCats, sortSnap.exists() ? sortSnap.val() : {});
+      }).catch(() => _buildAndEmit(rawCats, {}));
+    });
   });
 }
 

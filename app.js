@@ -93,30 +93,47 @@ let products = {
 const _lsMenuPOS = _loadMenuFromLS();
 if (_lsMenuPOS) products = _lsMenuPOS;
 
-// Firebase subscribe: อัปเดต products realtime ทุกครั้งที่เมนูเปลี่ยน
+// Firebase subscribe: อัปเดต products realtime เมื่อเมนูเปลี่ยน
+// ลดการดาวน์โหลด: ถ้ามี LS แล้ว → get() ตรวจ hash ก่อน ไม่ subscribe realtime ถ้าข้อมูลเดิม
 let _menuRawCache = null;
 let _menuDebounce = null;
 
 function _startMenuSubscribe() {
+  const lsRaw = localStorage.getItem('ks90-menu');
+  if (lsRaw) {
+    // มี cache อยู่แล้ว → get() ครั้งเดียวเพื่อ check ว่าเมนูเปลี่ยนไหม
+    get(ref(db, 'menu')).then(snap => {
+      if (!snap.exists()) return;
+      const raw = snap.val();
+      const rawStr = JSON.stringify(raw);
+      if (rawStr === lsRaw) {
+        _menuRawCache = rawStr; // เมนูไม่เปลี่ยน → ไม่ต้อง subscribe realtime
+        return;
+      }
+      // เมนูเปลี่ยน → อัปเดต + subscribe realtime
+      _menuRawCache = rawStr;
+      try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
+      const parsed = parseMenuFromRaw(raw, 'image');
+      if (Object.keys(parsed).length) { products = parsed; renderProducts(); }
+      _subscribeMenuRealtimePOS();
+    }).catch(() => { _subscribeMenuRealtimePOS(); });
+  } else {
+    _subscribeMenuRealtimePOS();
+  }
+}
+
+function _subscribeMenuRealtimePOS() {
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
     const raw = snap.val();
-
-    // ถ้าข้อมูลไม่เปลี่ยน ไม่ต้อง re-parse / re-render
     const rawStr = JSON.stringify(raw);
     if (rawStr === _menuRawCache) return;
     _menuRawCache = rawStr;
-
     try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
-
-    // debounce 300ms กันการ re-render ถี่เกินไป
     clearTimeout(_menuDebounce);
     _menuDebounce = setTimeout(() => {
       const parsed = parseMenuFromRaw(raw, 'image');
-      if (Object.keys(parsed).length) {
-        products = parsed;
-        renderProducts();
-      }
+      if (Object.keys(parsed).length) { products = parsed; renderProducts(); }
     }, 300);
   });
 }

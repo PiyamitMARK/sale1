@@ -283,26 +283,32 @@ function playCallAlert() {
 
 
 // ==================== Popular Items (Feature #1) ====================
-// นับจำนวนออเดอร์ของแต่ละเมนูจาก paid orders ในวันนี้ + 30 วัน
-// แล้วเขียนลง Firebase เพื่อให้ customer.js อ่านได้
+// throttle: เขียน Firebase max 1 ครั้งต่อ 5 นาที เพื่อลด Downloads/Writes
+let _popularLastWrite = 0;
+let _popularDebounce  = null;
+const POPULAR_THROTTLE_MS = 5 * 60 * 1000; // 5 นาที
+
 async function updatePopularItems(orders) {
-  try {
-    const counts = {};
-    orders
-      .filter(o => o.status === 'paid')
-      .forEach(o => {
-        const items = o.batches ? o.batches.flat() : (o.items || []);
-        items.forEach(i => {
-          counts[i.name] = (counts[i.name] || 0) + i.qty;
+  const now = Date.now();
+  if (now - _popularLastWrite < POPULAR_THROTTLE_MS) return; // throttle
+  clearTimeout(_popularDebounce);
+  _popularDebounce = setTimeout(async () => {
+    try {
+      const counts = {};
+      orders
+        .filter(o => o.status === 'paid')
+        .forEach(o => {
+          const items = o.batches ? o.batches.flat() : (o.items || []);
+          items.forEach(i => { counts[i.name] = (counts[i.name] || 0) + i.qty; });
         });
-      });
-    // เอาแค่ Top 5
-    const top5 = Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name]) => name);
-    await update(ref(db, 'meta'), { popularItems: top5 });
-  } catch (_) {}
+      const top5 = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name]) => name);
+      await update(ref(db, 'meta'), { popularItems: top5 });
+      _popularLastWrite = Date.now();
+    } catch (_) {}
+  }, 2000); // debounce 2 วิ กันกระตุก
 }
 
 // ==================== Firebase: Real-time Listener ====================
@@ -582,15 +588,15 @@ let _menuDebounce = null;
 let _menuUnsubscribe = null;
 
 function startMenuListener() {
-  if (_menuUnsubscribe) return;
-  _menuUnsubscribe = onValue(ref(db, 'menu'), snap => {
+  if (_menuUnsubscribe) return; // ป้องกัน subscribe ซ้ำ
+  // ใช้ get() ครั้งเดียวแทน onValue realtime
+  // admin ไม่ต้องการ menu realtime — โหลดครั้งเดียวต่อ session เพียงพอ
+  get(ref(db, 'menu')).then(snap => {
     const raw = snap.val() || {};
-    const rawStr = JSON.stringify(raw);
-    if (rawStr === _menuRawCache) return;
-    _menuRawCache = rawStr;
-    clearTimeout(_menuDebounce);
-    _menuDebounce = setTimeout(() => { allMenuData = raw; }, 250);
-  });
+    allMenuData = raw;
+    try { localStorage.setItem('ks90-menu', JSON.stringify(raw)); } catch (_) {}
+  }).catch(() => {});
+  _menuUnsubscribe = true; // mark ว่าโหลดแล้ว (ไม่ให้โหลดซ้ำ)
 }
 
 // ==================== Products (admin add-item) ====================

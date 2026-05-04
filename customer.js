@@ -94,28 +94,50 @@ let _menuRawCache = null;
 let _menuDebounce = null;
 
 // Firebase subscribe: อัปเดต PRODUCTS realtime
+// ลดการดาวน์โหลด: ถ้ามี LS แล้ว → get() ตรวจ hash ก่อน subscribe
 function _startMenuSubscribe() {
-  // ถ้ามี LS แล้ว → ใช้ get() ครั้งแรกแทน onValue เพื่อตรวจว่าต้อง re-render ไหม
-  // จากนั้น subscribe ต่อเพื่อ realtime (แต่จะ skip render ถ้าข้อมูลไม่เปลี่ยน)
+  const lsRaw = localStorage.getItem('ks90-menu');
+  if (lsRaw) {
+    // มี cache อยู่แล้ว → get() ครั้งเดียวเพื่อ check ว่าเมนูเปลี่ยนไหม
+    get(ref(db, 'menu')).then(snap => {
+      if (!snap.exists()) return;
+      const raw = snap.val();
+      const rawStr = JSON.stringify(raw);
+      if (rawStr === lsRaw) {
+        // เมนูไม่เปลี่ยน → ไม่ต้อง re-render ไม่ต้อง subscribe realtime
+        _menuRawCache = rawStr;
+        return;
+      }
+      // เมนูเปลี่ยน → อัปเดต LS + render
+      _menuRawCache = rawStr;
+      try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
+      const parsed = parseMenuFromRaw(raw, 'img');
+      if (Object.keys(parsed).length) {
+        PRODUCTS = parsed;
+        if (document.getElementById('productGrid')) renderProducts();
+      }
+      // หลังจาก sync แล้ว subscribe ต่อสำหรับ realtime updates
+      _subscribeMenuRealtime();
+    }).catch(() => { _subscribeMenuRealtime(); });
+  } else {
+    // ไม่มี LS → subscribe realtime ทันที
+    _subscribeMenuRealtime();
+  }
+}
+
+function _subscribeMenuRealtime() {
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
     const raw = snap.val();
-
-    // ถ้าข้อมูลไม่เปลี่ยน ไม่ต้อง re-parse / re-render
     const rawStr = JSON.stringify(raw);
     if (rawStr === _menuRawCache) return;
     _menuRawCache = rawStr;
-
     try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
-
-    // debounce 300ms กันการ re-render ถี่เกินไป
     clearTimeout(_menuDebounce);
     _menuDebounce = setTimeout(() => {
       const parsed = parseMenuFromRaw(raw, 'img');
       if (Object.keys(parsed).length) {
         PRODUCTS = parsed;
-        // ถ้ามี LS อยู่แล้วตอนโหลด และ Firebase ส่งข้อมูลเดิมกลับมา (ตรวจจาก rawStr)
-        // จะไม่มาถึงบรรทัดนี้แล้ว (filtered ด้านบน)
         if (document.getElementById('productGrid')) renderProducts();
       }
     }, 300);
@@ -464,6 +486,7 @@ const KITCHEN_STATUS_MAP = {
 function startKitchenStatusWatcher(orderKey) {
   if (kitchenStatusUnsubscribe) { kitchenStatusUnsubscribe(); kitchenStatusUnsubscribe = null; }
   if (!orderKey) { hideKitchenBar(); return; }
+  // ฟังแค่ /status field (ไม่ใช่ทั้ง order document) → ลด Downloads ~80%
   kitchenStatusUnsubscribe = onValue(ref(db, `orders/${orderKey}/status`), snap => {
     updateKitchenBar(snap.exists() ? snap.val() : 'pending');
   });
@@ -596,10 +619,12 @@ window.addEventListener('resize', updateStickyOffsets);
 
 // ==================== Popular Items ====================
 function loadPopularItems() {
-  onValue(ref(db, 'meta/popularItems'), snap => {
+  // ใช้ get() ครั้งเดียวแทน onValue เพื่อลด Firebase Downloads
+  // popular items ไม่ต้องการ realtime — อัปเดตทุก session เพียงพอ
+  get(ref(db, 'meta/popularItems')).then(snap => {
     popularItems = snap.exists() ? (snap.val() || []) : [];
-    renderProducts(); // re-render เพื่อให้ badge ขึ้น
-  }, { onlyOnce: false });
+    renderProducts();
+  }).catch(() => {});
 }
 
 // ==================== Products ====================
