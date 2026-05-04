@@ -1793,22 +1793,21 @@ tr.drag-over td { background: var(--cream-dark) !important; }
      ========================================================= -->
 <script type="module">
 // ============================================================
-//  IMPORTS — must be at top of module
+//  IMPORTS — api-client.js แทนที่ Firebase SDK
 // ============================================================
-import { db } from './firebase-config.js';
-import { ref, onValue, update, remove, push, set } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { api, ws, adminLogin, adminLogout, isLoggedIn } from './api-client.js';
 
 // ============================================================
-//  Back Office — main script
+//  Back Office — main script (rewritten for api-client.js)
 // ============================================================
 
 // ---- dark mode ----
 (function initDark() {
   const t = localStorage.getItem('theme') || 'light';
   document.documentElement.setAttribute('data-theme', t);
-  const lbl = document.getElementById('darkToggleLabel');
+  const lbl  = document.getElementById('darkToggleLabel');
   const lblS = document.getElementById('darkToggleLabelShort');
-  if (lbl) lbl.textContent = t === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+  if (lbl)  lbl.textContent  = t === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
   if (lblS) lblS.textContent = t === 'dark' ? '☀️' : '🌙';
 })();
 
@@ -1857,9 +1856,9 @@ function switchPanel(id) {
   sidebar.classList.remove('open');
   overlay.classList.remove('open');
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
-  if (id === 'history' && !histLoaded) loadHistory();
-  if (id === 'menu') loadMenuItems();
-  if (id === 'qr') initQrPanel();
+  if (id === 'history'    && !histLoaded) loadHistory();
+  if (id === 'menu')  loadMenuItems();
+  if (id === 'qr')    initQrPanel();
 }
 
 document.querySelectorAll('.bo-nav-item[data-panel]').forEach(btn => {
@@ -1867,7 +1866,7 @@ document.querySelectorAll('.bo-nav-item[data-panel]').forEach(btn => {
 });
 
 // ---- modal helpers ----
-function openModal(id) { document.getElementById(id).classList.add('open'); }
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('[data-close]').forEach(btn => {
   btn.addEventListener('click', () => closeModal(btn.dataset.close));
@@ -1877,42 +1876,76 @@ document.querySelectorAll('.bo-modal').forEach(m => {
 });
 
 // ============================================================
-//  MENU FIREBASE HELPERS (single source of truth)
+//  LIVE DATA STATE
 // ============================================================
-// เมนูและหมวดหมู่ทั้งหมดอ่าน/เขียนที่ Firebase เท่านั้น
-// LocalStorage ใช้เป็น cache เผื่อ offline fallback เท่านั้น
+let LIVE_ORDERS = [];
+let LIVE_MENU   = {};   // keyed by id
+let LIVE_CATEGORIES = {
+  setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
+  nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
+};
+let LIVE_DEFAULT_CAT = null;
 
+const DEFAULT_PRODUCT_TYPES = [
+  { value: 'kaosoi',      label: '🍜 ข้าวซอย',          desc: 'มีตัวเลือกท็อปปิ้ง' },
+  { value: 'namngiao',    label: '🍜 น้ำเงี้ยว',         desc: 'มีตัวเลือกท็อปปิ้ง' },
+  { value: 'kaomutod',    label: '🍚 ข้าวหมูทอด',        desc: 'มีตัวเลือกเพิ่ม' },
+  { value: 'mapraopun',   label: '🥥 มะพร้าวปั่น',       desc: 'เลือกความหวาน' },
+  { value: 'drink-brew',  label: '☕ เครื่องดื่มชง',     desc: 'ร้อน/เย็น + ความหวาน + เพิ่มเติม' },
+  { value: 'drink-ready', label: '🥤 เครื่องดื่มสำเร็จ', desc: 'ไม่มีตัวเลือก (แค่หมายเหตุ)' },
+  { value: 'setkao',      label: '🍱 เซ็ตอาหาร',         desc: 'ไม่มีตัวเลือก (แค่หมายเหตุ)' },
+  { value: 'simple',      label: '🍽 เมนูเดี่ยว',         desc: 'ไม่มีตัวเลือก ไม่มีหมายเหตุ' },
+];
+let LIVE_PRODUCT_TYPES = [...DEFAULT_PRODUCT_TYPES];
+let LIVE_PT_TOPPINGS   = {};
+let _ptToppingEditors  = {};
+
+let MOCK_ORDERS = [];
+let MOCK_MENU   = [];
+
+// ============================================================
+//  MENU — REST + Local helpers
+// ============================================================
 const DEFAULT_LOCAL_CATS = {
   setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
   nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
 };
 
-// ── เมนู ──
-function getMenuLocal() {
-  // อ่านจาก LIVE_MENU ที่ sync มาจาก Firebase แล้ว
-  return LIVE_MENU;
-}
+function getMenuLocal() { return LIVE_MENU; }
 
+// ── เมนู ──
 async function saveMenuItemLocal(item) {
-  await set(ref(db, `menu/${item.id}`), item);
-  // sync LS ด้วยเผื่อ tab อื่น
-  try { const m = JSON.parse(localStorage.getItem('ks90-menu')||'{}'); m[item.id]=item; localStorage.setItem('ks90-menu',JSON.stringify(m)); } catch(_){}
+  // PUT เมนูทั้งก้อน (merge รายการเดิม + item ใหม่)
+  const updated = { ...LIVE_MENU, [item.id]: item };
+  await api.putMenu(updated);
+  LIVE_MENU = updated;
+  MOCK_MENU = Object.values(LIVE_MENU);
+  try { localStorage.setItem('ks90-menu', JSON.stringify(updated)); } catch(_) {}
 }
 
 async function deleteMenuItemLocal(id) {
-  await remove(ref(db, `menu/${id}`));
-  try { const m = JSON.parse(localStorage.getItem('ks90-menu')||'{}'); delete m[id]; localStorage.setItem('ks90-menu',JSON.stringify(m)); } catch(_){}
+  const updated = { ...LIVE_MENU };
+  delete updated[id];
+  await api.putMenu(updated);
+  LIVE_MENU = updated;
+  MOCK_MENU = Object.values(LIVE_MENU);
+  try { localStorage.setItem('ks90-menu', JSON.stringify(updated)); } catch(_) {}
 }
 
 async function toggleMenuItemLocal(id, enabled) {
-  await update(ref(db, `menu/${id}`), { enabled });
-  try { const m = JSON.parse(localStorage.getItem('ks90-menu')||'{}'); if(m[id]){m[id].enabled=enabled; localStorage.setItem('ks90-menu',JSON.stringify(m));} } catch(_){}
+  if (!LIVE_MENU[id]) return;
+  LIVE_MENU[id] = { ...LIVE_MENU[id], enabled };
+  await api.putMenu(LIVE_MENU);
+  MOCK_MENU = Object.values(LIVE_MENU);
+  try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
 }
 
 async function updateSortOrdersLocal(ids) {
-  const updates = {};
-  ids.forEach((id, i) => { updates[`menu/${id}/sortOrder`] = i + 1; });
-  await update(ref(db), updates);
+  ids.forEach((id, i) => {
+    if (LIVE_MENU[id]) LIVE_MENU[id].sortOrder = i + 1;
+  });
+  await api.putMenu(LIVE_MENU);
+  MOCK_MENU = Object.values(LIVE_MENU);
 }
 
 async function duplicateMenuItemLocal(id) {
@@ -1920,42 +1953,56 @@ async function duplicateMenuItemLocal(id) {
   if (!src) return;
   const nid = 'm' + Date.now();
   const newItem = { ...JSON.parse(JSON.stringify(src)), id: nid, name: src.name + ' (สำเนา)', enabled: false, sortOrder: Object.keys(LIVE_MENU).length + 1 };
-  await set(ref(db, `menu/${nid}`), newItem);
+  await saveMenuItemLocal(newItem);
 }
 
-// ── หมวดหมู่ ──
-function getCategoriesLocal() {
-  return { ...LIVE_CATEGORIES };
+// ── หมวดหมู่ — เก็บใน meta.categories ──
+function getCategoriesLocal() { return { ...LIVE_CATEGORIES }; }
+
+async function _saveCats() {
+  await api.updateMeta({ categories: LIVE_CATEGORIES, categories_sort: _catSort });
+  try { localStorage.setItem('ks90-categories', JSON.stringify(LIVE_CATEGORIES)); } catch(_) {}
 }
 
 async function addCategoryLocal(id, label) {
-  await update(ref(db, 'categories'), { [id]: label });
-  try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); c[id]=label; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
+  LIVE_CATEGORIES[id] = label;
+  await _saveCats();
+  _notifyCatsLocal(LIVE_CATEGORIES);
 }
 
 async function renameCategoryLocal(id, label) {
-  await update(ref(db, 'categories'), { [id]: label });
-  try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); c[id]=label; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
+  LIVE_CATEGORIES[id] = label;
+  await _saveCats();
+  _notifyCatsLocal(LIVE_CATEGORIES);
 }
 
 async function deleteCategoryLocal(id) {
-  await remove(ref(db, `categories/${id}`));
-  try { const c=JSON.parse(localStorage.getItem('ks90-categories')||'{}'); delete c[id]; localStorage.setItem('ks90-categories',JSON.stringify(c)); } catch(_){}
+  delete LIVE_CATEGORIES[id];
+  await _saveCats();
+  _notifyCatsLocal(LIVE_CATEGORIES);
 }
 
+let _rawCats = null;
+let _catSort = {};
+
 async function saveCategoryOrder(orderedIds) {
-  const updates = {};
-  orderedIds.forEach((id, idx) => { updates[`categories_sort/${id}`] = idx; });
-  await update(ref(db), updates);
+  const sort = {};
+  orderedIds.forEach((id, idx) => { sort[id] = idx; });
+  _catSort = sort;
+  const entries = Object.entries(LIVE_CATEGORIES);
+  entries.sort(([a], [b]) => (sort[a] ?? 9999) - (sort[b] ?? 9999));
+  LIVE_CATEGORIES = Object.fromEntries(entries);
+  await api.updateMeta({ categories: LIVE_CATEGORIES, categories_sort: sort });
   try {
-    const sort = JSON.parse(localStorage.getItem('ks90-categories-sort') || '{}');
-    orderedIds.forEach((id, idx) => { sort[id] = idx; });
+    localStorage.setItem('ks90-categories', JSON.stringify(LIVE_CATEGORIES));
     localStorage.setItem('ks90-categories-sort', JSON.stringify(sort));
   } catch(_) {}
 }
 
 async function saveDefaultCatLocal(catId) {
-  await update(ref(db, 'meta'), { defaultCat: catId });
+  LIVE_DEFAULT_CAT = catId;
+  await api.updateMeta({ defaultCat: catId });
+  if (window._catModalRerender) window._catModalRerender();
 }
 
 function _notifyCatsLocal(cats) {
@@ -1965,156 +2012,227 @@ function _notifyCatsLocal(cats) {
   if (window._catModalRerender) window._catModalRerender();
 }
 
-// ---- Live data from Firebase ----
-let LIVE_ORDERS = [];   // all orders from Firebase (converted to flat array)
-let LIVE_MENU   = {};   // menu keyed by id
-
-// Subscribe to orders — อ่านจาก orders/ เหมือน admin.js
-function subscribeOrders(cb) {
-  onValue(ref(db, 'orders'), snap => {
-    const allOrders = [];
-    snap.forEach(child => {
-      const o = child.val();
-      // flatten batches → items (รองรับทั้ง batches[] และ items[])
-      const items = [];
-      if (Array.isArray(o.batches)) {
-        o.batches.forEach(b => {
-          if (Array.isArray(b)) b.forEach(it => items.push(it));
-          else if (b && Array.isArray(b.items)) b.items.forEach(it => items.push(it));
-        });
-      } else if (o.batches && typeof o.batches === 'object') {
-        Object.values(o.batches).forEach(b => {
-          if (Array.isArray(b)) b.forEach(it => items.push(it));
-          else if (b && Array.isArray(b.items)) b.items.forEach(it => items.push(it));
-        });
-      } else if (Array.isArray(o.items)) {
-        o.items.forEach(it => items.push(it));
-      }
-      allOrders.push({
-        id:            child.key,
-        orderNumber:   o.orderNumber || o.id || child.key,
-        table:         o.table || o.tableNumber || '—',
-        status:        o.status || 'pending',
-        total:         o.total || 0,
-        items,
-        createdAt:     o.date ? new Date(o.date) : (o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now())),
-        paymentMethod: o.paymentMethod || 'cash',
-      });
-    });
-    LIVE_ORDERS = allOrders.sort((a, b) => b.createdAt - a.createdAt);
-    cb(LIVE_ORDERS);
-  });
-}
-
-// Subscribe to menu — Firebase เป็น source of truth
-let _menuRawCache = null;
-let _menuDebounce = null;
-
-function subscribeMenu(cb) {
-  onValue(ref(db, 'menu'), snap => {
-    const raw = snap.val() || {};
-    const rawStr = JSON.stringify(raw);
-    if (rawStr === _menuRawCache) return;
-    _menuRawCache = rawStr;
-
-    LIVE_MENU = raw;
-    MOCK_MENU = Object.values(LIVE_MENU);
-    try { localStorage.setItem('ks90-menu', rawStr); } catch(_){}
-
-    clearTimeout(_menuDebounce);
-    _menuDebounce = setTimeout(() => cb(LIVE_MENU), 250);
-  });
-}
-
-// Subscribe to categories — อ่านจาก Firebase
-let LIVE_CATEGORIES = {
-  setkao: '🍱 เซ็ตอาหาร', kao: '🍜 อาหาร',
-  nam: '🥤 เครื่องดื่ม', coffee: '☕ กาแฟ', soda: '🫧 โซดา',
-};
-let LIVE_DEFAULT_CAT = null; // id ของหมวดที่จะแสดงก่อนใน customer/POS
-
-// ── productTypes — stored in Firebase 'productTypes/' ──
-const DEFAULT_PRODUCT_TYPES = [
-  { value: 'kaosoi',       label: '🍜 ข้าวซอย',            desc: 'มีตัวเลือกท็อปปิ้ง' },
-  { value: 'namngiao',     label: '🍜 น้ำเงี้ยว',           desc: 'มีตัวเลือกท็อปปิ้ง' },
-  { value: 'kaomutod',     label: '🍚 ข้าวหมูทอด',          desc: 'มีตัวเลือกเพิ่ม' },
-  { value: 'mapraopun',    label: '🥥 มะพร้าวปั่น',         desc: 'เลือกความหวาน' },
-  { value: 'drink-brew',   label: '☕ เครื่องดื่มชง',       desc: 'ร้อน/เย็น + ความหวาน + เพิ่มเติม' },
-  { value: 'drink-ready',  label: '🥤 เครื่องดื่มสำเร็จ',   desc: 'ไม่มีตัวเลือก (แค่หมายเหตุ)' },
-  { value: 'setkao',       label: '🍱 เซ็ตอาหาร',           desc: 'ไม่มีตัวเลือก (แค่หมายเหตุ)' },
-  { value: 'simple',       label: '🍽 เมนูเดี่ยว',           desc: 'ไม่มีตัวเลือก ไม่มีหมายเหตุ' },
-];
-let LIVE_PRODUCT_TYPES = [...DEFAULT_PRODUCT_TYPES]; // array of { value, label, desc }
-let LIVE_PT_TOPPINGS = {}; // { [ptValue]: [ {id,label,type,choices} ] }
-let _ptToppingEditors = {};
-
-function subscribeProductTypes() {
-  onValue(ref(db, 'productTypes'), snap => {
-    if (snap.exists()) {
-      const data = snap.val(); // { kaosoi: { label, desc }, ... }
-      LIVE_PRODUCT_TYPES = Object.entries(data).map(([value, obj]) => ({
-        value,
-        label: obj.label || value,
-        desc:  obj.desc  || '',
-      }));
-    } else {
-      // seed defaults to Firebase on first run
-      LIVE_PRODUCT_TYPES = [...DEFAULT_PRODUCT_TYPES];
-      const writes = {};
-      DEFAULT_PRODUCT_TYPES.forEach(pt => {
-        writes[pt.value] = { label: pt.label, desc: pt.desc };
-      });
-      update(ref(db, 'productTypes'), writes).catch(() => {});
-    }
-    // sync LS
-    try { localStorage.setItem('ks90-productTypes', JSON.stringify(LIVE_PRODUCT_TYPES)); } catch(_) {}
-    // rebuild productType select inside open menu modal
-    rebuildProductTypeSelect(document.getElementById('menuProductType')?.value);
-    // re-render menu table if open
-    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
-    // re-render productType modal if open
-    if (window._ptModalRerender) window._ptModalRerender();
-  });
-}
-
+// ── productTypes — เก็บใน meta.productTypes ──
 async function addProductTypeLocal(value, label, desc) {
   if (!value || !label) throw new Error('ต้องระบุ id และชื่อ');
   value = value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
   if (!value) throw new Error('id ต้องเป็น a-z, 0-9, - หรือ _ เท่านั้น');
-  await update(ref(db, 'productTypes'), { [value]: { label: label.trim(), desc: (desc||'').trim() } });
+  LIVE_PRODUCT_TYPES.push({ value, label: label.trim(), desc: (desc || '').trim() });
+  await _saveProdTypes();
 }
 
 async function updateProductTypeLocal(value, label, desc) {
-  await update(ref(db, `productTypes/${value}`), { label: label.trim(), desc: (desc||'').trim() });
+  const idx = LIVE_PRODUCT_TYPES.findIndex(p => p.value === value);
+  if (idx >= 0) LIVE_PRODUCT_TYPES[idx] = { value, label: label.trim(), desc: (desc || '').trim() };
+  await _saveProdTypes();
 }
 
 async function deleteProductTypeLocal(value) {
-  await remove(ref(db, `productTypes/${value}`));
+  LIVE_PRODUCT_TYPES = LIVE_PRODUCT_TYPES.filter(p => p.value !== value);
+  await _saveProdTypes();
 }
-let _rawCats = null;
-let _catSort = {};
 
-function _applyCatSort() {
-  if (!_rawCats) return;
-  const entries = Object.entries(_rawCats);
-  entries.sort(([a], [b]) => (_catSort[a] ?? 9999) - (_catSort[b] ?? 9999));
-  LIVE_CATEGORIES = Object.fromEntries(entries);
-  try { localStorage.setItem('ks90-categories', JSON.stringify(LIVE_CATEGORIES)); } catch(_){}
-  renderCatBtns();
+async function _saveProdTypes() {
+  const obj = {};
+  LIVE_PRODUCT_TYPES.forEach(pt => { obj[pt.value] = { label: pt.label, desc: pt.desc }; });
+  await api.updateMeta({ productTypes: obj });
+  try { localStorage.setItem('ks90-productTypes', JSON.stringify(LIVE_PRODUCT_TYPES)); } catch(_) {}
+  rebuildProductTypeSelect(document.getElementById('menuProductType')?.value);
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
-  if (window._catModalRerender) window._catModalRerender();
+  if (window._ptModalRerender) window._ptModalRerender();
 }
 
-function subscribeCategories() {
-  onValue(ref(db, 'categories'), snap => {
-    _rawCats = snap.exists() ? snap.val() : { ...DEFAULT_LOCAL_CATS };
-    _applyCatSort();
-  });
-  onValue(ref(db, 'categories_sort'), snap => {
-    _catSort = snap.exists() ? snap.val() : {};
-    _applyCatSort();
-  });
+async function savePtToppings(ptValue, groups) {
+  if (!groups || groups.length === 0) {
+    delete LIVE_PT_TOPPINGS[ptValue];
+  } else {
+    LIVE_PT_TOPPINGS[ptValue] = groups;
+  }
+  await api.updateMeta({ productTypeToppings: LIVE_PT_TOPPINGS });
+  if (window._ptModalRerender) window._ptModalRerender();
 }
+
+// ============================================================
+//  UTILS
+// ============================================================
+const fmt  = n => '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+const fmtN = n => Number(n || 0).toLocaleString('th-TH');
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function daysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().slice(0, 10); }
+function dateLabel(ts) {
+  if (!ts) return '—';
+  const d = ts instanceof Date ? ts : new Date(ts);
+  return d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+}
+const CAT_LABELS = () => LIVE_CATEGORIES;
+function _guessCategory(itemName) {
+  const found = Object.values(LIVE_MENU).find(m => m.name === itemName);
+  return found?.category || '';
+}
+
+// ============================================================
+//  NORMALISE ORDER — convert API response → flat order obj
+// ============================================================
+function normaliseOrder(o, key) {
+  const items = [];
+  if (Array.isArray(o.batches)) {
+    o.batches.forEach(b => {
+      if (Array.isArray(b)) b.forEach(it => items.push(it));
+      else if (b && Array.isArray(b.items)) b.items.forEach(it => items.push(it));
+    });
+  } else if (o.batches && typeof o.batches === 'object') {
+    Object.values(o.batches).forEach(b => {
+      if (Array.isArray(b)) b.forEach(it => items.push(it));
+      else if (b && Array.isArray(b.items)) b.items.forEach(it => items.push(it));
+    });
+  } else if (Array.isArray(o.items)) {
+    items.push(...o.items);
+  }
+  return {
+    id:            key || o.id,
+    orderNumber:   o.orderNumber || o.id || key,
+    table:         o.table || o.table_num || o.tableNumber || '—',
+    status:        o.status || 'pending',
+    total:         o.total || 0,
+    items,
+    createdAt:     o.date ? new Date(o.date) : (o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now())),
+    paymentMethod: o.paymentMethod || o.payment_method || 'cash',
+  };
+}
+
+// ============================================================
+//  INIT — โหลดข้อมูลเริ่มต้นจาก REST + เปิด WebSocket
+// ============================================================
+async function initData() {
+  // โหลด meta (categories, productTypes, defaultCat, productTypeToppings)
+  try {
+    const meta = await api.getMeta();
+    if (meta) {
+      if (meta.categories)           LIVE_CATEGORIES   = meta.categories;
+      if (meta.categories_sort)      _catSort           = meta.categories_sort;
+      if (meta.defaultCat)           LIVE_DEFAULT_CAT   = meta.defaultCat;
+      if (meta.productTypes) {
+        LIVE_PRODUCT_TYPES = Object.entries(meta.productTypes).map(([value, obj]) => ({
+          value, label: obj.label || value, desc: obj.desc || '',
+        }));
+      }
+      if (meta.productTypeToppings)  LIVE_PT_TOPPINGS   = meta.productTypeToppings;
+    }
+  } catch(e) {
+    console.warn('getMeta failed:', e.message);
+    // fallback: localStorage
+    try {
+      const c = localStorage.getItem('ks90-categories');
+      if (c) LIVE_CATEGORIES = JSON.parse(c);
+      const pt = localStorage.getItem('ks90-productTypes');
+      if (pt) LIVE_PRODUCT_TYPES = JSON.parse(pt);
+    } catch(_) {}
+  }
+
+  // โหลดเมนู
+  try {
+    const menuObj = await api.getMenu();
+    if (menuObj && typeof menuObj === 'object') {
+      LIVE_MENU = menuObj;
+      MOCK_MENU = Object.values(LIVE_MENU);
+      try { localStorage.setItem('ks90-menu', JSON.stringify(menuObj)); } catch(_) {}
+    }
+  } catch(e) {
+    console.warn('getMenu failed:', e.message);
+    try {
+      const cached = localStorage.getItem('ks90-menu');
+      if (cached) { LIVE_MENU = JSON.parse(cached); MOCK_MENU = Object.values(LIVE_MENU); }
+    } catch(_) {}
+  }
+
+  // โหลด orders ทั้งหมด
+  try {
+    const raw = await api.getOrders();
+    if (Array.isArray(raw)) {
+      LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
+      MOCK_ORDERS = LIVE_ORDERS;
+    }
+  } catch(e) {
+    console.warn('getOrders failed:', e.message);
+  }
+
+  // render ส่วนที่พร้อม
+  renderCatBtns();
+  rebuildProductTypeSelect();
+  if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+
+  // เปิด WebSocket สำหรับ realtime update
+  _startWs();
+}
+
+// ─── WebSocket realtime ───────────────────────────────────────
+let _wsConn = null;
+
+function _startWs() {
+  if (_wsConn) return;
+  try {
+    _wsConn = ws.connect('admin', async (msg) => {
+      if (!msg || !msg.type) return;
+
+      if (msg.type === 'order:new' || msg.type === 'order:update' || msg.type === 'orders:changed') {
+        // รีโหลด orders จาก REST
+        try {
+          const raw = await api.getOrders();
+          if (Array.isArray(raw)) {
+            LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
+            MOCK_ORDERS = LIVE_ORDERS;
+            if (activePanelId === 'topsellers' && tsLoaded) renderTopSellers();
+            if (activePanelId === 'history' && histLoaded) {
+              histFiltered = [...LIVE_ORDERS];
+              buildDailyChart(LIVE_ORDERS);
+              renderHistTable();
+            }
+          }
+        } catch(e) { console.warn('WS reload orders failed:', e); }
+      }
+
+      if (msg.type === 'menu:changed') {
+        try {
+          const menuObj = await api.getMenu();
+          if (menuObj) {
+            LIVE_MENU = menuObj;
+            MOCK_MENU = Object.values(LIVE_MENU);
+            if (activePanelId === 'menu') renderMenuTable();
+            if (document.getElementById('menuModal')?.classList.contains('open')) {
+              const curCat = document.getElementById('menuCategory')?.value;
+              rebuildCategorySelect(curCat);
+            }
+          }
+        } catch(e) { console.warn('WS reload menu failed:', e); }
+      }
+
+      if (msg.type === 'meta:changed') {
+        try {
+          const meta = await api.getMeta();
+          if (meta) {
+            if (meta.categories)          { LIVE_CATEGORIES = meta.categories; _notifyCatsLocal(LIVE_CATEGORIES); }
+            if (meta.defaultCat)          { LIVE_DEFAULT_CAT = meta.defaultCat; if (window._catModalRerender) window._catModalRerender(); }
+            if (meta.productTypes)        {
+              LIVE_PRODUCT_TYPES = Object.entries(meta.productTypes).map(([value, obj]) => ({ value, label: obj.label || value, desc: obj.desc || '' }));
+              rebuildProductTypeSelect(document.getElementById('menuProductType')?.value);
+              if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+              if (window._ptModalRerender) window._ptModalRerender();
+            }
+            if (meta.productTypeToppings) { LIVE_PT_TOPPINGS = meta.productTypeToppings; }
+          }
+        } catch(e) { console.warn('WS reload meta failed:', e); }
+      }
+    });
+  } catch(e) {
+    console.warn('WebSocket not available, running without realtime:', e.message);
+  }
+}
+
+// ============================================================
+//  CATEGORY HELPERS
+// ============================================================
 function renderCatBtns() {
   const wrap = document.getElementById('menuCatBtns');
   if (!wrap) return;
@@ -2122,8 +2240,6 @@ function renderCatBtns() {
     + Object.entries(LIVE_CATEGORIES).map(([id, label]) =>
         `<button class="menu-cat-btn${menuCatFilter===id?' active':''}" data-cat="${id}">${escHtml(label)}</button>`
       ).join('');
-  // ใช้ event delegation บน wrap แทน bind ทีละปุ่ม
-  // ป้องกัน duplicate listener โดย clone-replace
   const newWrap = wrap.cloneNode(true);
   wrap.parentNode.replaceChild(newWrap, wrap);
   newWrap.addEventListener('click', e => {
@@ -2154,44 +2270,8 @@ function rebuildProductTypeSelect(currentVal) {
   if (currentVal) sel.value = currentVal;
 }
 
-
 // ============================================================
-//  UTILS
-// ============================================================
-const fmt = n => '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
-
-// หา category ของรายการจาก LIVE_MENU (ใช้ใน top sellers)
-function _guessCategory(itemName) {
-  const found = Object.values(LIVE_MENU).find(m => m.name === itemName);
-  return found?.category || '';
-}
-const fmtN = n => Number(n || 0).toLocaleString('th-TH');
-function escHtml(s) {
-  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
-}
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-function daysAgo(d) {
-  const dt = new Date(); dt.setDate(dt.getDate() - d);
-  return dt.toISOString().slice(0, 10);
-}
-function dateLabel(ts) {
-  if (!ts) return '—';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })
-    + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-}
-
-const CAT_LABELS = () => LIVE_CATEGORIES;
-
-// LIVE_ORDERS และ LIVE_MENU ถูก declare ไว้ข้างบนแล้ว (Firebase)
-// ใช้ตัวแปรเหล่านี้แทน MOCK_ORDERS / MOCK_MENU ทุกที่
-let MOCK_ORDERS = LIVE_ORDERS;
-let MOCK_MENU   = Object.values(LIVE_MENU);
-
-// ============================================================
-//  ===== PANEL: EXPORT =====
+//  PANEL: EXPORT
 // ============================================================
 let exportRange = 'today';
 
@@ -2204,8 +2284,6 @@ document.querySelectorAll('.export-range-card').forEach(card => {
   });
 });
 
-// Set default dates (handled above in INIT block)
-
 function getExportOrders() {
   const today = todayStr();
   const from = exportRange === 'today' ? today
@@ -2215,7 +2293,7 @@ function getExportOrders() {
              ? document.getElementById('exportDateTo').value || today
              : today;
   return MOCK_ORDERS.filter(o => {
-    const d = o.createdAt.toISOString?.().slice(0,10) || o.createdAt.toString().slice(0,10);
+    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
     return d >= from && d <= to && o.status === 'paid';
   });
 }
@@ -2237,7 +2315,7 @@ document.getElementById('exportPreviewBtn').addEventListener('click', () => {
         <th>ออเดอร์</th><th>วันที่</th><th>โต๊ะ</th><th>รายการ</th><th style="text-align:right">ยอด</th>
       </tr></thead>
       <tbody>
-        ${orders.slice(0,20).map(o => `
+        ${orders.slice(0, 20).map(o => `
           <tr>
             <td class="order-num-chip">#${o.orderNumber}</td>
             <td>${dateLabel(o.createdAt)}</td>
@@ -2252,15 +2330,15 @@ document.getElementById('exportPreviewBtn').addEventListener('click', () => {
 });
 
 document.getElementById('exportSendBtn').addEventListener('click', async () => {
-  const url = document.getElementById('exportWebhookUrl').value.trim();
+  const url    = document.getElementById('exportWebhookUrl').value.trim();
   const orders = getExportOrders();
-  const card = document.getElementById('exportProgressCard');
-  const fill = document.getElementById('exportProgressFill');
-  const pct  = document.getElementById('exportProgressPct');
-  const log  = document.getElementById('exportLog');
+  const card   = document.getElementById('exportProgressCard');
+  const fill   = document.getElementById('exportProgressFill');
+  const pct    = document.getElementById('exportProgressPct');
+  const log    = document.getElementById('exportLog');
 
   if (!orders.length) { log.textContent = '⚠️ ไม่มีข้อมูลในช่วงที่เลือก'; log.className = 'export-log err'; card.style.display = ''; return; }
-  if (!url) { log.textContent = '⚠️ กรุณาใส่ Google Apps Script URL'; log.className = 'export-log err'; card.style.display = ''; return; }
+  if (!url)           { log.textContent = '⚠️ กรุณาใส่ Google Apps Script URL'; log.className = 'export-log err'; card.style.display = ''; return; }
 
   card.style.display = '';
   log.textContent = `📦 กำลังเตรียมข้อมูล ${orders.length} ออเดอร์…`;
@@ -2270,10 +2348,11 @@ document.getElementById('exportSendBtn').addEventListener('click', async () => {
   const rows = [];
   orders.forEach(o => {
     o.items.forEach(item => {
+      const dt = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt);
       rows.push({
         orderNumber: o.orderNumber,
-        date: (o.createdAt.toDate ? o.createdAt.toDate() : o.createdAt).toLocaleDateString('th-TH'),
-        time: (o.createdAt.toDate ? o.createdAt.toDate() : o.createdAt).toLocaleTimeString('th-TH'),
+        date: dt.toLocaleDateString('th-TH'),
+        time: dt.toLocaleTimeString('th-TH'),
         table: o.table,
         itemName: item.name,
         qty: item.qty,
@@ -2303,26 +2382,25 @@ document.getElementById('exportSendBtn').addEventListener('click', async () => {
     }
   } catch (err) {
     fill.style.width = '100%';
-    log.textContent = `❌ ส่งไม่สำเร็จ: ${err.message}\n\nหมายเหตุ: ถ้าใช้ Mock Data ระบบไม่สามารถส่ง Webhook จริงได้`;
+    log.textContent = `❌ ส่งไม่สำเร็จ: ${err.message}`;
     log.className = 'export-log err';
   }
 });
 
 // ============================================================
-//  ===== PANEL: TOP SELLERS =====
+//  PANEL: TOP SELLERS
 // ============================================================
 let tsLoaded = false;
-let tsDays = 30;
+let tsDays   = 30;
 let qrInited = false;
 
 function buildTopSellers(orders, days) {
-  const now = new Date();
+  const now    = new Date();
   const cutoff = days === 0 ? new Date(0) : new Date(now - days * 864e5);
   const filtered = orders.filter(o => {
-    const d = o.createdAt.toDate ? o.createdAt.toDate() : o.createdAt;
+    const d = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt);
     return d >= cutoff && o.status === 'paid';
   });
-
   const map = {};
   filtered.forEach(o => {
     o.items.forEach(it => {
@@ -2331,24 +2409,25 @@ function buildTopSellers(orders, days) {
       map[it.name].revenue += it.price * it.qty;
     });
   });
-
   const list = Object.values(map).sort((a, b) => b.qty - a.qty);
-  const totalOrders = filtered.length;
-  const totalItems = list.reduce((s, i) => s + i.qty, 0);
-  const totalRevenue = list.reduce((s, i) => s + i.revenue, 0);
-  return { list, totalOrders, totalItems, totalRevenue };
+  return {
+    list,
+    totalOrders:  filtered.length,
+    totalItems:   list.reduce((s, i) => s + i.qty, 0),
+    totalRevenue: list.reduce((s, i) => s + i.revenue, 0),
+  };
 }
 
 function renderTopSellers() {
   const { list, totalOrders, totalItems, totalRevenue } = buildTopSellers(MOCK_ORDERS, tsDays);
-  document.getElementById('tsTotalOrders').textContent = fmtN(totalOrders);
-  document.getElementById('tsTotalItems').textContent = fmtN(totalItems);
+  document.getElementById('tsTotalOrders').textContent  = fmtN(totalOrders);
+  document.getElementById('tsTotalItems').textContent   = fmtN(totalItems);
   document.getElementById('tsTotalRevenue').textContent = fmt(totalRevenue);
-  document.getElementById('tsDateRange').textContent =
+  document.getElementById('tsDateRange').textContent    =
     tsDays === 0 ? 'ทั้งหมด' : tsDays === 1 ? 'วันนี้' : tsDays + ' วันล่าสุด';
 
   const maxQty = list[0]?.qty || 1;
-  const body = document.getElementById('tsTableBody');
+  const body   = document.getElementById('tsTableBody');
   if (!list.length) {
     body.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">🏆</div><div class="empty-state-text">ไม่มีข้อมูลในช่วงนี้</div></div></td></tr>`;
     return;
@@ -2390,16 +2469,22 @@ document.querySelectorAll('.topseller-filter-btn').forEach(btn => {
   });
 });
 
-document.getElementById('tsRefreshBtn').addEventListener('click', () => {
-  MOCK_ORDERS = LIVE_ORDERS;
+document.getElementById('tsRefreshBtn').addEventListener('click', async () => {
+  try {
+    const raw = await api.getOrders();
+    if (Array.isArray(raw)) {
+      LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
+      MOCK_ORDERS = LIVE_ORDERS;
+    }
+  } catch(e) { console.warn(e); }
   renderTopSellers();
 });
 
 // ============================================================
-//  ===== PANEL: HISTORY =====
+//  PANEL: HISTORY
 // ============================================================
-let histLoaded = false;
-let histPage = 1;
+let histLoaded  = false;
+let histPage    = 1;
 const HIST_PER_PAGE = 15;
 let histFiltered = [];
 
@@ -2407,22 +2492,21 @@ function buildDailyChart(orders) {
   const map = {};
   orders.forEach(o => {
     if (o.status !== 'paid') return;
-    const d = (o.createdAt.toDate ? o.createdAt.toDate() : o.createdAt).toISOString().slice(5,10);
+    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(5, 10);
     map[d] = (map[d] || 0) + o.total;
   });
-  const keys = Object.keys(map).sort();
-  const vals = keys.map(k => map[k]);
+  const keys   = Object.keys(map).sort();
+  const vals   = keys.map(k => map[k]);
   const maxVal = Math.max(...vals, 1);
-  const chart = document.getElementById('dailyChart');
+  const chart  = document.getElementById('dailyChart');
   if (!keys.length) { chart.innerHTML = '<div class="empty-state" style="width:100%"><div class="empty-state-text">ไม่มีข้อมูล</div></div>'; return; }
   chart.innerHTML = keys.map((k, i) => {
     const h = Math.max(4, Math.round((vals[i] / maxVal) * 80));
-    return `
-      <div class="day-bar-col" title="${k}: ${fmt(vals[i])}">
-        <div class="day-bar" style="height:${h}px">
-          <span class="day-bar-label">${k}</span>
-        </div>
-      </div>`;
+    return `<div class="day-bar-col" title="${k}: ${fmt(vals[i])}">
+      <div class="day-bar" style="height:${h}px">
+        <span class="day-bar-label">${k}</span>
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -2434,7 +2518,7 @@ function applyHistFilters() {
 
   histFiltered = MOCK_ORDERS.filter(o => {
     if (status && o.status !== status) return false;
-    const d = (o.createdAt.toDate ? o.createdAt.toDate() : o.createdAt).toISOString().slice(0,10);
+    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
     if (from && d < from) return false;
     if (to   && d > to  ) return false;
     if (search) {
@@ -2464,10 +2548,10 @@ function renderHistTable() {
     `รายการออเดอร์ (${fmtN(histFiltered.length)} รายการ)`;
 
   const STATUS_MAP = {
-    paid: ['status-paid','✅ จ่ายแล้ว'],
-    pending: ['status-pending','⏳ รอรับ'],
-    cooking: ['status-cooking','👨‍🍳 กำลังทำ'],
-    served: ['status-served','🍽 เสิร์ฟแล้ว'],
+    paid:      ['status-paid','✅ จ่ายแล้ว'],
+    pending:   ['status-pending','⏳ รอรับ'],
+    cooking:   ['status-cooking','👨‍🍳 กำลังทำ'],
+    served:    ['status-served','🍽 เสิร์ฟแล้ว'],
     cancelled: ['status-cancelled','✕ ยกเลิก'],
   };
 
@@ -2500,26 +2584,25 @@ function renderHistTable() {
   // expand rows
   body.querySelectorAll('.expand-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
+      const id       = btn.dataset.id;
       const existing = body.querySelector(`.expand-row[data-for="${id}"]`);
       if (existing) { existing.remove(); btn.textContent = '▶'; return; }
       btn.textContent = '▼';
       const o = histFiltered.find(x => x.id === id);
       if (!o) return;
       const tr = document.createElement('tr');
-      tr.className = 'expand-row'; tr.dataset.for = id;
-      tr.innerHTML = `<td colspan="7">
+      tr.className  = 'expand-row'; tr.dataset.for = id;
+      tr.innerHTML  = `<td colspan="7">
         <div class="expand-inner">
           <table>
             <thead><tr><td><strong>รายการ</strong></td><td><strong>ราคา/ชิ้น</strong></td><td><strong>จำนวน</strong></td><td><strong>รวม</strong></td></tr></thead>
-            <tbody>
-              ${o.items.map(i => `
-                <tr>
-                  <td>${escHtml(i.name)}</td>
-                  <td>${fmt(i.price)}</td>
-                  <td>×${i.qty}</td>
-                  <td style="font-weight:700">${fmt(i.price * i.qty)}</td>
-                </tr>`).join('')}
+            <tbody>${o.items.map(i => `
+              <tr>
+                <td>${escHtml(i.name)}</td>
+                <td>${fmt(i.price)}</td>
+                <td>×${i.qty}</td>
+                <td style="font-weight:700">${fmt(i.price * i.qty)}</td>
+              </tr>`).join('')}
             </tbody>
             <tfoot>
               <tr><td colspan="3" style="font-weight:700">รวม</td><td style="font-weight:700;color:var(--accent)">${fmt(o.total)}</td></tr>
@@ -2542,11 +2625,9 @@ function renderHistTable() {
   prev.className = 'page-btn'; prev.textContent = '‹'; prev.disabled = histPage === 1;
   prev.addEventListener('click', () => { if (histPage > 1) { histPage--; renderHistTable(); } });
   pag.appendChild(prev);
-
   const info = document.createElement('span');
   info.className = 'page-info'; info.textContent = `${histPage} / ${total_pages}`;
   pag.appendChild(info);
-
   const next = document.createElement('button');
   next.className = 'page-btn'; next.textContent = '›'; next.disabled = histPage === total_pages;
   next.addEventListener('click', () => { if (histPage < total_pages) { histPage++; renderHistTable(); } });
@@ -2557,7 +2638,7 @@ async function loadHistory() {
   histLoaded = true;
   document.getElementById('histDateFrom').value = daysAgo(30);
   document.getElementById('histDateTo').value   = todayStr();
-  MOCK_ORDERS = LIVE_ORDERS;
+  MOCK_ORDERS  = LIVE_ORDERS;
   histFiltered = [...LIVE_ORDERS];
   buildDailyChart(LIVE_ORDERS);
   renderHistTable();
@@ -2566,40 +2647,44 @@ async function loadHistory() {
 document.getElementById('histApplyFilter').addEventListener('click', applyHistFilters);
 document.getElementById('histSearchInput').addEventListener('input', applyHistFilters);
 document.getElementById('histStatusFilter').addEventListener('change', applyHistFilters);
-document.getElementById('histRefreshBtn').addEventListener('click', () => {
-  MOCK_ORDERS = LIVE_ORDERS;
-  histFiltered = [...LIVE_ORDERS];
-  buildDailyChart(LIVE_ORDERS);
-  renderHistTable();
+document.getElementById('histRefreshBtn').addEventListener('click', async () => {
+  try {
+    const raw = await api.getOrders();
+    if (Array.isArray(raw)) {
+      LIVE_ORDERS  = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
+      MOCK_ORDERS  = LIVE_ORDERS;
+      histFiltered = [...LIVE_ORDERS];
+      buildDailyChart(LIVE_ORDERS);
+      renderHistTable();
+    }
+  } catch(e) { console.warn(e); }
 });
 
-// CSV export
 document.getElementById('histExportCsvBtn').addEventListener('click', () => {
-  const headers = ['ออเดอร์', 'วันที่', 'โต๊ะ', 'ชื่อเมนู', 'จำนวน', 'ราคา', 'ยอดรวม', 'สถานะ', 'ช่องทางชำระ'];
+  const headers = ['ออเดอร์','วันที่','โต๊ะ','ชื่อเมนู','จำนวน','ราคา','ยอดรวม','สถานะ','ช่องทางชำระ'];
   const rows = [];
   histFiltered.forEach(o => {
     o.items.forEach(it => rows.push([
       '#'+o.orderNumber,
-      (o.createdAt.toDate ? o.createdAt.toDate() : o.createdAt).toLocaleString('th-TH'),
-      'โต๊ะ'+o.table,
-      it.name, it.qty, it.price, o.total, o.status, o.paymentMethod
+      (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toLocaleString('th-TH'),
+      'โต๊ะ'+o.table, it.name, it.qty, it.price, o.total, o.status, o.paymentMethod,
     ]));
   });
   const csv = [headers, ...rows].map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+  const a   = document.createElement('a');
+  a.href    = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
   a.download = 'orders_' + todayStr() + '.csv';
   a.click();
 });
 
 // ============================================================
-//  ===== PANEL: MENU MANAGER =====
+//  PANEL: MENU MANAGER
 // ============================================================
-let menuLoaded = false;
+let menuLoaded    = false;
 let menuCatFilter = 'all';
-let menuSearch = '';
+let menuSearch    = '';
 let editingMenuId = null;
-let optionGroups = [];
+let optionGroups  = [];
 
 const CAT_CSS = { setkao:'cat-setkao', kao:'cat-kao', nam:'cat-nam', coffee:'cat-coffee', soda:'cat-soda' };
 
@@ -2608,10 +2693,9 @@ function getPtLabel(value) {
   const found = LIVE_PRODUCT_TYPES.find(p => p.value === value);
   return found ? found.label : value;
 }
-
 function getPtChip(value) {
   if (!value) return '<span style="color:var(--brown-light);font-size:.78rem">—</span>';
-  const label = getPtLabel(value);
+  const label  = getPtLabel(value);
   const safeKey = value.replace(/[^a-z0-9_-]/g, '');
   return `<span class="pt-chip pt-chip-${safeKey}">${escHtml(label)}</span>`;
 }
@@ -2664,7 +2748,6 @@ function renderMenuTable() {
       </tr>`;
   }).join('');
 
-  // bind events
   body.querySelectorAll('.menu-toggle').forEach(chk => {
     chk.addEventListener('change', () => {
       toggleMenuItemLocal(chk.dataset.id, chk.checked).catch(e => console.error(e));
@@ -2688,8 +2771,8 @@ function renderMenuTable() {
   let draggingRow = null;
   body.querySelectorAll('tr[draggable]').forEach(row => {
     row.addEventListener('dragstart', () => { draggingRow = row; row.classList.add('dragging'); });
-    row.addEventListener('dragend', () => { row.classList.remove('dragging'); draggingRow = null; });
-    row.addEventListener('dragover', e => { e.preventDefault(); if (draggingRow && draggingRow !== row) row.classList.add('drag-over'); });
+    row.addEventListener('dragend',   () => { row.classList.remove('dragging'); draggingRow = null; });
+    row.addEventListener('dragover',  e => { e.preventDefault(); if (draggingRow && draggingRow !== row) row.classList.add('drag-over'); });
     row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
     row.addEventListener('drop', e => {
       e.preventDefault();
@@ -2698,7 +2781,6 @@ function renderMenuTable() {
       const ids = [...body.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
       const fromIdx = ids.indexOf(draggingRow.dataset.id);
       const toIdx   = ids.indexOf(row.dataset.id);
-      // reorder และ save sortOrder ลง LocalStorage
       const filtered = getFilteredMenu();
       const moved = filtered.splice(fromIdx, 1)[0];
       filtered.splice(toIdx, 0, moved);
@@ -2709,33 +2791,37 @@ function renderMenuTable() {
 
 async function loadMenuItems() {
   menuLoaded = true;
-  renderCatBtns();          // แสดงปุ่มหมวดทันที
+  renderCatBtns();
   MOCK_MENU = Object.values(LIVE_MENU);
   if (MOCK_MENU.length > 0) {
     renderMenuTable();
   } else {
-    // Firebase ยังไม่ตอบ — แสดง spinner รอ callback จาก subscribeMenu
     document.getElementById('menuTableBody').innerHTML =
-      '<tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนูจาก Firebase…</div></td></tr>';
+      '<tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนู…</div></td></tr>';
     document.getElementById('menuCountBadge').textContent = '…';
-    // ตั้ง timeout fallback: ถ้า 8 วิยังว่าง แสดงว่าอาจไม่มีเมนูใน Firebase
-    setTimeout(() => {
-      if (MOCK_MENU.length === 0 && activePanelId === 'menu') renderMenuTable();
-    }, 8000);
+    // พยายามโหลดใหม่อีกครั้ง
+    try {
+      const menuObj = await api.getMenu();
+      if (menuObj) {
+        LIVE_MENU = menuObj;
+        MOCK_MENU = Object.values(LIVE_MENU);
+        renderMenuTable();
+      } else {
+        setTimeout(() => { if (MOCK_MENU.length === 0 && activePanelId === 'menu') renderMenuTable(); }, 3000);
+      }
+    } catch(e) { console.warn(e); }
   }
 }
-
-// cat filter — ปุ่มสร้างแบบ dynamic โดย renderCatBtns() ซึ่งมี event delegation ในตัวอยู่แล้ว
 
 document.getElementById('menuSearchInput').addEventListener('input', e => {
   menuSearch = e.target.value;
   renderMenuTable();
 });
 
-// ---- modal helpers ----
+// ---- menu modal ----
 function clearMenuModal() {
   editingMenuId = null;
-  optionGroups = [];
+  optionGroups  = [];
   document.getElementById('menuModalTitle').textContent = '＋ เพิ่มเมนู';
   ['menuName','menuDesc','menuImgUrl'].forEach(id => document.getElementById(id).value = '');
   ['menuPrice','menuSortOrder','menuPromoPrice'].forEach(id => document.getElementById(id).value = '');
@@ -2755,8 +2841,7 @@ function clearMenuModal() {
 function openMenuModal(id = null) {
   clearMenuModal();
   if (id) {
-    const localMenu = getMenuLocal();
-    const m = localMenu[id] || MOCK_MENU.find(x => x.id === id);
+    const m = LIVE_MENU[id] || MOCK_MENU.find(x => x.id === id);
     if (!m) return;
     editingMenuId = id;
     document.getElementById('menuModalTitle').textContent = '✏️ แก้ไขเมนู';
@@ -2765,7 +2850,6 @@ function openMenuModal(id = null) {
     document.getElementById('menuPrice').value     = m.price;
     document.getElementById('menuSortOrder').value = m.sortOrder || '';
     rebuildCategorySelect(m.category);
-    // productType — rebuild select then set value
     rebuildProductTypeSelect(m.productType || '');
     if (m.imageUrl) {
       document.getElementById('menuImgUrl').value = m.imageUrl;
@@ -2778,7 +2862,6 @@ function openMenuModal(id = null) {
       document.getElementById('menuPromoPrice').value = m.promo.promoPrice || '';
       document.getElementById('menuPromoLabel').value = m.promo.label || '';
     }
-    // รองรับทั้ง options (menu-manager format) และ optionGroups (format เก่า)
     const rawOpts = m.options || m.optionGroups || [];
     optionGroups = rawOpts.map(g => ({
       id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
@@ -2787,27 +2870,22 @@ function openMenuModal(id = null) {
       type:    g.type || 'single',
       choices: (g.choices || []).map(c =>
         typeof c === 'string'
-          ? { value: c, label: c, price: 0 }          // format เก่า
-          : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }  // format ใหม่
+          ? { value: c, label: c, price: 0 }
+          : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
       ),
     }));
     renderOptionGroups();
   }
   openModal('menuModal');
-  // Pre-fill toppings from productType defaults when adding new menu
   if (!id) {
-    const ptVal = document.getElementById('menuProductType').value;
+    const ptVal   = document.getElementById('menuProductType').value;
     const defaults = LIVE_PT_TOPPINGS[ptVal];
     if (defaults && Array.isArray(defaults) && defaults.length > 0) {
       optionGroups = defaults.map(g => ({
         id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
-        name:    g.label || '',
-        label:   g.label || '',
-        type:    g.type || 'single',
+        name:    g.label || '', label: g.label || '', type: g.type || 'single',
         choices: (g.choices || []).map(c =>
-          typeof c === 'string'
-            ? { value: c, label: c, price: 0 }
-            : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
+          typeof c === 'string' ? { value: c, label: c, price: 0 } : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
         ),
       }));
       renderOptionGroups();
@@ -2820,22 +2898,15 @@ document.getElementById('menuPromoEnabled').addEventListener('change', function(
 });
 
 document.getElementById('menuProductType').addEventListener('change', function() {
-  // pre-fill toppings only when adding NEW menu (not editing)
   if (editingMenuId) return;
-  const ptVal = this.value;
+  const ptVal   = this.value;
   const defaults = LIVE_PT_TOPPINGS[ptVal];
-  if (!defaults || !Array.isArray(defaults) || defaults.length === 0) return;
-  // only pre-fill if no groups set yet
-  if (optionGroups.length > 0) return;
+  if (!defaults || !Array.isArray(defaults) || defaults.length === 0 || optionGroups.length > 0) return;
   optionGroups = defaults.map(g => ({
-    id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
-    name:    g.label || '',
-    label:   g.label || '',
-    type:    g.type || 'single',
+    id: g.id || ('g' + Math.random().toString(36).slice(2,6)),
+    name: g.label || '', label: g.label || '', type: g.type || 'single',
     choices: (g.choices || []).map(c =>
-      typeof c === 'string'
-        ? { value: c, label: c, price: 0 }
-        : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
+      typeof c === 'string' ? { value: c, label: c, price: 0 } : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
     ),
   }));
   renderOptionGroups();
@@ -2849,32 +2920,28 @@ window.openProductTypeModal = openProductTypeModal;
 document.getElementById('menuSaveBtn').addEventListener('click', async () => {
   const name  = document.getElementById('menuName').value.trim();
   const price = parseFloat(document.getElementById('menuPrice').value);
-  if (!name) { alert('กรุณาใส่ชื่อเมนู'); return; }
+  if (!name)                      { alert('กรุณาใส่ชื่อเมนู'); return; }
   if (isNaN(price) || price < 0) { alert('กรุณาใส่ราคาที่ถูกต้อง'); return; }
 
-  const saveBtn = document.getElementById('menuSaveBtn');
+  const saveBtn  = document.getElementById('menuSaveBtn');
   const origText = saveBtn.textContent;
-  saveBtn.disabled = true;
+  saveBtn.disabled  = true;
   saveBtn.textContent = '⏳ กำลังบันทึก…';
 
   const promoEnabled = document.getElementById('menuPromoEnabled').checked;
   const id = editingMenuId || 'm' + Date.now();
-  const localMenu = getMenuLocal();
   const item = {
     id,
     name,
-    desc: document.getElementById('menuDesc').value.trim(),
-    category: document.getElementById('menuCategory').value,
+    desc:        document.getElementById('menuDesc').value.trim(),
+    category:    document.getElementById('menuCategory').value,
     productType: document.getElementById('menuProductType').value || 'simple',
     price,
-    sortOrder: parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
-    enabled: editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
-    imageUrl: document.getElementById('menuImgUrl').value.trim() || null,
-    // บันทึกในรูปแบบ menu-manager (options) — ไม่ใช้ optionGroups อีกต่อไป
+    sortOrder:   parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
+    enabled:     editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
+    imageUrl:    document.getElementById('menuImgUrl').value.trim() || null,
     options: optionGroups.length > 0 ? optionGroups.map(g => ({
-      id:      g.id || g.name,
-      label:   g.label || g.name,
-      type:    g.type,
+      id: g.id || g.name, label: g.label || g.name, type: g.type,
       choices: g.choices.map(c =>
         typeof c === 'string'
           ? { value: c, label: c }
@@ -2883,28 +2950,31 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
       hasNote: false,
     })) : null,
     promo: promoEnabled ? {
-      enabled: true,
+      enabled:    true,
       promoPrice: parseFloat(document.getElementById('menuPromoPrice').value) || price,
-      label: document.getElementById('menuPromoLabel').value.trim() || 'โปร',
+      label:      document.getElementById('menuPromoLabel').value.trim() || 'โปร',
     } : null,
   };
 
   try {
     await saveMenuItemLocal(item);
     closeModal('menuModal');
+    if (activePanelId === 'menu') renderMenuTable();
   } catch(e) {
     alert('บันทึกไม่สำเร็จ: ' + e.message);
   } finally {
-    saveBtn.disabled = false;
+    saveBtn.disabled  = false;
     saveBtn.textContent = origText;
   }
 });
 
 function duplicateMenu(id) {
-  duplicateMenuItemLocal(id).catch(e => alert('Duplicate ไม่สำเร็จ: ' + e.message));
+  duplicateMenuItemLocal(id)
+    .then(() => { if (activePanelId === 'menu') renderMenuTable(); })
+    .catch(e => alert('Duplicate ไม่สำเร็จ: ' + e.message));
 }
 
-// option groups
+// ---- option groups ----
 function renderOptionGroups() {
   const wrap = document.getElementById('optionGroupsWrap');
   wrap.innerHTML = '';
@@ -2924,9 +2994,8 @@ function renderOptionGroups() {
         ${(g.choices||[]).map((c,ci) => {
           const cLabel = typeof c === 'string' ? c : (c.label || c.value || '');
           const cPrice = typeof c === 'object' ? (c.price || '') : '';
-          return `
-          <div class="opts-choice-row" style="display:flex;gap:.4rem;align-items:center">
-            <input type="text" class="field-input" placeholder="เช่น ไม่เผ็ด" value="${escHtml(cLabel)}" style="flex:1">
+          return `<div class="opts-choice-row" style="display:flex;gap:.4rem;align-items:center">
+            <input type="text"   class="field-input" placeholder="เช่น ไม่เผ็ด" value="${escHtml(cLabel)}" style="flex:1">
             <input type="number" class="field-input" placeholder="±ราคา" value="${escHtml(String(cPrice))}" style="width:80px">
             <button type="button" class="opts-rm" data-gi="${gi}" data-ci="${ci}">✕</button>
           </div>`;
@@ -2934,22 +3003,18 @@ function renderOptionGroups() {
       </div>
       <button type="button" class="btn btn-ghost btn-sm opts-add-choice" data-gi="${gi}" style="align-self:flex-start;margin-top:.25rem">＋ เพิ่มตัวเลือก</button>`;
 
-    // bind
     const nameInput = div.querySelector('input[type=text]');
     nameInput.addEventListener('input', () => { optionGroups[gi].name = nameInput.value; });
     const typeSelect = div.querySelector('select');
     typeSelect.addEventListener('change', () => { optionGroups[gi].type = typeSelect.value; });
     div.querySelector('.opts-rm-group').addEventListener('click', () => {
-      optionGroups.splice(gi, 1);
-      renderOptionGroups();
+      optionGroups.splice(gi, 1); renderOptionGroups();
     });
     div.querySelectorAll('.opts-rm').forEach(btn => {
       btn.addEventListener('click', () => {
-        optionGroups[gi].choices.splice(parseInt(btn.dataset.ci), 1);
-        renderOptionGroups();
+        optionGroups[gi].choices.splice(parseInt(btn.dataset.ci), 1); renderOptionGroups();
       });
     });
-    // bind choice inputs (label + price)
     const choiceRows = div.querySelectorAll('.opts-choices .opts-choice-row');
     choiceRows.forEach((row, ci) => {
       const [labelInp, priceInp] = row.querySelectorAll('input');
@@ -2965,10 +3030,8 @@ function renderOptionGroups() {
       });
     });
     div.querySelector('.opts-add-choice').addEventListener('click', () => {
-      optionGroups[gi].choices.push({ value: '', label: '' });
-      renderOptionGroups();
+      optionGroups[gi].choices.push({ value: '', label: '' }); renderOptionGroups();
     });
-
     wrap.appendChild(div);
   });
 }
@@ -2979,23 +3042,21 @@ document.getElementById('addOptionGroupBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-//  INIT — subscribe Firebase live data
+//  CATEGORY MANAGER MODAL
 // ============================================================
-
-// ==================== Category Manager Modal ====================
 function openCategoryModal() {
   let modal = document.getElementById('categoryManagerModal');
   if (!modal) {
     modal = document.createElement('div');
-    modal.id = 'categoryManagerModal';
+    modal.id        = 'categoryManagerModal';
     modal.className = 'bo-modal';
     document.body.appendChild(modal);
   }
 
   function renderModal() {
-    const cats = LIVE_CATEGORIES;
+    const cats       = LIVE_CATEGORIES;
     const catEntries = Object.entries(cats);
-    const defaultId = LIVE_DEFAULT_CAT || catEntries[0]?.[0] || '';
+    const defaultId  = LIVE_DEFAULT_CAT || catEntries[0]?.[0] || '';
 
     modal.innerHTML = `
       <div class="bo-modal-box" style="max-width:500px">
@@ -3007,7 +3068,6 @@ function openCategoryModal() {
           <p style="font-size:.85rem;color:var(--brown-light);margin-top:-.25rem;margin-bottom:.75rem">
             ลากแถว <strong>⠿</strong> เพื่อเรียงลำดับ — กด <strong>⭐</strong> เพื่อตั้งหมวดเริ่มต้น
           </p>
-
           <div id="catSortList" style="display:flex;flex-direction:column;gap:.45rem">
             ${catEntries.map(([id, label]) => {
               const isDefault = id === defaultId;
@@ -3016,37 +3076,31 @@ function openCategoryModal() {
                 style="display:flex;align-items:center;gap:.5rem;background:var(--white);
                        border:1.5px solid ${isDefault ? 'var(--accent)' : 'var(--cream-dark)'};
                        border-radius:8px;padding:.35rem .5rem;transition:box-shadow .15s">
-                <span style="font-size:1.1rem;color:var(--brown-light);cursor:grab;
-                             padding:0 .25rem;user-select:none;flex-shrink:0" title="ลากเพื่อเรียง">⠿</span>
-                <input type="text" class="field-input cat-label-input" data-id="${id}"
-                  value="${escHtml(label)}" style="flex:1;min-width:0">
+                <span style="font-size:1.1rem;color:var(--brown-light);cursor:grab;padding:0 .25rem;user-select:none;flex-shrink:0">⠿</span>
+                <input type="text" class="field-input cat-label-input" data-id="${id}" value="${escHtml(label)}" style="flex:1;min-width:0">
                 <button type="button" class="btn btn-sm cat-default-btn" data-id="${id}"
-                  title="${isDefault ? 'หมวดเริ่มต้นอยู่แล้ว' : 'ตั้งเป็นหมวดเริ่มต้น'}"
                   style="background:${isDefault ? 'var(--accent)' : 'none'};
                          color:${isDefault ? '#fff' : 'var(--brown-light)'};
                          border:1.5px solid ${isDefault ? 'var(--accent)' : 'var(--cream-dark)'};
-                         border-radius:var(--pill);font-size:.8rem;padding:.25rem .55rem;
-                         cursor:${isDefault ? 'default' : 'pointer'}"
+                         border-radius:var(--pill);font-size:.8rem;padding:.25rem .55rem;cursor:${isDefault ? 'default' : 'pointer'}"
                   ${isDefault ? 'disabled' : ''}>⭐</button>
-                <button type="button" class="btn btn-outline btn-sm cat-rename-btn" data-id="${id}" title="บันทึกชื่อ">💾</button>
-                <button type="button" class="btn btn-danger btn-sm cat-delete-btn" data-id="${id}" title="ลบหมวด">🗑</button>
+                <button type="button" class="btn btn-outline btn-sm cat-rename-btn" data-id="${id}">💾</button>
+                <button type="button" class="btn btn-danger btn-sm cat-delete-btn" data-id="${id}">🗑</button>
               </div>`;
             }).join('')}
           </div>
 
-          <div id="catOrderSaveRow" style="display:none;margin-top:.6rem;display:none;justify-content:flex-end;align-items:center;gap:.75rem">
+          <div id="catOrderSaveRow" style="display:none;margin-top:.6rem;justify-content:flex-end;align-items:center;gap:.75rem">
             <p id="catOrderSaveMsg" style="font-size:.8rem;color:var(--green);min-height:1rem;flex:1"></p>
-            <button type="button" class="btn btn-primary btn-sm" id="catSaveOrderBtn">
-              💾 บันทึกลำดับใหม่
-            </button>
+            <button type="button" class="btn btn-primary btn-sm" id="catSaveOrderBtn">💾 บันทึกลำดับใหม่</button>
           </div>
 
           <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.75rem;display:flex;flex-direction:column;gap:.5rem">
             <p style="font-size:.82rem;font-weight:700;color:var(--brown-light)">＋ เพิ่มหมวดใหม่</p>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-start">
-              <input type="text" class="field-input" id="newCatId" placeholder="id เช่น dessert (a-z)" style="flex:1;min-width:100px">
-              <input type="text" class="field-input" id="newCatLabel" placeholder="ชื่อ เช่น 🍮 ของหวาน" style="flex:1;min-width:120px">
-              <button type="button" class="btn btn-primary btn-sm" id="addCatBtn" style="flex-shrink:0">＋ เพิ่มหมวด</button>
+              <input type="text" class="field-input" id="newCatId"    placeholder="id เช่น dessert (a-z)" style="flex:1;min-width:100px">
+              <input type="text" class="field-input" id="newCatLabel" placeholder="ชื่อ เช่น 🍮 ของหวาน"  style="flex:1;min-width:120px">
+              <button type="button" class="btn btn-primary btn-sm" id="addCatBtn">＋ เพิ่มหมวด</button>
             </div>
             <p id="catModalError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
           </div>
@@ -3054,47 +3108,34 @@ function openCategoryModal() {
         <div class="bo-modal-footer">
           <button type="button" class="btn btn-outline" id="catModalCloseFooter">ปิด</button>
         </div>
-      </div>
-    `;
+      </div>`;
+
     modal.classList.add('open');
 
     const closeAll = () => modal.classList.remove('open');
-    modal.querySelector('#catModalClose').onclick = closeAll;
+    modal.querySelector('#catModalClose').onclick       = closeAll;
     modal.querySelector('#catModalCloseFooter').onclick = closeAll;
     modal.addEventListener('click', e => { if (e.target === modal) closeAll(); });
 
-    // ---- Drag & Drop reorder ----
-    const list = modal.querySelector('#catSortList');
+    // Drag & Drop
+    const list    = modal.querySelector('#catSortList');
     const saveRow = modal.querySelector('#catOrderSaveRow');
     const saveMsg = modal.querySelector('#catOrderSaveMsg');
-    let dragSrc = null;
+    let dragSrc   = null;
 
     list.querySelectorAll('.cat-sort-row').forEach(row => {
-      row.addEventListener('dragstart', e => {
-        dragSrc = row;
-        row.style.opacity = '.4';
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      row.addEventListener('dragend', () => {
-        row.style.opacity = '';
-        list.querySelectorAll('.cat-sort-row').forEach(r => r.style.boxShadow = '');
-      });
-      row.addEventListener('dragover', e => {
-        e.preventDefault();
-        if (row !== dragSrc) row.style.boxShadow = '0 0 0 2px var(--accent)';
-      });
+      row.addEventListener('dragstart', e => { dragSrc = row; row.style.opacity = '.4'; e.dataTransfer.effectAllowed = 'move'; });
+      row.addEventListener('dragend',   () => { row.style.opacity = ''; list.querySelectorAll('.cat-sort-row').forEach(r => r.style.boxShadow = ''); });
+      row.addEventListener('dragover',  e => { e.preventDefault(); if (row !== dragSrc) row.style.boxShadow = '0 0 0 2px var(--accent)'; });
       row.addEventListener('dragleave', () => { row.style.boxShadow = ''; });
       row.addEventListener('drop', e => {
-        e.preventDefault();
-        row.style.boxShadow = '';
+        e.preventDefault(); row.style.boxShadow = '';
         if (!dragSrc || dragSrc === row) return;
         const rows = [...list.querySelectorAll('.cat-sort-row')];
         const srcIdx = rows.indexOf(dragSrc);
         const tgtIdx = rows.indexOf(row);
-        if (srcIdx < tgtIdx) row.after(dragSrc);
-        else row.before(dragSrc);
-        saveRow.style.display = 'flex';
-        saveMsg.textContent = '';
+        if (srcIdx < tgtIdx) row.after(dragSrc); else row.before(dragSrc);
+        saveRow.style.display = 'flex'; saveMsg.textContent = '';
       });
     });
 
@@ -3104,35 +3145,24 @@ function openCategoryModal() {
       const orderedIds = [...list.querySelectorAll('.cat-sort-row')].map(r => r.dataset.id);
       try {
         await saveCategoryOrder(orderedIds);
-        saveMsg.textContent = '✅ บันทึกลำดับแล้ว!';
-        saveMsg.style.color = 'var(--green)';
+        saveMsg.textContent = '✅ บันทึกลำดับแล้ว!'; saveMsg.style.color = 'var(--green)';
         setTimeout(() => { saveRow.style.display = 'none'; saveMsg.textContent = ''; btn.disabled = false; }, 1500);
-      } catch(e) {
-        saveMsg.textContent = '❌ ' + e.message;
-        saveMsg.style.color = 'var(--red)';
-        btn.disabled = false;
-      }
+      } catch(e) { saveMsg.textContent = '❌ ' + e.message; saveMsg.style.color = 'var(--red)'; btn.disabled = false; }
     };
 
-    // ---- ตั้งหมวดเริ่มต้น ----
     modal.querySelectorAll('.cat-default-btn').forEach(btn => {
       btn.onclick = async () => {
-        if (btn.disabled) return;
-        btn.disabled = true;
-        try {
-          await saveDefaultCatLocal(btn.dataset.id);
-          // LIVE_DEFAULT_CAT จะถูก update จาก onValue subscribe แล้ว re-render เอง
-        } catch(e) { alert('ตั้งไม่ได้: ' + e.message); btn.disabled = false; }
+        if (btn.disabled) return; btn.disabled = true;
+        try { await saveDefaultCatLocal(btn.dataset.id); }
+        catch(e) { alert('ตั้งไม่ได้: ' + e.message); btn.disabled = false; }
       };
     });
 
-    // ---- บันทึกชื่อ ----
     modal.querySelectorAll('.cat-rename-btn').forEach(btn => {
       btn.onclick = async () => {
-        const id = btn.dataset.id;
+        const id       = btn.dataset.id;
         const newLabel = modal.querySelector(`.cat-label-input[data-id="${id}"]`).value.trim();
-        if (!newLabel) return;
-        btn.disabled = true;
+        if (!newLabel) return; btn.disabled = true;
         try {
           await renameCategoryLocal(id, newLabel);
           btn.textContent = '✅';
@@ -3141,361 +3171,132 @@ function openCategoryModal() {
       };
     });
 
-    // ---- ลบหมวด ----
     modal.querySelectorAll('.cat-delete-btn').forEach(btn => {
       btn.onclick = async () => {
-        const id = btn.dataset.id;
+        const id    = btn.dataset.id;
         const label = LIVE_CATEGORIES[id] || id;
         if (!confirm(`ลบหมวด "${label}" ออก?\nเมนูที่อยู่ในหมวดนี้จะยังคงอยู่`)) return;
         btn.disabled = true;
-        try {
-          await deleteCategoryLocal(id);
-        } catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
+        try { await deleteCategoryLocal(id); }
+        catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
       };
     });
 
-    // ---- เพิ่มหมวดใหม่ ----
     modal.querySelector('#addCatBtn').onclick = async () => {
-      const idInput = modal.querySelector('#newCatId');
+      const idInput    = modal.querySelector('#newCatId');
       const labelInput = modal.querySelector('#newCatLabel');
-      const errEl = modal.querySelector('#catModalError');
+      const errEl      = modal.querySelector('#catModalError');
       errEl.textContent = '';
       let id = idInput.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
       const label = labelInput.value.trim();
-      if (!id) { errEl.textContent = 'id ต้องเป็นตัวอักษรภาษาอังกฤษ/ตัวเลขเท่านั้น'; return; }
-      if (!label) { errEl.textContent = 'กรุณาใส่ชื่อหมวด'; return; }
+      if (!id)              { errEl.textContent = 'id ต้องเป็นตัวอักษรภาษาอังกฤษ/ตัวเลขเท่านั้น'; return; }
+      if (!label)           { errEl.textContent = 'กรุณาใส่ชื่อหมวด'; return; }
       if (LIVE_CATEGORIES[id]) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
-      try {
-        await addCategoryLocal(id, label);
-        idInput.value = ''; labelInput.value = '';
-      } catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
+      try { await addCategoryLocal(id, label); idInput.value = ''; labelInput.value = ''; }
+      catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
     };
   }
 
   renderModal();
-
-  window._catModalRerender = () => {
-    if (modal.classList.contains('open')) renderModal();
-  };
+  window._catModalRerender = () => { if (modal.classList.contains('open')) renderModal(); };
 }
 
-// ==================== ProductType Manager Modal ====================
-
-function subscribePtToppings() {
-  onValue(ref(db, 'productTypeToppings'), snap => {
-    LIVE_PT_TOPPINGS = snap.exists() ? snap.val() : {};
-    if (window._ptModalRerender) window._ptModalRerender();
-  });
-}
-
-async function savePtToppings(ptValue, groups) {
-  if (!groups || groups.length === 0) {
-    await remove(ref(db, `productTypeToppings/${ptValue}`));
-  } else {
-    await set(ref(db, `productTypeToppings/${ptValue}`), groups);
-  }
-}
-
-// ─── Topping editor state (per open modal) ───
+// ============================================================
+//  PRODUCT TYPE MANAGER MODAL
+// ============================================================
 function _initPtToppingEditor(ptValue) {
-  const raw = LIVE_PT_TOPPINGS[ptValue];
-  if (Array.isArray(raw)) {
-    _ptToppingEditors[ptValue] = raw.map(g => ({
-      id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
-      label:   g.label || g.name || '',
-      type:    g.type || 'single',
-      choices: (g.choices || []).map(c =>
-        typeof c === 'string'
-          ? { value: c, label: c, price: 0 }
-          : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
-      ),
-    }));
-  } else {
-    _ptToppingEditors[ptValue] = [];
-  }
-}
-
-function _renderPtToppingEditor(container, ptValue) {
-  const groups = _ptToppingEditors[ptValue] || [];
-  container.innerHTML = '';
-
-  if (groups.length === 0) {
-    container.innerHTML = `<p style="font-size:.78rem;color:var(--brown-light);padding:.4rem 0">ยังไม่มีตัวเลือก — กด <strong>＋ เพิ่มกลุ่ม</strong> เพื่อเพิ่ม</p>`;
-    return;
-  }
-
-  groups.forEach((g, gi) => {
-    const gDiv = document.createElement('div');
-    gDiv.className = 'opts-group';
-    gDiv.style.cssText = 'background:var(--cream);border:1.5px solid var(--cream-dark);border-radius:8px;padding:.6rem;display:flex;flex-direction:column;gap:.4rem;';
-    gDiv.innerHTML = `
-      <div style="display:flex;gap:.4rem;align-items:flex-start;flex-wrap:wrap">
-        <input type="text" class="field-input pt-grp-name" placeholder="ชื่อกลุ่ม เช่น ระดับความเผ็ด"
-          value="${escHtml(g.label)}" style="flex:1;min-width:100px;font-size:.83rem;padding:.32rem .55rem">
-        <select class="field-input pt-grp-type" style="flex:0 0 88px;font-size:.8rem;padding:.32rem .45rem">
-          <option value="single" ${g.type==='single'?'selected':''}>เลือก 1</option>
-          <option value="multi"  ${g.type==='multi' ?'selected':''}>หลายอย่าง</option>
-        </select>
-        <button type="button" class="btn-icon del pt-grp-del" title="ลบกลุ่ม" style="flex-shrink:0">🗑</button>
-      </div>
-      <div class="pt-choices-wrap" style="display:flex;flex-direction:column;gap:.28rem;padding-left:.2rem">
-        ${g.choices.map((c, ci) => `
-          <div style="display:flex;gap:.35rem;align-items:center">
-            <input type="text" class="field-input pt-ch-label" data-ci="${ci}"
-              placeholder="เช่น ไม่เผ็ด" value="${escHtml(c.label||c.value||'')}"
-              style="flex:1;font-size:.82rem;padding:.28rem .5rem">
-            <input type="number" class="field-input pt-ch-price" data-ci="${ci}"
-              placeholder="±ราคา" value="${c.price != null && c.price !== 0 ? c.price : ''}"
-              style="width:70px;font-size:.82rem;padding:.28rem .45rem">
-            <button type="button" class="opts-rm pt-ch-del" data-ci="${ci}">✕</button>
-          </div>`).join('')}
-      </div>
-      <button type="button" class="btn btn-ghost btn-sm pt-add-choice" style="align-self:flex-start;font-size:.78rem;padding:.28rem .65rem;margin-top:.1rem">＋ เพิ่มตัวเลือก</button>
-    `;
-
-    gDiv.querySelector('.pt-grp-name').addEventListener('input', e => {
-      _ptToppingEditors[ptValue][gi].label = e.target.value;
-    });
-    gDiv.querySelector('.pt-grp-type').addEventListener('change', e => {
-      _ptToppingEditors[ptValue][gi].type = e.target.value;
-    });
-    gDiv.querySelector('.pt-grp-del').addEventListener('click', () => {
-      _ptToppingEditors[ptValue].splice(gi, 1);
-      _renderPtToppingEditor(container, ptValue);
-    });
-    gDiv.querySelectorAll('.pt-ch-label').forEach(inp => {
-      inp.addEventListener('input', () => {
-        const ci = parseInt(inp.dataset.ci);
-        _ptToppingEditors[ptValue][gi].choices[ci].label = inp.value;
-        _ptToppingEditors[ptValue][gi].choices[ci].value = inp.value;
-      });
-    });
-    gDiv.querySelectorAll('.pt-ch-price').forEach(inp => {
-      inp.addEventListener('input', () => {
-        const ci = parseInt(inp.dataset.ci);
-        const p = parseFloat(inp.value);
-        _ptToppingEditors[ptValue][gi].choices[ci].price = isNaN(p) ? 0 : p;
-      });
-    });
-    gDiv.querySelectorAll('.pt-ch-del').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const ci = parseInt(btn.dataset.ci);
-        _ptToppingEditors[ptValue][gi].choices.splice(ci, 1);
-        _renderPtToppingEditor(container, ptValue);
-      });
-    });
-    gDiv.querySelector('.pt-add-choice').addEventListener('click', () => {
-      _ptToppingEditors[ptValue][gi].choices.push({ value: '', label: '', price: 0 });
-      _renderPtToppingEditor(container, ptValue);
-    });
-
-    container.appendChild(gDiv);
-  });
+  if (_ptToppingEditors[ptValue]) return _ptToppingEditors[ptValue];
+  const saved = LIVE_PT_TOPPINGS[ptValue] || [];
+  _ptToppingEditors[ptValue] = JSON.parse(JSON.stringify(saved));
+  return _ptToppingEditors[ptValue];
 }
 
 function openProductTypeModal() {
   let modal = document.getElementById('productTypeManagerModal');
   if (!modal) {
     modal = document.createElement('div');
-    modal.id = 'productTypeManagerModal';
+    modal.id        = 'productTypeManagerModal';
     modal.className = 'bo-modal';
     document.body.appendChild(modal);
   }
 
-  function getUsageCount(value) {
-    return Object.values(LIVE_MENU).filter(m => m.productType === value).length;
-  }
-
   function renderModal() {
-    const pts = LIVE_PRODUCT_TYPES;
-    pts.forEach(pt => { if (!_ptToppingEditors[pt.value]) _initPtToppingEditor(pt.value); });
-
+    _ptToppingEditors = {};
     modal.innerHTML = `
-      <div class="bo-modal-box" style="max-width:680px">
+      <div class="bo-modal-box" style="max-width:620px;max-height:90vh;overflow-y:auto">
         <div class="bo-modal-header">
-          <span class="bo-modal-title">🏷 จัดการประเภทเมนู (productType)</span>
+          <span class="bo-modal-title">🏷 จัดการประเภทเมนู</span>
           <button class="bo-modal-close" id="ptModalClose">✕</button>
         </div>
-        <div class="bo-modal-body" style="gap:.75rem">
-          <p style="font-size:.82rem;color:var(--brown-light);margin-top:-.25rem">
-            กำหนดชื่อ คำอธิบาย และ <strong>Topping/ตัวเลือกเริ่มต้น</strong> สำหรับแต่ละประเภท — เมนูใหม่ที่เลือกประเภทนี้จะได้รับ Topping นี้โดยอัตโนมัติ
+        <div class="bo-modal-body">
+          <p style="font-size:.82rem;color:var(--brown-light);margin-bottom:.75rem">
+            กำหนด "ประเภทเมนู" และ Topping/ตัวเลือกเริ่มต้นสำหรับแต่ละประเภท
           </p>
-
-          <div style="display:flex;flex-direction:column;gap:.55rem" id="ptList">
-            ${pts.map(pt => {
-              const usage = getUsageCount(pt.value);
-              const safeVal = escHtml(pt.value);
-              const safeLabel = escHtml(pt.label);
-              const safeDesc  = escHtml(pt.desc || '');
-              const toppingCount = Array.isArray(LIVE_PT_TOPPINGS[pt.value]) ? LIVE_PT_TOPPINGS[pt.value].length : 0;
-              return `
-              <div class="pt-row" data-ptvalue="${safeVal}" style="flex-direction:column;align-items:stretch;gap:.55rem;padding:.7rem .75rem">
-                <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                  <div style="flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0">
-                    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-                      <input type="text" class="field-input pt-label-input" data-id="${safeVal}"
-                        value="${safeLabel}" placeholder="ชื่อประเภท"
-                        style="flex:1;min-width:110px;font-size:.85rem;padding:.35rem .55rem">
-                      <input type="text" class="field-input pt-desc-input" data-id="${safeVal}"
-                        value="${safeDesc}" placeholder="คำอธิบาย (ไม่บังคับ)"
-                        style="flex:2;min-width:140px;font-size:.82rem;padding:.35rem .55rem;color:var(--brown-light)">
-                    </div>
-                    <div class="pt-row-id">id: <strong>${safeVal}</strong></div>
+          <div id="ptList" style="display:flex;flex-direction:column;gap:1rem">
+            ${LIVE_PRODUCT_TYPES.map(pt => `
+              <div class="card" style="border:1.5px solid var(--cream-dark)">
+                <div class="card-body" style="padding:.85rem 1rem">
+                  <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+                    <strong style="font-size:.92rem;flex:1">${escHtml(pt.label)}</strong>
+                    <code style="font-size:.75rem;color:var(--brown-light);background:var(--cream-mid);padding:.1rem .4rem;border-radius:4px">${escHtml(pt.value)}</code>
+                    <button class="btn btn-outline btn-sm pt-edit-btn" data-pt="${escHtml(pt.value)}">✏️ แก้ไข</button>
+                    <button class="btn btn-danger  btn-sm pt-del-btn"  data-pt="${escHtml(pt.value)}" data-label="${escHtml(pt.label)}">🗑</button>
                   </div>
-                  <span class="pt-usage-badge${usage > 0 ? ' has-usage' : ''}" title="จำนวนเมนูที่ใช้ประเภทนี้">${usage} เมนู</span>
-                  <button type="button" class="btn btn-outline btn-sm pt-save-btn" data-id="${safeVal}">💾 บันทึก</button>
-                  <button type="button" class="btn btn-danger btn-sm pt-delete-btn" data-id="${safeVal}" data-usage="${usage}">🗑</button>
+                  ${pt.desc ? `<p style="font-size:.78rem;color:var(--brown-light)">${escHtml(pt.desc)}</p>` : ''}
+                  <div class="pt-topping-editor" id="pt-editor-${escHtml(pt.value)}" style="display:none;margin-top:.75rem"></div>
                 </div>
-
-                <div style="border-top:1px dashed var(--cream-dark);padding-top:.55rem">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem;gap:.4rem;flex-wrap:wrap">
-                    <div style="display:flex;align-items:center;gap:.35rem">
-                      <span style="font-size:.75rem;font-weight:700;color:var(--brown-light);text-transform:uppercase;letter-spacing:.04em">🍢 Topping / ตัวเลือกเริ่มต้น</span>
-                      ${toppingCount > 0
-                        ? `<span style="background:#e8f5e9;color:#2e7d32;font-size:.7rem;font-weight:700;padding:.1rem .4rem;border-radius:999px">${toppingCount} กลุ่ม</span>`
-                        : `<span style="background:var(--cream-dark);color:var(--brown-light);font-size:.7rem;padding:.1rem .4rem;border-radius:999px">ยังไม่มี</span>`}
-                    </div>
-                    <button type="button" class="btn btn-ghost btn-sm pt-topping-toggle" data-ptval="${safeVal}"
-                      style="font-size:.78rem;padding:.28rem .6rem">
-                      ${toppingCount > 0 ? '✏️ แก้ไข Topping' : '＋ เพิ่ม Topping'}
-                    </button>
-                  </div>
-                  <div class="pt-topping-editor" data-ptval="${safeVal}" style="display:none;flex-direction:column;gap:.4rem">
-                    <div class="pt-topping-groups" data-ptval="${safeVal}"></div>
-                    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.1rem">
-                      <button type="button" class="btn btn-ghost btn-sm pt-add-group" data-ptval="${safeVal}"
-                        style="font-size:.78rem;padding:.28rem .65rem">＋ เพิ่มกลุ่มตัวเลือก</button>
-                      <button type="button" class="btn btn-primary btn-sm pt-save-topping" data-ptval="${safeVal}"
-                        style="font-size:.78rem;padding:.28rem .75rem">💾 บันทึก Topping</button>
-                      <span class="pt-topping-msg" data-ptval="${safeVal}" style="font-size:.78rem;color:var(--green)"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>`;
-            }).join('')}
+              </div>`).join('')}
           </div>
 
-          <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:.1rem">
-            <p style="font-size:.82rem;font-weight:700;color:var(--brown-light);margin-bottom:.6rem">＋ เพิ่มประเภทใหม่</p>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1.5fr;gap:.45rem">
-              <input type="text" class="field-input" id="newPtId" placeholder="id เช่น hotpot" style="font-size:.82rem">
-              <input type="text" class="field-input" id="newPtLabel" placeholder="ชื่อ เช่น 🍲 หม้อไฟ" style="font-size:.82rem">
-              <input type="text" class="field-input" id="newPtDesc" placeholder="คำอธิบาย (ไม่บังคับ)" style="font-size:.82rem">
+          <div style="border-top:1.5px dashed var(--cream-dark);padding-top:1rem;margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+            <p style="font-size:.82rem;font-weight:700;color:var(--brown-light)">＋ เพิ่มประเภทใหม่</p>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-start">
+              <input type="text" class="field-input" id="newPtId"    placeholder="id เช่น pasta"   style="flex:1;min-width:100px">
+              <input type="text" class="field-input" id="newPtLabel" placeholder="ชื่อ เช่น 🍝 พาสต้า" style="flex:1;min-width:120px">
+              <input type="text" class="field-input" id="newPtDesc"  placeholder="คำอธิบาย (ไม่บังคับ)" style="flex:1;min-width:120px">
+              <button type="button" class="btn btn-primary btn-sm" id="addPtBtn">＋ เพิ่ม</button>
             </div>
-            <p id="ptModalError" style="color:var(--red);font-size:.82rem;min-height:1.2rem;margin-top:.3rem"></p>
-            <button type="button" class="btn btn-primary btn-sm" id="addPtBtn" style="margin-top:.25rem">＋ เพิ่มประเภท</button>
+            <p id="ptModalError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
           </div>
         </div>
         <div class="bo-modal-footer">
-          <p style="font-size:.75rem;color:var(--brown-light);flex:1">
-            💡 Topping ที่บันทึกไว้จะถูก pre-fill อัตโนมัติเมื่อสร้างเมนูใหม่ที่ใช้ประเภทนี้
-          </p>
           <button type="button" class="btn btn-outline" id="ptModalCloseFooter">ปิด</button>
         </div>
-      </div>
-    `;
+      </div>`;
+
     modal.classList.add('open');
 
     const closeAll = () => { modal.classList.remove('open'); _ptToppingEditors = {}; };
-    modal.querySelector('#ptModalClose').onclick = closeAll;
+    modal.querySelector('#ptModalClose').onclick       = closeAll;
     modal.querySelector('#ptModalCloseFooter').onclick = closeAll;
     modal.addEventListener('click', e => { if (e.target === modal) closeAll(); });
 
-    modal.querySelectorAll('.pt-save-btn').forEach(btn => {
+    // Delete PT
+    modal.querySelectorAll('.pt-del-btn').forEach(btn => {
       btn.onclick = async () => {
-        const id = btn.dataset.id;
-        const row = modal.querySelector(`.pt-row[data-ptvalue="${id}"]`);
-        const newLabel = row.querySelector('.pt-label-input').value.trim();
-        const newDesc  = row.querySelector('.pt-desc-input').value.trim();
-        if (!newLabel) { alert('กรุณาใส่ชื่อประเภท'); return; }
+        if (!confirm(`ลบประเภท "${btn.dataset.label}"?`)) return;
         btn.disabled = true;
-        try {
-          await updateProductTypeLocal(id, newLabel, newDesc);
-          btn.textContent = '✅ บันทึกแล้ว';
-          setTimeout(() => { btn.textContent = '💾 บันทึก'; btn.disabled = false; }, 1400);
-        } catch(e) { alert('แก้ไม่ได้: ' + e.message); btn.disabled = false; }
+        try { await deleteProductTypeLocal(btn.dataset.pt); renderModal(); }
+        catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
       };
     });
 
-    modal.querySelectorAll('.pt-delete-btn').forEach(btn => {
-      btn.onclick = async () => {
-        const id = btn.dataset.id;
-        const usage = parseInt(btn.dataset.usage) || 0;
-        const pt = LIVE_PRODUCT_TYPES.find(p => p.value === id);
-        const name = pt?.label || id;
-        let msg = `ลบประเภท "${name}" (${id}) ออก?`;
-        if (usage > 0) msg += `\n\n⚠️ มีเมนู ${usage} รายการที่ใช้ประเภทนี้อยู่`;
-        if (!confirm(msg)) return;
-        btn.disabled = true;
-        try {
-          await deleteProductTypeLocal(id);
-          await remove(ref(db, `productTypeToppings/${id}`));
-        } catch(e) { alert('ลบไม่ได้: ' + e.message); btn.disabled = false; }
-      };
-    });
-
-    modal.querySelectorAll('.pt-topping-toggle').forEach(btn => {
+    // Edit PT — toggle topping editor
+    modal.querySelectorAll('.pt-edit-btn').forEach(btn => {
       btn.onclick = () => {
-        const ptVal = btn.dataset.ptval;
-        const editor = modal.querySelector(`.pt-topping-editor[data-ptval="${ptVal}"]`);
-        const isOpen = editor.style.display !== 'none';
-        if (isOpen) {
-          editor.style.display = 'none';
-          const tCount = (_ptToppingEditors[ptVal] || []).length;
-          btn.textContent = tCount > 0 ? '✏️ แก้ไข Topping' : '＋ เพิ่ม Topping';
-        } else {
-          editor.style.display = 'flex';
-          btn.textContent = '🔼 ซ่อน';
-          if (!_ptToppingEditors[ptVal]) _initPtToppingEditor(ptVal);
-          _renderPtToppingEditor(editor.querySelector('.pt-topping-groups'), ptVal);
-        }
+        const ptVal = btn.dataset.pt;
+        const editorEl = modal.querySelector(`#pt-editor-${ptVal}`);
+        if (!editorEl) return;
+        const isOpen = editorEl.style.display !== 'none';
+        if (isOpen) { editorEl.style.display = 'none'; btn.textContent = '✏️ แก้ไข'; return; }
+        editorEl.style.display = 'block';
+        btn.textContent = '▲ ซ่อน';
+        const groups = _initPtToppingEditor(ptVal);
+        renderPtToppingEditor(editorEl, ptVal, groups, btn);
       };
     });
 
-    modal.querySelectorAll('.pt-add-group').forEach(btn => {
-      btn.onclick = () => {
-        const ptVal = btn.dataset.ptval;
-        if (!_ptToppingEditors[ptVal]) _ptToppingEditors[ptVal] = [];
-        _ptToppingEditors[ptVal].push({
-          id: 'g' + Date.now(),
-          label: '',
-          type: 'single',
-          choices: [{ value: '', label: '', price: 0 }],
-        });
-        const editor = modal.querySelector(`.pt-topping-editor[data-ptval="${ptVal}"]`);
-        _renderPtToppingEditor(editor.querySelector('.pt-topping-groups'), ptVal);
-      };
-    });
-
-    modal.querySelectorAll('.pt-save-topping').forEach(btn => {
-      btn.onclick = async () => {
-        const ptVal = btn.dataset.ptval;
-        const groups = (_ptToppingEditors[ptVal] || [])
-          .filter(g => g.label.trim() && g.choices.some(c => c.label.trim()))
-          .map(g => ({
-            id:      g.id,
-            label:   g.label.trim(),
-            type:    g.type,
-            choices: g.choices
-              .filter(c => c.label.trim())
-              .map(c => ({ value: c.value||c.label, label: c.label, price: c.price||0 })),
-          }));
-        const msgEl = modal.querySelector(`.pt-topping-msg[data-ptval="${ptVal}"]`);
-        btn.disabled = true;
-        try {
-          await savePtToppings(ptVal, groups.length > 0 ? groups : null);
-          _ptToppingEditors[ptVal] = groups;
-          msgEl.textContent = '✅ บันทึกแล้ว!';
-          msgEl.style.color = 'var(--green)';
-          setTimeout(() => { msgEl.textContent = ''; btn.disabled = false; }, 2000);
-        } catch(e) {
-          msgEl.textContent = '❌ ' + e.message;
-          msgEl.style.color = 'var(--red)';
-          btn.disabled = false;
-        }
-      };
-    });
-
+    // Add PT
     modal.querySelector('#addPtBtn').onclick = async () => {
       const idInput    = modal.querySelector('#newPtId');
       const labelInput = modal.querySelector('#newPtLabel');
@@ -3507,60 +3308,146 @@ function openProductTypeModal() {
       const desc  = descInput.value.trim();
       if (!id)    { errEl.textContent = 'id ต้องเป็น a-z, 0-9, - หรือ _ เท่านั้น'; return; }
       if (!label) { errEl.textContent = 'กรุณาใส่ชื่อประเภท'; return; }
-      if (LIVE_PRODUCT_TYPES.find(p => p.value === id)) {
-        errEl.textContent = `id "${id}" มีอยู่แล้ว`; return;
-      }
+      if (LIVE_PRODUCT_TYPES.find(p => p.value === id)) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
       try {
         await addProductTypeLocal(id, label, desc);
         idInput.value = ''; labelInput.value = ''; descInput.value = '';
         errEl.textContent = '';
+        renderModal();
       } catch(e) { errEl.textContent = 'เพิ่มไม่ได้: ' + e.message; }
     };
   }
 
-  renderModal();
+  // ─── Render per-PT topping editor ───
+  function renderPtToppingEditor(el, ptVal, groups, toggleBtn) {
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:.55rem" id="pt-groups-${escHtml(ptVal)}"></div>
+      <div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap;align-items:center">
+        <button type="button" class="btn btn-ghost btn-sm pt-add-group">＋ เพิ่มกลุ่ม Topping</button>
+        <button type="button" class="btn btn-primary btn-sm pt-save-toppings">💾 บันทึก Topping</button>
+        <span class="pt-save-msg" style="font-size:.8rem;color:var(--green);min-height:1rem"></span>
+      </div>`;
 
-  window._ptModalRerender = () => {
-    if (modal.classList.contains('open')) { _ptToppingEditors = {}; renderModal(); }
-  };
+    function renderGroups() {
+      const wrap = el.querySelector(`#pt-groups-${ptVal}`);
+      wrap.innerHTML = '';
+      groups.forEach((g, gi) => {
+        const div = document.createElement('div');
+        div.style.cssText = 'border:1.5px solid var(--cream-dark);border-radius:8px;padding:.6rem .75rem;background:var(--cream-mid)';
+        div.innerHTML = `
+          <div style="display:flex;gap:.4rem;margin-bottom:.4rem;align-items:center">
+            <input type="text" class="field-input" placeholder="ชื่อกลุ่ม" value="${escHtml(g.label||'')}" style="flex:1">
+            <select class="field-input" style="flex:0 0 90px;font-size:.82rem">
+              <option value="single" ${g.type==='single'?'selected':''}>เลือก 1</option>
+              <option value="multi"  ${g.type==='multi' ?'selected':''}>หลายอย่าง</option>
+            </select>
+            <button type="button" class="btn-icon del pt-rm-group" data-gi="${gi}">🗑</button>
+          </div>
+          <div class="pt-choices" style="display:flex;flex-direction:column;gap:.3rem">
+            ${(g.choices||[]).map((c,ci) => {
+              const cLabel = typeof c === 'string' ? c : (c.label || c.value || '');
+              const cPrice = typeof c === 'object' ? (c.price || '') : '';
+              return `<div style="display:flex;gap:.3rem;align-items:center">
+                <input type="text"   class="field-input" placeholder="ตัวเลือก" value="${escHtml(cLabel)}" style="flex:1">
+                <input type="number" class="field-input" placeholder="±ราคา" value="${escHtml(String(cPrice))}" style="width:72px">
+                <button type="button" class="opts-rm" data-gi="${gi}" data-ci="${ci}">✕</button>
+              </div>`;
+            }).join('')}
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm pt-add-choice" data-gi="${gi}" style="margin-top:.3rem">＋ เพิ่มตัวเลือก</button>`;
+
+        const nameInp = div.querySelector('input[type=text]');
+        nameInp.addEventListener('input', () => { groups[gi].label = nameInp.value; groups[gi].name = nameInp.value; });
+        const typeSel = div.querySelector('select');
+        typeSel.addEventListener('change', () => { groups[gi].type = typeSel.value; });
+        div.querySelector('.pt-rm-group').addEventListener('click', () => { groups.splice(gi,1); renderGroups(); });
+        div.querySelectorAll('.opts-rm').forEach(b => {
+          b.addEventListener('click', () => { groups[gi].choices.splice(parseInt(b.dataset.ci),1); renderGroups(); });
+        });
+        const choiceRows = div.querySelectorAll('.pt-choices > div');
+        choiceRows.forEach((row, ci) => {
+          const [lInp, pInp] = row.querySelectorAll('input');
+          if (lInp) lInp.addEventListener('input', () => {
+            if (!groups[gi].choices[ci]) groups[gi].choices[ci] = { value:'', label:'' };
+            groups[gi].choices[ci].value = lInp.value;
+            groups[gi].choices[ci].label = lInp.value;
+          });
+          if (pInp) pInp.addEventListener('input', () => {
+            if (!groups[gi].choices[ci]) groups[gi].choices[ci] = { value:'', label:'' };
+            const p = parseFloat(pInp.value);
+            groups[gi].choices[ci].price = isNaN(p) ? undefined : p;
+          });
+        });
+        div.querySelector('.pt-add-choice').addEventListener('click', () => { groups[gi].choices.push({ value:'', label:'' }); renderGroups(); });
+        wrap.appendChild(div);
+      });
+    }
+
+    renderGroups();
+
+    el.querySelector('.pt-add-group').addEventListener('click', () => {
+      groups.push({ id: 'g'+Date.now(), label: '', name: '', type: 'single', choices: [{ value:'', label:'' }] });
+      renderGroups();
+    });
+
+    el.querySelector('.pt-save-toppings').addEventListener('click', async () => {
+      const btn = el.querySelector('.pt-save-toppings');
+      const msg = el.querySelector('.pt-save-msg');
+      btn.disabled = true;
+      try {
+        await savePtToppings(ptVal, groups.length ? groups : []);
+        msg.textContent = '✅ บันทึกแล้ว!'; msg.style.color = 'var(--green)';
+        setTimeout(() => { msg.textContent = ''; btn.disabled = false; }, 1500);
+      } catch(e) {
+        msg.textContent = '❌ ' + e.message; msg.style.color = 'var(--red)'; btn.disabled = false;
+      }
+    });
+  }
+
+  renderModal();
+  window._ptModalRerender = () => { if (modal.classList.contains('open')) { _ptToppingEditors = {}; renderModal(); } };
 }
 
-if (typeof subscribePtToppings === 'function') subscribePtToppings();
-
-subscribeOrders(orders => {
-  MOCK_ORDERS = orders;
-  // re-render panels ที่เปิดอยู่
-  if (activePanelId === 'topsellers' && tsLoaded)   renderTopSellers();
-  if (activePanelId === 'history' && histLoaded) {
-    histFiltered = [...orders];
-    buildDailyChart(orders);
-    renderHistTable();
-  }
+// ============================================================
+//  CLEAR DATA
+// ============================================================
+document.getElementById('clearDataBtn').addEventListener('click', () => {
+  document.getElementById('clearDataCode').value = '';
+  document.getElementById('clearDataError').textContent = '';
+  document.getElementById('clearDataModal').classList.add('open');
 });
 
-// เมนู: subscribe จาก Firebase (real-time)
-subscribeMenu(menuObj => {
-  MOCK_MENU = Object.values(menuObj);
-  menuLoaded = true;
-  // render เมนูทันทีถ้า panel เมนูเปิดอยู่ (ไม่ว่าจะมาจาก Firebase เมื่อไรก็ตาม)
-  if (activePanelId === 'menu') renderMenuTable();
-  // อัปเดต category select ใน modal ถ้าเปิดอยู่
-  if (document.getElementById('menuModal')?.classList.contains('open')) {
-    const curCat = document.getElementById('menuCategory')?.value;
-    rebuildCategorySelect(curCat);
+document.getElementById('clearDataConfirm').addEventListener('click', async () => {
+  const ADMIN_PASS_HASH = 'bfa474b7bef2a64f28c6d8ec0c668174f381bdfc7ad5e0736fb0a9fadf681be0';
+  const code  = document.getElementById('clearDataCode').value;
+  const errEl = document.getElementById('clearDataError');
+  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
+  const hash    = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  if (hash !== ADMIN_PASS_HASH) {
+    errEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง';
+    document.getElementById('clearDataCode').value = '';
+    document.getElementById('clearDataCode').focus();
+    return;
   }
-});
-subscribeCategories();
-subscribeProductTypes();
-
-// subscribe defaultCat จาก Firebase
-onValue(ref(db, 'meta/defaultCat'), snap => {
-  LIVE_DEFAULT_CAT = snap.exists() ? snap.val() : null;
-  if (window._catModalRerender) window._catModalRerender();
+  errEl.textContent = '';
+  try {
+    const today = new Date(Date.now() + 7*60*60*1000).toISOString().slice(0,10);
+    // ลบ orders ทั้งหมด + reset meta.orderNumber
+    const orders = await api.getOrders();
+    if (Array.isArray(orders)) {
+      await Promise.all(orders.map(o => api.deleteOrder(o.id).catch(() => {})));
+    }
+    await api.updateMeta({ orderNumber: 1000, lastOrderDate: today });
+    LIVE_ORDERS = []; MOCK_ORDERS = [];
+    document.getElementById('clearDataModal').classList.remove('open');
+    alert('✅ ล้างข้อมูลเรียบร้อย');
+  } catch(e) {
+    errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
+  }
 });
 
 // ============================================================
-//  ===== PANEL: QR โต๊ะ =====
+//  PANEL: QR โต๊ะ
 // ============================================================
 function initQrPanel() {
   const baseInput  = document.getElementById('qrBaseUrl');
@@ -3573,13 +3460,13 @@ function initQrPanel() {
     qrInited = true;
     baseInput.value = location.origin + '/';
 
-    function updatePreview() {
-      preview.innerHTML = 'ตัวอย่าง URL: <strong>' + getQrUrl(1) + '</strong>';
-    }
     function getQrUrl(t) {
       let base = baseInput.value.trim();
       if (!base.endsWith('/')) base += '/';
       return base + 'customer.html?table=' + t;
+    }
+    function updatePreview() {
+      preview.innerHTML = 'ตัวอย่าง URL: <strong>' + getQrUrl(1) + '</strong>';
     }
     updatePreview();
     baseInput.addEventListener('input', updatePreview);
@@ -3588,7 +3475,7 @@ function initQrPanel() {
       const count = Math.max(1, Math.min(99, parseInt(countInput.value) || 9));
       grid.innerHTML = '';
       for (let t = 1; t <= count; t++) {
-        const url = getQrUrl(t);
+        const url  = getQrUrl(t);
         const card = document.createElement('div');
         card.className = 'qr-card';
         card.innerHTML = `
@@ -3604,7 +3491,6 @@ function initQrPanel() {
             <button class="btn btn-primary btn-sm" id="bo-qr-print-${t}">🖨 พิมพ์โต๊ะนี้</button>
           </div>`;
         grid.appendChild(card);
-
         try {
           new QRCode(document.getElementById('bo-qr-' + t), {
             text: url, width: 150, height: 150,
@@ -3614,7 +3500,6 @@ function initQrPanel() {
         } catch(e) {
           document.getElementById('bo-qr-' + t).textContent = 'QR Error';
         }
-
         document.getElementById('bo-qr-print-' + t).addEventListener('click', () => printQrTable(t, url));
       }
     }
@@ -3626,12 +3511,11 @@ function initQrPanel() {
 
 function printQrTable(tableNum, url) {
   const safeUrl = JSON.stringify(url);
-  const win = window.open('', '_blank', 'width=300,height=500');
+  const win     = window.open('', '_blank', 'width=300,height=500');
   if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อนนะครับ'); return; }
   win.document.write(`<!DOCTYPE html>
 <html lang="th"><head>
-<meta charset="UTF-8">
-<title>QR โต๊ะ ${tableNum}</title>
+<meta charset="UTF-8"><title>QR โต๊ะ ${tableNum}</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
 <style>
   @page { size: 58mm 100mm; margin: 3mm; }
@@ -3673,47 +3557,9 @@ function printQrTable(tableNum, url) {
   win.document.close();
 }
 
-// ---- Clear Data ----
-document.getElementById('clearDataBtn').addEventListener('click', () => {
-  document.getElementById('clearDataCode').value = '';
-  document.getElementById('clearDataError').textContent = '';
-  document.getElementById('clearDataModal').classList.add('open');
-});
-document.getElementById('clearDataConfirm').addEventListener('click', async () => {
-  const ADMIN_PASS_HASH = 'bfa474b7bef2a64f28c6d8ec0c668174f381bdfc7ad5e0736fb0a9fadf681be0';
-  const code = document.getElementById('clearDataCode').value;
-  const errEl = document.getElementById('clearDataError');
-  // hash ด้วย SHA-256 เหมือน admin.js
-  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
-  const hash = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  if (hash !== ADMIN_PASS_HASH) {
-    errEl.textContent = '❌ รหัสผ่านไม่ถูกต้อง';
-    document.getElementById('clearDataCode').value = '';
-    document.getElementById('clearDataCode').focus();
-    return;
-  }
-  errEl.textContent = '';
-  try {
-    const today = (() => {
-      const th = new Date(Date.now() + 7 * 60 * 60 * 1000);
-      return th.toISOString().slice(0, 10);
-    })();
-    await Promise.all([
-      remove(ref(db, 'orders')),
-      remove(ref(db, 'tableOrders')),
-      update(ref(db, 'meta'), { orderNumber: 1000, lastOrderDate: today }),
-    ]);
-    document.getElementById('clearDataModal').classList.remove('open');
-    alert('✅ ล้างข้อมูลเรียบร้อย');
-  } catch (e) {
-    errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
-  }
-});
-
-// init export default dates
-document.getElementById('exportDateFrom').value = daysAgo(7);
-document.getElementById('exportDateTo').value = todayStr();
-
+// ============================================================
+//  IMAGE UPLOAD HANDLERS
+// ============================================================
 document.getElementById('menuImgInput').addEventListener('change', function() {
   const file = this.files[0]; if (!file) return;
   const reader = new FileReader();
@@ -3731,6 +3577,15 @@ document.getElementById('menuImgUrl').addEventListener('input', function() {
     document.getElementById('imgUploadArea').classList.add('has-image');
   }
 });
+
+// ============================================================
+//  INIT defaults
+// ============================================================
+document.getElementById('exportDateFrom').value = daysAgo(7);
+document.getElementById('exportDateTo').value   = todayStr();
+
+// เริ่มโหลดข้อมูล
+initData();
 </script>
 </body>
 </html>
