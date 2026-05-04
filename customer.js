@@ -751,7 +751,7 @@ function initSearchBar() {
   bar.innerHTML = `
     <div class="cust-search-wrap">
       <input class="cust-search-input" id="menuSearchInput" type="search"
-        placeholder="🔍 ค้นหาเมนู..." autocomplete="off" maxlength="60">
+        placeholder="ค้นหาเมนู..." autocomplete="off" maxlength="60">
       <button class="cust-search-clear hidden" id="menuSearchClear" type="button">✕</button>
     </div>`;
   catBar.insertAdjacentElement('afterend', bar);
