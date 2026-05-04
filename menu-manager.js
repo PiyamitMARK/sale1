@@ -191,26 +191,39 @@ export function subscribeDefaultCat(db, cb) {
 }
 
 export function subscribeCategoriesAndSync(db, cb) {
-  let _rawCats = null;
-  let _sortMap  = {};
+  let _lastEmitted = null;
 
-  function _emit() {
-    if (!_rawCats) return;
-    const entries = Object.entries(_rawCats);
-    entries.sort(([a], [b]) => (_sortMap[a] ?? 9999) - (_sortMap[b] ?? 9999));
+  function _buildAndEmit(rawCats, sortMap) {
+    const entries = Object.entries(rawCats || CATEGORY_LABELS);
+    entries.sort(([a], [b]) => ((sortMap || {})[a] ?? 9999) - ((sortMap || {})[b] ?? 9999));
     const sorted = Object.fromEntries(entries);
+    // ไม่ re-render ถ้าข้อมูลไม่เปลี่ยน
+    const key = JSON.stringify(sorted);
+    if (key === _lastEmitted) return;
+    _lastEmitted = key;
     _syncCatsToLS(sorted);
     cb(sorted);
   }
 
-  onValue(ref(db, 'categories'), snap => {
-    _rawCats = snap.exists() ? snap.val() : { ...CATEGORY_LABELS };
-    _emit();
-  });
+  // โหลดครั้งแรกด้วย get() (เร็วกว่า onValue เพราะไม่ต้องรอ realtime handshake)
+  // แล้วค่อย subscribe เพื่อ realtime updates
+  Promise.all([
+    get(ref(db, 'categories')),
+    get(ref(db, 'categories_sort')),
+  ]).then(([catSnap, sortSnap]) => {
+    const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
+    const sortMap = sortSnap.exists() ? sortSnap.val() : {};
+    _buildAndEmit(rawCats, sortMap);
+  }).catch(() => {});
 
-  onValue(ref(db, 'categories_sort'), snap => {
-    _sortMap = snap.exists() ? snap.val() : {};
-    _emit();
+  // subscribe ต่อเนื่อง แต่ merge ทั้ง 2 paths ไว้ใน 1 listener บน /categories_meta
+  // (ใช้ get ซ้ำเมื่อ categories เปลี่ยน เพื่อดึง sort ไปพร้อมกัน)
+  onValue(ref(db, 'categories'), catSnap => {
+    const rawCats = catSnap.exists() ? catSnap.val() : { ...CATEGORY_LABELS };
+    get(ref(db, 'categories_sort')).then(sortSnap => {
+      const sortMap = sortSnap.exists() ? sortSnap.val() : {};
+      _buildAndEmit(rawCats, sortMap);
+    }).catch(() => _buildAndEmit(rawCats, {}));
   });
 }
 

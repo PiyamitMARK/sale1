@@ -95,6 +95,10 @@ let _menuDebounce = null;
 
 // Firebase subscribe: อัปเดต PRODUCTS realtime
 function _startMenuSubscribe() {
+  // ถ้ามี LS แล้ว → ใช้ get() ครั้งแรกแทน onValue เพื่อตรวจว่าต้อง re-render ไหม
+  // จากนั้น subscribe ต่อเพื่อ realtime (แต่จะ skip render ถ้าข้อมูลไม่เปลี่ยน)
+  const _hasLsMenu = !!localStorage.getItem('ks90-menu');
+
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
     const raw = snap.val();
@@ -106,15 +110,17 @@ function _startMenuSubscribe() {
 
     try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
 
-    // debounce 250ms กันการ re-render ถี่เกินไป
+    // debounce 300ms กันการ re-render ถี่เกินไป
     clearTimeout(_menuDebounce);
     _menuDebounce = setTimeout(() => {
       const parsed = parseMenuFromRaw(raw, 'img');
       if (Object.keys(parsed).length) {
         PRODUCTS = parsed;
+        // ถ้ามี LS อยู่แล้วตอนโหลด และ Firebase ส่งข้อมูลเดิมกลับมา (ตรวจจาก rawStr)
+        // จะไม่มาถึงบรรทัดนี้แล้ว (filtered ด้านบน)
         if (document.getElementById('productGrid')) renderProducts();
       }
-    }, 250);
+    }, 300);
   });
 }
 
@@ -363,6 +369,11 @@ async function init() {
   loadCart();
 
   // render เมนูทันที ไม่ต้องรอ Firebase
+  // ถ้ายังไม่มีเมนูใน LS → แสดง skeleton ก่อน (Firebase จะ replace เมื่อตอบ)
+  const grid = document.getElementById('productGrid');
+  if (!localStorage.getItem('ks90-menu') && grid) {
+    _renderSkeleton(grid, 8);
+  }
   renderProducts();
   initSearchBar();
   updateCartBar();
@@ -594,6 +605,18 @@ function loadPopularItems() {
 }
 
 // ==================== Products ====================
+function _renderSkeleton(grid, count = 6) {
+  grid.innerHTML = Array.from({ length: count }, () =>
+    `<div class="cust-product-card cust-product-skeleton" aria-hidden="true">
+      <div class="cust-product-img-wrap skel-img"></div>
+      <div class="cust-product-info">
+        <div class="skel-line skel-name"></div>
+        <div class="skel-line skel-price"></div>
+      </div>
+    </div>`
+  ).join('');
+}
+
 function renderProducts() {
   const grid = document.getElementById('productGrid');
   // กรองตาม search query ถ้ามี
@@ -683,7 +706,7 @@ try {
   if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
 } catch (_) {}
 
-// Subscribe Firebase → อัปเดต realtime เมื่อข้อมูลเปลี่ยน
+// Subscribe Firebase → อัปเดต realtime (dedup ใน menu-manager ป้องกัน render ซ้ำ)
 subscribeCategoriesAndSync(db, renderCategoryTabs);
 
 // ชื่อเดิมยังคงอยู่สำหรับ backward compat (ถูกเรียกใน init())

@@ -2,6 +2,32 @@
   "name": "kaosoi2",
   "compatibility_date": "2026-05-03",
   "assets": {
-    "directory": "./"
+    "directory": "./",
+    "headers": [
+      {
+        "match": "/images/*",
+        "headers": {
+          "Cache-Control": "public, max-age=31536000, immutable"
+        }
+      },
+      {
+        "match": "/*.js",
+        "headers": {
+          "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600"
+        }
+      },
+      {
+        "match": "/*.css",
+        "headers": {
+          "Cache-Control": "public, max-age=86400, stale-while-revalidate=3600"
+        }
+      },
+      {
+        "match": "/*.html",
+        "headers": {
+          "Cache-Control": "public, max-age=0, must-revalidate"
+        }
+      }
+    ]
   }
 }

@@ -109,7 +109,7 @@ function _startMenuSubscribe() {
 
     try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
 
-    // debounce 250ms กันการ re-render ถี่เกินไป
+    // debounce 300ms กันการ re-render ถี่เกินไป
     clearTimeout(_menuDebounce);
     _menuDebounce = setTimeout(() => {
       const parsed = parseMenuFromRaw(raw, 'image');
@@ -117,7 +117,7 @@ function _startMenuSubscribe() {
         products = parsed;
         renderProducts();
       }
-    }, 250);
+    }, 300);
   });
 }
 

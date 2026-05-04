@@ -673,3 +673,57 @@ body {
   color: var(--brown); transition: background 0.2s;
 }
 .cust-dark-btn:hover { background: var(--cream-dark); }
+/* ==========================================
+   Skeleton Loading — แสดงระหว่างรอเมนูโหลด
+   ========================================== */
+@keyframes skel-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.cust-product-skeleton {
+  pointer-events: none;
+  cursor: default;
+}
+
+.skel-img,
+.skel-line {
+  background: linear-gradient(
+    90deg,
+    var(--cream-mid) 25%,
+    var(--cream-dark) 50%,
+    var(--cream-mid) 75%
+  );
+  background-size: 800px 100%;
+  animation: skel-shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+
+.cust-product-skeleton .skel-img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.skel-name {
+  height: 14px;
+  width: 75%;
+  margin-bottom: 6px;
+}
+
+.skel-price {
+  height: 12px;
+  width: 40%;
+}
+
+[data-theme="dark"] .skel-img,
+[data-theme="dark"] .skel-line {
+  background: linear-gradient(
+    90deg,
+    #2a1f18 25%,
+    #3a2d24 50%,
+    #2a1f18 75%
+  );
+  background-size: 800px 100%;
+  animation: skel-shimmer 1.4s infinite linear;
+}
