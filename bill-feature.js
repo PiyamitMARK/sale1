@@ -299,8 +299,6 @@ function _renderMergeBody(orders) {
     try {
       await _mergeOrdersInFirebase(orders, selectedPayment);
       // ปิด merge mode ก่อน close modal เพื่อให้ Firebase re-render ได้ state ที่ถูกต้องทันที
-      mergeMode = false;
-      mergeSelected.clear();
       _closeBillModal();
       _cancelMergeMode();
       _showToast(`✅ รวมบิล ${orders.length} โต๊ะ (${orders.map(o=>'#'+o.orderNumber).join(', ')}) เป็น order เดียวแล้ว`);

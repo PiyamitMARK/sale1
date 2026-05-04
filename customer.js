@@ -27,13 +27,13 @@ const IMG = (n) => 'images/img' + n + '.png';
 
 let PRODUCTS = {
   setkao: [
-    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:129, img:IMG(10021),   productType:'setkao' },
-    { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:85, img:IMG(10012),   productType:'setkao' },
-    { id:'setkao2', name:'ข้าวซอยน่องไก่ + ชาไทย',       price:110, img:IMG(10013),  productType:'setkao' },
-    { id:'setkao3', name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price:115, img:IMG(10014),   productType:'setkao' },
-    { id:'setkao4', name:'ข้าวซอยหมูทอด + โค๊ก',      price:85, img:IMG(10020),   productType:'setkao' },
-    { id:'setkao5', name:'ข้าวซอยหมูทอด + ชาไทย',       price:110, img:IMG(10019),  productType:'setkao' },
-    { id:'setkao6', name:'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price:115, img:IMG(10018),   productType:'setkao' },
+    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:124, img:IMG(10021),   productType:'setkao' },
+    { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:80, img:IMG(10012),   productType:'setkao' },
+    { id:'setkao2', name:'ข้าวซอยน่องไก่ + ชาไทย',       price:105, img:IMG(10013),  productType:'setkao' },
+    { id:'setkao3', name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price:110, img:IMG(10014),   productType:'setkao' },
+    { id:'setkao4', name:'ข้าวซอยหมูทอด + โค๊ก',      price:80, img:IMG(10020),   productType:'setkao' },
+    { id:'setkao5', name:'ข้าวซอยหมูทอด + ชาไทย',       price:105, img:IMG(10019),  productType:'setkao' },
+    { id:'setkao6', name:'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price:110, img:IMG(10018),   productType:'setkao' },
     { id:'setkao7', name:'น้ำเงี้ยว + โค๊ก',      price:75, img:IMG(10015),   productType:'setkao' },
     { id:'setkao8', name:'น้ำเงี้ยว + ชาไทย',       price:100, img:IMG(10016),  productType:'setkao' },
     { id:'setkao9', name:'น้ำเงี้ยว + มะพร้าวปั่น',            price:105, img:IMG(10017),   productType:'setkao' },
@@ -97,8 +97,6 @@ let _menuDebounce = null;
 function _startMenuSubscribe() {
   // ถ้ามี LS แล้ว → ใช้ get() ครั้งแรกแทน onValue เพื่อตรวจว่าต้อง re-render ไหม
   // จากนั้น subscribe ต่อเพื่อ realtime (แต่จะ skip render ถ้าข้อมูลไม่เปลี่ยน)
-  const _hasLsMenu = !!localStorage.getItem('ks90-menu');
-
   onValue(ref(db, 'menu'), (snap) => {
     if (!snap.exists()) return;
     const raw = snap.val();
