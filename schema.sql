@@ -51,3 +51,10 @@ CREATE TABLE IF NOT EXISTS call_staff (
 );
 
 CREATE INDEX IF NOT EXISTS idx_call_staff_done ON call_staff(done);
+
+-- menu_items — เก็บ menu แต่ละรายการแยก row (แทน KV ทั้งก้อน)
+-- แก้ปัญหา: KV eventual consistency, race condition จาก PATCH ซ้อนกัน
+CREATE TABLE IF NOT EXISTS menu_items (
+  id    TEXT PRIMARY KEY,
+  data  TEXT NOT NULL   -- JSON ของ item ทั้งหมด
+);

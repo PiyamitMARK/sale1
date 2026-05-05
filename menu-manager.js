@@ -192,10 +192,24 @@ export async function loadMenuFromFirebase(_db) {
   return parseMenuSnapshot(raw);
 }
 
-/**
- * Subscribe เมนู realtime ผ่าน WebSocket
- * ส่งคืน unsubscribe function (เหมือน onValue เดิม)
- */
+// ─── Shared WebSocket singleton ─────────────────────────────────────────────
+// ทุก subscribe* ใช้ connection เดียวกัน ไม่เปิด WS ซ้ำหลายตัวต่อ page
+let _sharedSocket = null;
+const _wsListeners = new Set(); // Set<(msg) => void>
+
+function _getSharedSocket() {
+  if (_sharedSocket) return _sharedSocket;
+  _sharedSocket = ws.connect('admin', (msg) => {
+    _wsListeners.forEach(fn => { try { fn(msg); } catch (_) {} });
+  });
+  return _sharedSocket;
+}
+
+function _addWsListener(fn) {
+  _getSharedSocket(); // ensure connected
+  _wsListeners.add(fn);
+  return () => _wsListeners.delete(fn); // returns unsub
+}
 export function subscribeMenu(_db, callback) {
   // โหลดครั้งแรกจาก cache (เร็วมากถ้ามีข้อมูลแล้ว)
   _getMenuCached().then(raw => {
@@ -206,10 +220,9 @@ export function subscribeMenu(_db, callback) {
     callback(parseMenuSnapshot(raw));
   }).catch(() => callback(buildProductsFromDefault()));
 
-  // subscribe realtime updates จาก WebSocket
-  const socket = ws.connect('admin', (msg) => {
+  // subscribe realtime ผ่าน shared WebSocket — 1 connection ต่อ page
+  const unsub = _addWsListener((msg) => {
     if (msg.type === 'menu_updated') {
-      // invalidate cache แล้วโหลดใหม่ (เพราะ browser อื่นอาจแก้ไข)
       _invalidateMenuCache();
       _getMenuCached().then(raw => {
         if (!raw) return;
@@ -218,8 +231,7 @@ export function subscribeMenu(_db, callback) {
     }
   });
 
-  // คืน unsubscribe function (interface เดิม)
-  return () => socket.close();
+  return unsub;
 }
 
 /**
@@ -304,8 +316,8 @@ export function subscribeCategoriesAndSync(_db, cb) {
     if (!lsCats) _buildAndEmit({ ...CATEGORY_LABELS }, {});
   });
 
-  // subscribe realtime ผ่าน WebSocket
-  const socket = ws.connect('admin', (msg) => {
+  // subscribe realtime ผ่าน shared WebSocket
+  const unsub = _addWsListener((msg) => {
     if (msg.type === 'meta_updated' || msg.type === 'categories_updated') {
       _invalidateMetaCache();
       _getMetaCached().then(meta => {
@@ -315,7 +327,7 @@ export function subscribeCategoriesAndSync(_db, cb) {
     }
   });
 
-  return () => socket.close();
+  return unsub;
 }
 
 function parseMenuSnapshot(data) {
@@ -412,15 +424,15 @@ export function subscribeAllMenuAdmin(_db, callback) {
     }
   }).catch(() => {});
 
-  // realtime ผ่าน WebSocket — เมื่อ browser อื่นแก้เมนู
-  const socket = ws.connect('admin', (msg) => {
+  // realtime ผ่าน shared WebSocket — เมื่อ browser อื่นแก้เมนู
+  const unsub = _addWsListener((msg) => {
     if (msg.type === 'menu_updated') {
       _invalidateMenuCache();
       _getMenuCached().then(raw => { if (raw) callback(raw); }).catch(() => {});
     }
   });
 
-  return () => socket.close();
+  return unsub;
 }
 
 /**
@@ -476,8 +488,8 @@ export function generateMenuId(category) {
 
 /**
  * อัปเดต sortOrder หลาย items พร้อมกัน (สำหรับ drag & drop)
- * ใช้ PATCH แบบ bulk ผ่าน patchMenuItem หลายตัวพร้อมกัน (Promise.all)
- * เร็วกว่าเดิมมาก — ไม่ต้อง GET ทั้งก้อน
+ * ใช้ PATCH /api/menu-sort แบบ batch — 1 round-trip เดียว
+ * แก้ปัญหา race condition ของเดิมที่ยิง N PATCH พร้อมกันบน KV
  */
 export async function updateSortOrders(_db, orderedIds) {
   // optimistic: อัปเดต cache ก่อน
@@ -487,10 +499,26 @@ export async function updateSortOrders(_db, orderedIds) {
   });
   _updateMenuCache(cached);
 
-  // ส่ง PATCH พร้อมกันทุก item ที่เปลี่ยน sortOrder
-  await Promise.all(
-    orderedIds.map((id, idx) => api.patchMenuItem(id, { sortOrder: idx }))
-  );
+  // ส่ง batch เดียว — ไม่ยิง N request พร้อมกัน
+  const orders = orderedIds.map((id, idx) => ({ id, sortOrder: idx }));
+  await apiFetch('/api/menu-sort', {
+    method: 'PATCH',
+    body: JSON.stringify({ orders }),
+  });
+}
+
+// helper: apiFetch โดยตรงสำหรับใช้ใน menu-manager
+async function apiFetch(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const adminKey = localStorage.getItem('ks90-admin-key') || '';
+  if (adminKey) headers['X-Admin-Key'] = adminKey;
+  const res = await fetch(path, { ...options, headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 /** Duplicate เมนู — ใช้ saveMenuItem ที่ปรับปรุงแล้ว */
@@ -594,8 +622,8 @@ let _allMenuData = {};
 let _onSaved    = null;   // callback หลังบันทึก
 
 /** เรียก init ก่อนใช้งาน openMenuFormModal */
-export function initMenuFormHelper(_db, allMenuDataRef, onSaved) {
-  _db          = db;        // ยังรับไว้เพื่อ backward compat (ไม่ถูกใช้งานจริง)
+export function initMenuFormHelper(db_param, allMenuDataRef, onSaved) {
+  _db          = db_param;   // รับค่า db จาก caller (backward compat)
   _allMenuData = allMenuDataRef; // object reference — จะ sync อัตโนมัติ
   _onSaved     = onSaved;
   _injectStyles();
@@ -1572,13 +1600,13 @@ export function subscribeCategories(_db, cb) {
     cb((meta?.categories) || { ...CATEGORY_LABELS });
   }).catch(() => cb({ ...CATEGORY_LABELS }));
 
-  const socket = ws.connect('admin', (msg) => {
+  const unsub = _addWsListener((msg) => {
     if (msg.type === 'meta_updated' || msg.type === 'categories_updated') {
       _invalidateMetaCache();
       _getMetaCached().then(meta => cb((meta?.categories) || { ...CATEGORY_LABELS })).catch(() => {});
     }
   });
-  return () => socket.close();
+  return unsub;
 }
 
 /** บันทึก category ใหม่ — ใช้ meta cache */

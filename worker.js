@@ -15,7 +15,7 @@
  *   GET    /api/meta                → ดึง meta (orderNumber ฯลฯ)
  *   PATCH  /api/meta                → อัปเดต meta
  *
- *   GET    /api/menu                → ดึงเมนู (จาก KV)
+ *   GET    /api/menu                → ดึงเมนู (จาก D1)
  *   PUT    /api/menu                → อัปเดตเมนูทั้งก้อน (admin only)
  *   PATCH  /api/menu/:id            → อัปเดตรายการเดียว (admin only)
  *   DELETE /api/menu/:id            → ลบรายการเดียว (admin only)
@@ -116,6 +116,7 @@ export default {
 
       if (path === '/api/menu' && method === 'GET') return handleGetMenu(env);
       if (path === '/api/menu' && method === 'PUT') return handlePutMenu(request, env);
+      if (path === '/api/menu-sort' && method === 'PATCH') return handleMenuSort(request, env, ctx);
       if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  return handlePatchMenuItem(request, path, env, ctx);
       if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') return handleDeleteMenuItem(path, env, ctx);
 
@@ -320,50 +321,119 @@ async function handleUpdateMeta(request, env) {
   return json({ ok: true });
 }
 
-// ==================== Menu (KV) ====================
+// ==================== Menu (D1) ====================
+// เก็บแต่ละ menu item เป็น row ใน D1 — ไม่ต้อง GET ทั้งก้อนก่อน PATCH
+// schema: menu_items(id TEXT PK, data TEXT NOT NULL)
+// ตัว data เก็บ JSON ของ item ทั้งหมด — flexible, ไม่ต้อง migrate เมื่อเพิ่ม field
+//
+// ถ้า table ยังไม่มีให้ migrate ครั้งแรกด้วย:
+//   CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+//   (เพิ่มใน schema.sql ด้วย)
+
+async function _ensureMenuTable(env) {
+  // สร้าง table ถ้ายังไม่มี (idempotent — ใช้แทน migration สำหรับ table ใหม่)
+  await env.DB.prepare(
+    'CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, data TEXT NOT NULL)'
+  ).run();
+}
 
 async function handleGetMenu(env) {
-  const raw = await env.KV.get('menu', 'json');
-  if (!raw) return json({});
-  return json(raw);
+  await _ensureMenuTable(env);
+
+  // ลอง D1 ก่อน
+  const { results } = await env.DB.prepare('SELECT id, data FROM menu_items').all();
+
+  if (results.length > 0) {
+    // คืน object { [id]: item } เหมือนเดิม (client ไม่ต้องเปลี่ยน)
+    const menu = {};
+    for (const row of results) {
+      try { menu[row.id] = JSON.parse(row.data); } catch (_) {}
+    }
+    return json(menu);
+  }
+
+  // fallback: ถ้า D1 ว่าง ลอง migrate จาก KV (one-time migration)
+  if (env.KV) {
+    const kvMenu = await env.KV.get('menu', 'json').catch(() => null);
+    if (kvMenu && Object.keys(kvMenu).length > 0) {
+      // migrate ทีเดียว
+      const stmts = Object.values(kvMenu).map(item =>
+        env.DB.prepare('INSERT OR REPLACE INTO menu_items (id, data) VALUES (?, ?)')
+          .bind(item.id, JSON.stringify(item))
+      );
+      // batch insert ใน transaction
+      for (let i = 0; i < stmts.length; i += 50) {
+        await env.DB.batch(stmts.slice(i, i + 50));
+      }
+      return json(kvMenu);
+    }
+  }
+
+  return json({});
 }
 
 async function handlePutMenu(request, env) {
-  const body = await request.json();
-  await env.KV.put('menu', JSON.stringify(body), {
-    // cache 1 ชั่วโมง — เมนูไม่ค่อยเปลี่ยน
-    //expirationTtl: 3600,
-  });
-  // Broadcast เมนูเปลี่ยน
-  await broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  await _ensureMenuTable(env);
+  const body = await request.json(); // { [id]: item }
+
+  if (!body || typeof body !== 'object') return err('invalid body');
+
+  // upsert ทั้งหมดใน batch
+  const items = Object.values(body);
+  const stmts = items.map(item =>
+    env.DB.prepare('INSERT OR REPLACE INTO menu_items (id, data) VALUES (?, ?)')
+      .bind(item.id, JSON.stringify(item))
+  );
+  // ลบรายการที่ไม่อยู่ใน body (full replace)
+  const ids = items.map(i => i.id);
+  // batch upsert
+  for (let i = 0; i < stmts.length; i += 50) {
+    await env.DB.batch(stmts.slice(i, i + 50));
+  }
+  // ลบ rows ที่ไม่อยู่ใน ids ใหม่
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    await env.DB.prepare(`DELETE FROM menu_items WHERE id NOT IN (${placeholders})`)
+      .bind(...ids).run();
+  } else {
+    await env.DB.prepare('DELETE FROM menu_items').run();
+  }
+
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
+  } else {
+    await broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  }
   return json({ ok: true });
 }
 
 async function handlePatchMenuItem(request, path, env, ctx) {
+  await _ensureMenuTable(env);
   const id   = decodeURIComponent(path.split('/')[3]);
   const body = await request.json();
 
-  // ดึงเมนูทั้งก้อน แก้แค่รายการเดียว แล้ว save กลับ
-  const menu = await env.KV.get('menu', 'json') || {};
-  if (!menu[id] && body._delete) return json({ ok: true }); // ไม่มีก็จบ
-  menu[id] = { ...(menu[id] || {}), ...body, id };
-  await env.KV.put('menu', JSON.stringify(menu));
+  // ดึงเฉพาะ row นั้น (ไม่ GET ทั้งก้อนแล้ว)
+  const existing = await env.DB.prepare('SELECT data FROM menu_items WHERE id = ?').bind(id).first();
+  const current  = existing ? JSON.parse(existing.data) : {};
+  const updated  = { ...current, ...body, id };
 
-  // broadcast แบบ fire-and-forget — ไม่ block response
+  await env.DB.prepare('INSERT OR REPLACE INTO menu_items (id, data) VALUES (?, ?)')
+    .bind(id, JSON.stringify(updated)).run();
+
   if (ctx?.waitUntil) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
   } else {
     broadcastToRoom(env, 'admin', { type: 'menu_updated' });
   }
 
-  return json({ ok: true, item: menu[id] });
+  return json({ ok: true, item: updated });
 }
 
 async function handleDeleteMenuItem(path, env, ctx) {
-  const id   = decodeURIComponent(path.split('/')[3]);
-  const menu = await env.KV.get('menu', 'json') || {};
-  delete menu[id];
-  await env.KV.put('menu', JSON.stringify(menu));
+  await _ensureMenuTable(env);
+  const id = decodeURIComponent(path.split('/')[3]);
+
+  await env.DB.prepare('DELETE FROM menu_items WHERE id = ?').bind(id).run();
 
   if (ctx?.waitUntil) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
@@ -372,6 +442,44 @@ async function handleDeleteMenuItem(path, env, ctx) {
   }
 
   return json({ ok: true });
+}
+
+/**
+ * PATCH /api/menu-sort — อัปเดต sortOrder หลายรายการพร้อมกันใน 1 request
+ * body: { orders: [{ id, sortOrder }, ...] }
+ * แทน Promise.all(N × PATCH) ซึ่งทำให้เกิด race condition บน KV
+ */
+async function handleMenuSort(request, env, ctx) {
+  await _ensureMenuTable(env);
+  const body = await request.json();
+  const orders = body?.orders; // [{ id, sortOrder }]
+  if (!Array.isArray(orders) || orders.length === 0) return err('orders array required');
+
+  // batch update sortOrder ทีละ 50
+  const stmts = [];
+  for (const { id, sortOrder } of orders) {
+    if (!id) continue;
+    const existing = await env.DB.prepare('SELECT data FROM menu_items WHERE id = ?').bind(id).first();
+    if (!existing) continue;
+    const item = JSON.parse(existing.data);
+    item.sortOrder = sortOrder;
+    stmts.push(
+      env.DB.prepare('INSERT OR REPLACE INTO menu_items (id, data) VALUES (?, ?)')
+        .bind(id, JSON.stringify(item))
+    );
+  }
+
+  for (let i = 0; i < stmts.length; i += 50) {
+    await env.DB.batch(stmts.slice(i, i + 50));
+  }
+
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
+  } else {
+    broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  }
+
+  return json({ ok: true, updated: stmts.length });
 }
 
 // ==================== Call Staff ====================
