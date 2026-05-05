@@ -7,7 +7,6 @@
  *   - จ่ายแล้ว → order ใหม่ได้เลขถัดไป
  */
 
-import './darkmode.js';
 import { api, ws } from './api-client.js';
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 

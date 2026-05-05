@@ -224,3 +224,31 @@ export function adminLogout() {
 export function isLoggedIn() {
   return !!localStorage.getItem('krua-khun-mae-auth');
 }
+
+// ─── Dark Mode (shared) ──────────────────────────────────────────────────────
+const _THEME_KEY = 'theme';
+
+export function getTheme() {
+  return localStorage.getItem(_THEME_KEY) || 'light';
+}
+
+export function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('darkToggleBtn');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+export function toggleTheme() {
+  const next = getTheme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(_THEME_KEY, next);
+  applyTheme(next);
+}
+
+// apply ทันทีเพื่อ prevent flash
+applyTheme(getTheme());
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('darkToggleBtn');
+  if (btn) btn.addEventListener('click', toggleTheme);
+  applyTheme(getTheme());
+});

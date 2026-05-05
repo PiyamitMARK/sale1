@@ -9,7 +9,6 @@
  * ใช้ api-client.js แทน Firebase SDK
  */
 
-import './darkmode.js';
 import { api, ws } from './api-client.js';
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 

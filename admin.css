@@ -2425,3 +2425,552 @@ tr[draggable="true"]:active {
   border-color: #3a2d24;
   color: var(--brown-mid);
 }
+
+/* ==========================================
+   bill-feature.css — รวมบิล / แยกบิล
+   (merged into admin.css)
+   ========================================== */
+/* ==========================================
+   bill-feature.css — รวมบิล / แยกบิล
+   เพิ่มต่อท้าย admin.css
+   ========================================== */
+
+/* ===== ปุ่มในการ์ดออเดอร์ ===== */
+.btn-split-bill {
+  background: none;
+  border: 1.5px solid var(--cream-dark);
+  color: var(--brown-mid);
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font-family: 'Mitr', sans-serif;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn-split-bill:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: #f5f3ff;
+}
+
+/* ===== ปุ่ม รวมบิล (toolbar) ===== */
+.merge-bill-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  background: #fff8e1;
+  border: 1.5px solid #f6d860;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.merge-bill-bar.hidden { display: none !important; }
+.merge-bill-bar-label {
+  font-size: 0.85rem;
+  color: #856404;
+  font-weight: 600;
+  flex: 1;
+}
+.merge-bill-bar-count {
+  background: #856404;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+.btn-do-merge {
+  background: #856404;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  font-family: 'Mitr', sans-serif;
+  transition: background 0.15s;
+}
+.btn-do-merge:hover { background: #6b5003; }
+.btn-cancel-merge {
+  background: none;
+  border: 1.5px solid var(--cream-dark);
+  color: var(--brown-light);
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  font-family: 'Mitr', sans-serif;
+  transition: border-color 0.15s;
+}
+.btn-cancel-merge:hover { border-color: var(--red); color: var(--red); }
+
+/* ===== เลือกออเดอร์สำหรับรวมบิล ===== */
+.order-card--merge-selectable {
+  cursor: pointer;
+  outline: 2px dashed transparent;
+  transition: outline 0.15s, box-shadow 0.15s;
+}
+.order-card--merge-selectable:hover {
+  outline-color: #f6d860;
+}
+.order-card--merge-selected {
+  outline: 2.5px solid #856404 !important;
+  background: #fffde7 !important;
+}
+[data-theme="dark"] .order-card--merge-selected {
+  background: #2a2100 !important;
+  outline-color: #f6d860 !important;
+}
+.merge-check-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #856404;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+/* ===== Modal รวมบิล / แยกบิล ===== */
+#billModal .modal-box {
+  max-width: 620px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.bill-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1.5px solid var(--cream-dark);
+  background: var(--cream-mid);
+  flex-shrink: 0;
+}
+.bill-modal-title {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--brown);
+}
+.bill-modal-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 1.1rem; color: var(--brown-light);
+  padding: 0.2rem 0.4rem; border-radius: 4px; transition: 0.15s;
+}
+.bill-modal-close:hover { background: var(--cream-dark); }
+
+/* Tab switcher inside modal */
+.bill-modal-tabs {
+  display: flex;
+  border-bottom: 1.5px solid var(--cream-dark);
+  flex-shrink: 0;
+}
+.bill-modal-tab {
+  flex: 1;
+  padding: 0.7rem;
+  background: none;
+  border: none;
+  font-family: 'Mitr', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--brown-light);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.bill-modal-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.bill-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 1.25rem 1.5rem;
+}
+
+/* ===== รวมบิล — merged summary ===== */
+.merge-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin-bottom: 1rem;
+}
+.merge-summary-table th {
+  text-align: left;
+  font-weight: 700;
+  color: var(--brown-light);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1.5px solid var(--cream-dark);
+}
+.merge-summary-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--cream-mid);
+  vertical-align: top;
+}
+.merge-summary-table tr:last-child td { border-bottom: none; }
+.merge-order-chip {
+  background: var(--cream-mid);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.1rem 0.5rem;
+  color: var(--brown-mid);
+  margin-right: 0.25rem;
+  display: inline-block;
+}
+.merge-grand-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0.5rem;
+  border-top: 2px solid var(--cream-dark);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--brown);
+  margin-top: 0.25rem;
+}
+.merge-grand-total-amt {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.3rem;
+  color: var(--accent);
+}
+
+/* Payment section inside merge */
+.bill-payment-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1.5px dashed var(--cream-dark);
+}
+.bill-payment-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--brown-light);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.6rem;
+}
+.bill-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+.bill-pay-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.55rem 0.25rem;
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--brown-mid);
+  background: var(--white);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.bill-pay-option.selected {
+  border-color: var(--accent);
+  background: #fff8f0;
+  color: var(--accent);
+}
+.bill-pay-option-icon { font-size: 1.3rem; }
+
+/* ===== แยกบิลเท่าๆ กัน ===== */
+.split-equal-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.split-equal-info {
+  background: var(--cream-mid);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  font-size: 0.88rem;
+}
+.split-equal-info strong {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+.split-people-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.split-people-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--brown-mid);
+  min-width: 4rem;
+}
+.split-people-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem;
+}
+.split-people-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: var(--cream-mid);
+  color: var(--brown);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.split-people-btn:hover { background: var(--cream-dark); }
+.split-people-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.split-people-num {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  min-width: 2rem;
+  text-align: center;
+  color: var(--brown);
+}
+.split-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.6rem;
+}
+.split-result-card {
+  background: var(--cream-mid);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  text-align: center;
+}
+.split-result-person {
+  font-size: 0.78rem;
+  color: var(--brown-light);
+  margin-bottom: 0.2rem;
+}
+.split-result-amt {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ===== แยกบิลตามคน ===== */
+.split-custom-wrap { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.split-custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.split-custom-hint {
+  font-size: 0.8rem;
+  color: var(--brown-light);
+}
+.btn-add-person {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+  font-family: 'Mitr', sans-serif;
+  transition: background 0.15s;
+}
+.btn-add-person:hover { background: var(--accent-light); }
+
+.split-items-pool {
+  background: var(--cream-mid);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+.split-pool-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--brown-light);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+.split-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--cream-dark);
+  font-size: 0.85rem;
+}
+.split-item-row:last-child { border-bottom: none; }
+.split-item-name { flex: 1; color: var(--brown); }
+.split-item-price { color: var(--brown-light); font-size: 0.82rem; min-width: 4rem; text-align: right; }
+.split-item-assign {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.split-assign-btn {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+  color: var(--brown-mid);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.split-assign-btn.active {
+  border-color: var(--accent);
+  background: #fff8f0;
+  color: var(--accent);
+}
+
+.split-persons-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.split-person-card {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+}
+.split-person-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.split-person-name-input {
+  flex: 1;
+  border: 1.5px solid var(--cream-dark);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.88rem;
+  font-family: 'Sarabun', sans-serif;
+  background: var(--cream-mid);
+  color: var(--brown);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.split-person-name-input:focus { border-color: var(--accent); background: var(--white); }
+.split-person-total {
+  font-family: 'Mitr', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 5rem;
+  text-align: right;
+}
+.split-person-items {
+  font-size: 0.8rem;
+  color: var(--brown-light);
+  padding-left: 0.25rem;
+}
+.btn-rm-person {
+  background: none; border: none; cursor: pointer;
+  color: var(--brown-light); font-size: 0.9rem; padding: 0.2rem;
+  border-radius: 4px; transition: color 0.15s;
+}
+.btn-rm-person:hover { color: var(--red); }
+
+.split-unassigned-warn {
+  background: #fef3cd;
+  border: 1.5px solid #f6d860;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  color: #856404;
+  display: none;
+}
+.split-unassigned-warn.visible { display: block; }
+
+/* ===== Modal footer ===== */
+.bill-modal-footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.9rem 1.5rem;
+  border-top: 1.5px solid var(--cream-dark);
+  background: var(--cream-mid);
+  flex-shrink: 0;
+}
+
+/* ===== รายการโต๊ะที่รวมแล้ว ===== */
+.order-merged-badge {
+  background: #856404;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+/* Dark mode */
+[data-theme="dark"] .merge-bill-bar {
+  background: #2a2100;
+  border-color: #856404;
+}
+[data-theme="dark"] .merge-bill-bar-label { color: #f6d860; }
+[data-theme="dark"] .bill-pay-option {
+  background: #231a15;
+  border-color: var(--cream-dark);
+  color: var(--brown-mid);
+}
+[data-theme="dark"] .bill-pay-option.selected {
+  background: #2a1f10;
+  border-color: var(--accent);
+}
+[data-theme="dark"] .split-person-card {
+  background: #231a15;
+  border-color: var(--cream-dark);
+}
+[data-theme="dark"] .split-person-name-input {
+  background: #1e150f;
+  border-color: var(--cream-dark);
+  color: var(--cream);
+}
+[data-theme="dark"] .split-person-name-input:focus {
+  background: #2a1f18;
+}
+[data-theme="dark"] .split-assign-btn {
+  background: #231a15;
+  border-color: var(--cream-dark);
+  color: var(--cream-dark);
+}
+[data-theme="dark"] .split-assign-btn.active {
+  background: #2a1f10;
+}
+[data-theme="dark"] .split-unassigned-warn {
+  background: #2a2100;
+  border-color: #856404;
+  color: #f6d860;
+}
+[data-theme="dark"] .bill-pay-option-icon { color: var(--cream); }
+
+@media (max-width: 520px) {
+  .bill-payment-grid { grid-template-columns: repeat(2, 1fr); }
+  .bill-modal-body { padding: 1rem; }
+  .bill-modal-footer { padding: 0.75rem 1rem; }
+}
