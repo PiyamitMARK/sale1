@@ -192,24 +192,20 @@ async function handleCreateOrder(request, env, ctx) {
   if (!table_num) return err('table_num required');
 
   // Auto-increment order number (atomic)
-  // ป้องกัน race condition: ไม่ SELECT แล้ว UPDATE แยก — ใช้ batch เดียวกัน
-  const today    = todayStr();
+  const meta    = await env.DB.prepare("SELECT value FROM meta WHERE key = 'orderNumber'").first();
   const lastDate = await env.DB.prepare("SELECT value FROM meta WHERE key = 'lastOrderDate'").first();
+  const today   = todayStr();
 
+  let orderNum = parseInt(meta?.value || '1001');
   if (lastDate?.value !== today) {
-    // วันใหม่ → reset และ lock ใน batch เดียว
-    await env.DB.batch([
-      env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'lastOrderDate'").bind(today),
-      env.DB.prepare("UPDATE meta SET value = '1001' WHERE key = 'orderNumber'"),
-    ]);
+    // วันใหม่ → reset เป็น 1001
+    orderNum = 1001;
+    await env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'lastOrderDate'").bind(today).run();
+    await env.DB.prepare("UPDATE meta SET value = '1001' WHERE key = 'orderNumber'").run();
   }
 
-  // อ่านค่าปัจจุบัน แล้ว increment ทันที (ถ้า 2 request มาพร้อมกัน D1 serializes ให้)
-  const metaRow = await env.DB.prepare("SELECT value FROM meta WHERE key = 'orderNumber'").first();
-  const orderNum = parseInt(metaRow?.value || '1001');
-  await env.DB.prepare(
-    "UPDATE meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'orderNumber'"
-  ).run();
+  const nextNum = orderNum + 1;
+  await env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'orderNumber'").bind(String(nextNum)).run();
 
   const id       = nanoid();
   const now      = nowISO();
@@ -244,24 +240,9 @@ async function handleUpdateOrder(request, path, env, ctx) {
   const updates = [];
   const params  = [];
 
-  // Status whitelist + ห้าม client ถอยหลัง
-  const VALID_STATUSES = ['pending', 'cooking', 'served', 'paid', 'cancelled'];
-  const STATUS_RANK    = { pending: 0, cooking: 1, served: 2, paid: 3, cancelled: 4 };
   if (body.status !== undefined) {
-    if (!VALID_STATUSES.includes(body.status)) return err('invalid status');
-    // ถ้า request นี้มาจากลูกค้าสั่งเพิ่ม (from_customer) → ไม่ยอมให้เปลี่ยน status เด็ดขาด
-    if (body.from_customer === true) {
-      // ลบ status ออกจาก body เลย — ไม่ update
-    } else {
-      // admin: ห้ามถอยหลังข้าม paid/cancelled
-      const curRank = STATUS_RANK[row.status] ?? 0;
-      const newRank = STATUS_RANK[body.status] ?? 0;
-      if ((row.status === 'paid' || row.status === 'cancelled') && newRank < curRank) {
-        return err('cannot revert a closed order');
-      }
-      updates.push('status = ?');
-      params.push(body.status);
-    }
+    updates.push('status = ?');
+    params.push(body.status);
   }
   if (body.batches !== undefined) {
     const flat  = body.batches.flat();
@@ -371,16 +352,11 @@ async function handleUpdateMeta(request, env) {
 //   CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, data TEXT NOT NULL);
 //   (เพิ่มใน schema.sql ด้วย)
 
-// ==================== Menu (D1) ====================
-// ใช้ flag ระดับ module เพื่อไม่ต้อง DDL ทุก request (Worker instance ถูก reuse)
-let _menuTableReady = false;
-
 async function _ensureMenuTable(env) {
-  if (_menuTableReady) return;
+  // สร้าง table ถ้ายังไม่มี (idempotent — ใช้แทน migration สำหรับ table ใหม่)
   await env.DB.prepare(
     'CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, data TEXT NOT NULL)'
   ).run();
-  _menuTableReady = true;
 }
 
 async function handleGetMenu(env) {
