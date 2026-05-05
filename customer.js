@@ -9,7 +9,7 @@
  * ใช้ api-client.js แทน Firebase SDK
  */
 
-import { api, ws } from './api-client.js';
+import { api, ws, applyTheme, toggleTheme, getTheme } from './api-client.js';
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
 // LS fallback: โหลดเมนูจาก localStorage ก่อน API ตอบกลับ
@@ -1372,3 +1372,6 @@ init();
   `;
   document.head.appendChild(style);
 })();
+// ==================== Dark Mode ====================
+applyTheme(getTheme());
+document.getElementById('darkToggleBtn')?.addEventListener('click', toggleTheme);

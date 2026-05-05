@@ -7,7 +7,7 @@
  *   - จ่ายแล้ว → order ใหม่ได้เลขถัดไป
  */
 
-import { api, ws } from './api-client.js';
+import { api, ws, applyTheme, toggleTheme, getTheme } from './api-client.js';
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
 // LS fallback ใช้ตอน API ยังไม่ตอบ
@@ -993,3 +993,6 @@ renderProducts();
 renderCart();
 loadOrderNumber();
 _startMenuSubscribe();
+// ==================== Dark Mode ====================
+applyTheme(getTheme());
+document.getElementById('darkToggleBtn')?.addEventListener('click', toggleTheme);
