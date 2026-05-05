@@ -1931,12 +1931,14 @@ async function toggleMenuItemLocal(id, enabled) {
 }
 
 async function updateSortOrdersLocal(ids) {
-  // sort ต้องแก้หลายรายการพร้อมกัน — ยัง PUT ทั้งก้อน แต่เกิดน้อยมาก
+  // optimistic update ใน memory ก่อน
   ids.forEach((id, i) => {
     if (LIVE_MENU[id]) LIVE_MENU[id].sortOrder = i + 1;
   });
   MOCK_MENU = Object.values(LIVE_MENU);
-  await api.putMenu(LIVE_MENU);
+  try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
+  // PATCH พร้อมกันทุก item — เร็วกว่า PUT ทั้งก้อนมาก
+  await Promise.all(ids.map((id, i) => api.patchMenuItem(id, { sortOrder: i + 1 })));
 }
 
 async function duplicateMenuItemLocal(id) {
@@ -2097,23 +2099,41 @@ function normaliseOrder(o, key) {
 //  INIT — โหลดข้อมูลเริ่มต้นจาก REST + เปิด WebSocket
 // ============================================================
 async function initData() {
-  // โหลด meta (categories, productTypes, defaultCat, productTypeToppings)
+  // ── LS fallback: render ทันทีก่อน network มา ──────────────────
   try {
-    const meta = await api.getMeta();
-    if (meta) {
-      if (meta.categories)           LIVE_CATEGORIES   = meta.categories;
-      if (meta.categories_sort)      _catSort           = meta.categories_sort;
-      if (meta.defaultCat)           LIVE_DEFAULT_CAT   = meta.defaultCat;
-      if (meta.productTypes) {
-        LIVE_PRODUCT_TYPES = Object.entries(meta.productTypes).map(([value, obj]) => ({
-          value, label: obj.label || value, desc: obj.desc || '',
-        }));
-      }
-      if (meta.productTypeToppings)  LIVE_PT_TOPPINGS   = meta.productTypeToppings;
+    const cachedMenu = localStorage.getItem('ks90-menu');
+    if (cachedMenu) {
+      LIVE_MENU  = JSON.parse(cachedMenu);
+      MOCK_MENU  = Object.values(LIVE_MENU);
     }
-  } catch(e) {
-    console.warn('getMeta failed:', e.message);
-    // fallback: localStorage
+    const cachedCats = localStorage.getItem('ks90-categories');
+    if (cachedCats) LIVE_CATEGORIES = JSON.parse(cachedCats);
+  } catch(_) {}
+  renderCatBtns();
+  rebuildProductTypeSelect();
+  if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+
+  // ── โหลด meta + menu + orders พร้อมกัน (ไม่รอทีละตัว) ────────
+  const [metaResult, menuResult, ordersResult] = await Promise.allSettled([
+    api.getMeta(),
+    api.getMenu(),
+    api.getOrders(),
+  ]);
+
+  // meta
+  if (metaResult.status === 'fulfilled' && metaResult.value) {
+    const meta = metaResult.value;
+    if (meta.categories)          LIVE_CATEGORIES   = meta.categories;
+    if (meta.categories_sort)     _catSort           = meta.categories_sort;
+    if (meta.defaultCat)          LIVE_DEFAULT_CAT   = meta.defaultCat;
+    if (meta.productTypes) {
+      LIVE_PRODUCT_TYPES = Object.entries(meta.productTypes).map(([value, obj]) => ({
+        value, label: obj.label || value, desc: obj.desc || '',
+      }));
+    }
+    if (meta.productTypeToppings) LIVE_PT_TOPPINGS   = meta.productTypeToppings;
+  } else if (metaResult.status === 'rejected') {
+    console.warn('getMeta failed:', metaResult.reason?.message);
     try {
       const c = localStorage.getItem('ks90-categories');
       if (c) LIVE_CATEGORIES = JSON.parse(c);
@@ -2122,34 +2142,25 @@ async function initData() {
     } catch(_) {}
   }
 
-  // โหลดเมนู
-  try {
-    const menuObj = await api.getMenu();
-    if (menuObj && typeof menuObj === 'object') {
-      LIVE_MENU = menuObj;
-      MOCK_MENU = Object.values(LIVE_MENU);
-      try { localStorage.setItem('ks90-menu', JSON.stringify(menuObj)); } catch(_) {}
-    }
-  } catch(e) {
-    console.warn('getMenu failed:', e.message);
-    try {
-      const cached = localStorage.getItem('ks90-menu');
-      if (cached) { LIVE_MENU = JSON.parse(cached); MOCK_MENU = Object.values(LIVE_MENU); }
-    } catch(_) {}
+  // menu
+  if (menuResult.status === 'fulfilled' && menuResult.value && typeof menuResult.value === 'object') {
+    LIVE_MENU = menuResult.value;
+    MOCK_MENU = Object.values(LIVE_MENU);
+    try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
+  } else if (menuResult.status === 'rejected') {
+    console.warn('getMenu failed:', menuResult.reason?.message);
+    // LS fallback ถูก apply แล้วตอน init
   }
 
-  // โหลด orders ทั้งหมด
-  try {
-    const raw = await api.getOrders();
-    if (Array.isArray(raw)) {
-      LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
-      MOCK_ORDERS = LIVE_ORDERS;
-    }
-  } catch(e) {
-    console.warn('getOrders failed:', e.message);
+  // orders
+  if (ordersResult.status === 'fulfilled' && Array.isArray(ordersResult.value)) {
+    LIVE_ORDERS = ordersResult.value.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
+    MOCK_ORDERS = LIVE_ORDERS;
+  } else if (ordersResult.status === 'rejected') {
+    console.warn('getOrders failed:', ordersResult.reason?.message);
   }
 
-  // render ส่วนที่พร้อม
+  // render ข้อมูลจริงจาก network
   renderCatBtns();
   rebuildProductTypeSelect();
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
@@ -2190,6 +2201,7 @@ function _startWs() {
           if (menuObj) {
             LIVE_MENU = menuObj;
             MOCK_MENU = Object.values(LIVE_MENU);
+            try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
             if (activePanelId === 'menu') renderMenuTable();
             if (document.getElementById('menuModal')?.classList.contains('open')) {
               const curCat = document.getElementById('menuCategory')?.value;
@@ -2785,22 +2797,38 @@ async function loadMenuItems() {
   MOCK_MENU = Object.values(LIVE_MENU);
   if (MOCK_MENU.length > 0) {
     renderMenuTable();
-  } else {
-    document.getElementById('menuTableBody').innerHTML =
-      '<tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนู…</div></td></tr>';
-    document.getElementById('menuCountBadge').textContent = '…';
-    // พยายามโหลดใหม่อีกครั้ง
-    try {
-      const menuObj = await api.getMenu();
-      if (menuObj) {
-        LIVE_MENU = menuObj;
+    return;
+  }
+
+  // LIVE_MENU ว่าง — ลอง LS ก่อน (เร็ว, ไม่รอ network)
+  try {
+    const cached = localStorage.getItem('ks90-menu');
+    if (cached) {
+      const obj = JSON.parse(cached);
+      if (obj && Object.keys(obj).length > 0) {
+        LIVE_MENU = obj;
         MOCK_MENU = Object.values(LIVE_MENU);
         renderMenuTable();
-      } else {
-        setTimeout(() => { if (MOCK_MENU.length === 0 && activePanelId === 'menu') renderMenuTable(); }, 3000);
+        return;
       }
-    } catch(e) { console.warn(e); }
-  }
+    }
+  } catch(_) {}
+
+  // LS ว่างด้วย — แสดง spinner แล้ว fetch
+  document.getElementById('menuTableBody').innerHTML =
+    '<tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลดเมนู…</div></td></tr>';
+  document.getElementById('menuCountBadge').textContent = '…';
+  try {
+    const menuObj = await api.getMenu();
+    if (menuObj) {
+      LIVE_MENU = menuObj;
+      MOCK_MENU = Object.values(LIVE_MENU);
+      try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
+      renderMenuTable();
+    } else {
+      setTimeout(() => { if (MOCK_MENU.length === 0 && activePanelId === 'menu') renderMenuTable(); }, 3000);
+    }
+  } catch(e) { console.warn(e); }
 }
 
 document.getElementById('menuSearchInput').addEventListener('input', e => {
