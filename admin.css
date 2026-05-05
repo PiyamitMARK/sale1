@@ -2390,3 +2390,38 @@ tr[draggable="true"]:active {
   display: inline-block;
 }
 .menu-drag-handle:hover { color: var(--accent); }
+/* ===== Date Divider ===== */
+.order-date-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0.5rem;
+}
+.order-date-divider::before,
+.order-date-divider::after {
+  content: '';
+  flex: 1;
+  height: 1.5px;
+  background: var(--cream-dark);
+  border-radius: 2px;
+}
+.order-date-divider-label {
+  font-family: 'Mitr', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brown-light);
+  white-space: nowrap;
+  padding: 0.2rem 0.75rem;
+  background: var(--cream-mid);
+  border-radius: 999px;
+  border: 1.5px solid var(--cream-dark);
+}
+[data-theme="dark"] .order-date-divider::before,
+[data-theme="dark"] .order-date-divider::after {
+  background: #3a2d24;
+}
+[data-theme="dark"] .order-date-divider-label {
+  background: #2a1f18;
+  border-color: #3a2d24;
+  color: var(--brown-mid);
+}

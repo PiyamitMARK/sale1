@@ -281,7 +281,7 @@ function startRealtimeListener() {
 
 async function _loadOrders() {
   try {
-    const orders = await api.getOrders({ today: true });
+    const orders = await api.getOrders({ limit: 500 });
     const newOrders = (orders || []).map(o => ({
       ...o,
       firebaseKey: o.id, // alias สำหรับ compatibility กับ render functions

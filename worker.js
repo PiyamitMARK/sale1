@@ -327,7 +327,7 @@ async function handlePutMenu(request, env) {
   const body = await request.json();
   await env.KV.put('menu', JSON.stringify(body), {
     // cache 1 ชั่วโมง — เมนูไม่ค่อยเปลี่ยน
-    expirationTtl: 3600,
+    //expirationTtl: 3600,
   });
   // Broadcast เมนูเปลี่ยน
   await broadcastToRoom(env, 'admin', { type: 'menu_updated' });
