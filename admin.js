@@ -331,7 +331,7 @@ async function _loadOrders(opts = {}) {
   const silent = opts.silent === true;
   try {
     const orders = await api.getOrders({ limit: 500 });
-    const newOrders = (orders || []).map(o => ({\n      ...o,
+    const newOrders = (orders || []).map(o => ({      ...o,
       firebaseKey: o.id,
     }));
     newOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
