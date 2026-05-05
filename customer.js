@@ -1,153 +1,117 @@
 /**
- * ข้าวซอย 90 — Customer Order Page
- * ลูกค้าสแกน QR → เปิดหน้านี้พร้อม ?table=N → สั่งอาหารได้เลย
+ * ข้าวซอย 90 — POS System
+ * Cloudflare Worker REST API + WebSocket
  *
  * ระบบใหม่: 1 โต๊ะ = 1 Order Number จนกว่าจะจ่ายเงิน
- *   - ถ้าโต๊ะมี order active → เพิ่ม batch ต่อท้าย order เดิม
- *   - ถ้าไม่มี → สร้าง order ใหม่
- *
- * ใช้ api-client.js แทน Firebase SDK
+ *   - สั่งเพิ่มในโต๊ะเดิม → ต่อท้าย order เดิม (แยก batch)
+ *   - จ่ายแล้ว → order ใหม่ได้เลขถัดไป
  */
 
 import { api, ws, applyTheme, toggleTheme, getTheme } from './api-client.js';
 import { parseMenuFromRaw, subscribeCategoriesAndSync, subscribeDefaultCat } from './menu-manager.js';
 
-// LS fallback: โหลดเมนูจาก localStorage ก่อน API ตอบกลับ
+// LS fallback ใช้ตอน API ยังไม่ตอบ
 function _loadMenuFromLS() {
   try {
     const raw = localStorage.getItem('ks90-menu');
     if (!raw) return null;
-    const parsed = parseMenuFromRaw(JSON.parse(raw), 'img');
+    const parsed = parseMenuFromRaw(JSON.parse(raw), 'image');
     return Object.keys(parsed).length ? parsed : null;
   } catch { return null; }
 }
 
-// ==================== เมนู (โหลดจาก API) ====================
+// ==================== รูปสินค้า ====================
 const IMG = (n) => 'images/img' + n + '.png';
 
-let PRODUCTS = {
+// ==================== เมนูสินค้า (โหลดจาก API) ====================
+let products = {
   setkao: [
-    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:124, img:IMG(10021),   productType:'setkao' },
-    { id:'setkao1', name:'ข้าวซอยน่องไก่ + โค๊ก',      price:80, img:IMG(10012),   productType:'setkao' },
-    { id:'setkao2', name:'ข้าวซอยน่องไก่ + ชาไทย',       price:105, img:IMG(10013),  productType:'setkao' },
-    { id:'setkao3', name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price:110, img:IMG(10014),   productType:'setkao' },
-    { id:'setkao4', name:'ข้าวซอยหมูทอด + โค๊ก',      price:80, img:IMG(10020),   productType:'setkao' },
-    { id:'setkao5', name:'ข้าวซอยหมูทอด + ชาไทย',       price:105, img:IMG(10019),  productType:'setkao' },
-    { id:'setkao6', name:'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price:110, img:IMG(10018),   productType:'setkao' },
-    { id:'setkao7', name:'น้ำเงี้ยว + โค๊ก',      price:75, img:IMG(10015),   productType:'setkao' },
-    { id:'setkao8', name:'น้ำเงี้ยว + ชาไทย',       price:100, img:IMG(10016),  productType:'setkao' },
-    { id:'setkao9', name:'น้ำเงี้ยว + มะพร้าวปั่น',            price:105, img:IMG(10017),   productType:'setkao' },
-    { id:'setkao10', name:'ข้าวหมูทอด + โค๊ก',      price:65, img:IMG(10009),   productType:'setkao' },
-    { id:'setkao11', name:'ข้าวหมูทอด + ชาไทย',       price:90, img:IMG(10010),  productType:'setkao' },
-    { id:'setkao12', name:'ข้าวหมูทอด + มะพร้าวปั่น',            price:95, img:IMG(10011),   productType:'setkao' },
+    { id: 'setkao13', name: 'เซ็ตอิ่มคุ้มคู่❗',            price: 129, image: IMG(10021),   productType: 'setkao' },
+    { id: 'setkao1', name: 'ข้าวซอยน่องไก่ + โค๊ก',      price: 85, image: IMG(10012),   productType: 'setkao' },
+    { id: 'setkao2', name: 'ข้าวซอยน่องไก่ + ชาไทย',       price: 110, image: IMG(10013),  productType: 'setkao' },
+    { id: 'setkao3', name: 'ข้าวซอยน่องไก่ + มะพร้าวปั่น',            price: 115, image: IMG(10014),   productType: 'setkao' },
+    { id: 'setkao4', name: 'ข้าวซอยหมูทอด + โค๊ก',      price: 85, image: IMG(10020),   productType: 'setkao' },
+    { id: 'setkao5', name: 'ข้าวซอยหมูทอด + ชาไทย',       price: 110, image: IMG(10019),  productType: 'setkao' },
+    { id: 'setkao6', name: 'ข้าวซอยหมูทอด + มะพร้าวปั่น',            price: 115, image: IMG(10018),   productType: 'setkao' },
+    { id: 'setkao7', name: 'น้ำเงี้ยว + โค๊ก',      price: 75, image: IMG(10015),   productType: 'setkao' },
+    { id: 'setkao8', name: 'น้ำเงี้ยว + ชาไทย',       price: 100, image: IMG(10016),  productType: 'setkao' },
+    { id: 'setkao9', name: 'น้ำเงี้ยว + มะพร้าวปั่น',            price: 105, image: IMG(10017),   productType: 'setkao' },
+    { id: 'setkao10', name: 'ข้าวหมูทอด + โค๊ก',      price: 65, image: IMG(10009),   productType: 'setkao' },
+    { id: 'setkao11', name: 'ข้าวหมูทอด + ชาไทย',       price: 90, image: IMG(10010),  productType: 'setkao' },
+    { id: 'setkao12', name: 'ข้าวหมูทอด + มะพร้าวปั่น',            price: 95, image: IMG(10011),   productType: 'setkao' },
   ],
   kao: [
-    { id:'kao1', name:'ข้าวซอยน่องไก่',      price:65, img:IMG(111),   productType:'kaosoi' },
-    { id:'kao2', name:'ข้าวซอยหมูทอด',       price:65, img:IMG(1007),  productType:'kaosoi' },
-    { id:'kao3', name:'น้ำเงี้ยว',            price:60, img:IMG(555),   productType:'namngiao' },
-    { id:'kao4', name:'ข้าวหมูทอด',           price:50, img:IMG(7667),  productType:'kaomutod' },
-    { id:'kao7', name:'ลาบเหนือ',           price:60, img:IMG(10001),  productType:'kaomutod' },
-    { id:'kao10', name:'ข้าวกะเพรา',               price:50, img:IMG(1090),  productType:'simple' },
-    { id:'kao8', name:'ข้าวเหนียว',           price:10, img:IMG(10002),  productType:'simple' },
-    { id:'kao9', name:'ข้าวสวย',           price:10, img:IMG(10003),  productType:'simple' },
-    { id:'kao5', name:'แคบหมู',               price:15, img:IMG(98789), productType:'simple' },
-    { id:'kao6', name:'ไข่ต้ม',               price:10, img:IMG(1090),  productType:'simple' },
-    { id:'kao11', name:'ไข่ดาว',               price:10, img:IMG(1090),  productType:'simple' },
-  ],
+    { id: 'kao1', name: 'ข้าวซอยน่องไก่', price: 70, image: IMG(111),   productType: 'kaosoi'   },
+    { id: 'kao2', name: 'ข้าวซอยหมูทอด',       price: 70, image: IMG(1007),   productType: 'kaosoi'  },
+    { id: 'kao3', name: 'น้ำเงี้ยว',            price: 60, image: IMG(555),    productType: 'namngiao'  },
+    { id: 'kao4', name: 'ข้าวหมูทอด',           price: 50, image: IMG(7667),   productType: 'kaomutod'  },
+    { id: 'kao5', name: 'แคบหมู',               price: 15, image: IMG(98789),  productType: 'simple' },
+    { id: 'kao7', name: 'ลาบเหนือ',           price: 60, image: IMG(10001),  productType: 'kaomutod' },
+    { id: 'kao8', name: 'ข้าวเหนียว',           price: 10, image: IMG(10002),  productType: 'simple' },
+    { id: 'kao9', name: 'ข้าวสวย',           price: 10, image: IMG(10003),  productType: 'simple' },
+    { id: 'kao6', name: 'ไข่ต้ม',               price: 10, image: IMG(1090),  productType: 'simple' },
+    ],
   nam: [
-    { id:'nam1',  name:'น้ำเปล่า',       price:10, img:IMG(60),  productType:'drink-ready' },
-    { id:'nam2',  name:'โค๊ก',           price:15, img:IMG(80),  productType:'drink-ready' },
-    { id:'nam3',  name:'สไปร์ท',         price:15, img:IMG(345), productType:'drink-ready' },
-    { id:'nam4',  name:'มะพร้าวปั่น',    price:45, img:IMG(333), productType:'mapraopun' },
-    { id:'nam5',  name:'ชาไทย',          price:40, img:IMG(1),   productType:'drink-brew' },
-    { id:'nam6',  name:'ชาดำเย็น',       price:40, img:IMG(5),   productType:'drink-brew' },
-    { id:'nam7',  name:'ชามะนาว',        price:40, img:IMG(13),  productType:'drink-brew' },
-    { id:'nam8',  name:'นมชมพู',         price:40, img:IMG(14),  productType:'drink-brew' },
-    { id:'nam9',  name:'โกโก้',          price:40, img:IMG(9),   productType:'drink-brew' },
-    { id:'nam10', name:'มัทฉะมะพร้าว',   price:60, img:IMG(15),  productType:'drink-brew' },
-    { id:'nam11', name:'มัทฉะลาเต้',     price:60, img:IMG(3),   productType:'drink-brew' },
-    { id:'nam12', name:'เพียวมัทฉะ',     price:55, img:IMG(2),   productType:'drink-brew' },
+    { id: 'nam1',  name: 'น้ำเปล่า',       price: 10, image: IMG(60),  productType: 'drink-ready' },
+    { id: 'nam2',  name: 'โค๊ก',           price: 15, image: IMG(80),  productType: 'drink-ready' },
+    { id: 'nam3',  name: 'สไปร์ท',         price: 15, image: IMG(345), productType: 'drink-ready' },
+    { id: 'nam4',  name: 'มะพร้าวปั่น',    price: 45, image: IMG(333), productType: 'mapraopun' },
+    { id: 'nam5',  name: 'ชาไทย',          price: 40, image: IMG(1),   productType: 'drink-brew' },
+    { id: 'nam6',  name: 'ชาดำเย็น',       price: 40, image: IMG(5),   productType: 'drink-brew' },
+    { id: 'nam7',  name: 'ชามะนาว',        price: 40, image: IMG(13),  productType: 'drink-brew' },
+    { id: 'nam8',  name: 'นมชมพู',         price: 40, image: IMG(14),  productType: 'drink-brew' },
+    { id: 'nam9',  name: 'โกโก้',          price: 40, image: IMG(9),   productType: 'drink-brew' },
+    { id: 'nam10', name: 'มัทฉะมะพร้าว',   price: 60, image: IMG(15),  productType: 'drink-brew' },
+    { id: 'nam11', name: 'มัทฉะลาเต้',     price: 60, image: IMG(3),   productType: 'drink-brew' },
+    { id: 'nam12', name: 'เพียวมัทฉะ',     price: 55, image: IMG(2),   productType: 'drink-brew' },
   ],
   coffee: [
-    { id:'coffee1', name:'เอสเปรสโซ่',         price:55, img:IMG(12), productType:'drink-brew' },
-    { id:'coffee2', name:'คาปูชิโน่',           price:55, img:IMG(7),  productType:'drink-brew' },
-    { id:'coffee3', name:'ลาเต้',               price:55, img:IMG(4),  productType:'drink-brew' },
-    { id:'coffee4', name:'มอคค่า',              price:55, img:IMG(12), productType:'drink-brew' },
-    { id:'coffee5', name:'อเมริกาโน่',           price:45, img:IMG(5),  productType:'drink-brew' },
-    { id:'coffee6', name:'อเมริกาโน่มะพร้าว',   price:60, img:IMG(6),  productType:'drink-brew' },
-    { id:'coffee7', name:'อเมริกาโน่น้ำผึ้ง',   price:60, img:IMG(5),  productType:'drink-brew' },
-    { id:'coffee8', name:'อเมริกาโน่ส้ม',       price:60, img:IMG(8),  productType:'drink-brew' }, 
+    { id: 'coffee1', name: 'เอสเปรสโซ่',         price: 55, image: IMG(12), productType: 'drink-brew' },
+    { id: 'coffee2', name: 'คาปูชิโน่',           price: 55, image: IMG(7),  productType: 'drink-brew' },
+    { id: 'coffee3', name: 'ลาเต้',               price: 55, image: IMG(4),  productType: 'drink-brew' },
+    { id: 'coffee4', name: 'มอคค่า',              price: 55, image: IMG(12), productType: 'drink-brew' },
+    { id: 'coffee5', name: 'อเมริกาโน่',           price: 45, image: IMG(5),  productType: 'drink-brew' },
+    { id: 'coffee6', name: 'อเมริกาโน่มะพร้าว',   price: 60, image: IMG(6),  productType: 'drink-brew' },
+    { id: 'coffee7', name: 'อเมริกาโน่น้ำผึ้ง',   price: 60, image: IMG(5),  productType: 'drink-brew' },
+    { id: 'coffee8', name: 'อเมริกาโน่ส้ม',       price: 60, image: IMG(8),  productType: 'drink-brew' },
   ],
   soda: [
-    { id:'soda1', name:'แดงมะนาวโซดา',      price:35, img:IMG(23), productType:'drink-ready' },
-    { id:'soda2', name:'บลูฮาวายมะนาวโซดา', price:35, img:IMG(26), productType:'drink-ready' },
-    { id:'soda3', name:'แอปเปิ้ลโซดา',      price:35, img:IMG(24), productType:'drink-ready' },
-    { id:'soda4', name:'ส้มโซดา',           price:35, img:IMG(25), productType:'drink-ready' },
-    { id:'soda5', name:'สตรอเบอร์รี่โซดา',  price:35, img:IMG(30), productType:'drink-ready' },
-    { id:'soda6', name:'บลูเบอร์รี่โซดา',   price:35, img:IMG(21), productType:'drink-ready' },
+    { id: 'soda1', name: 'แดงมะนาวโซดา',      price: 35, image: IMG(23), productType: 'drink-ready' },
+    { id: 'soda2', name: 'บลูฮาวายมะนาวโซดา', price: 35, image: IMG(26), productType: 'drink-ready' },
+    { id: 'soda3', name: 'แอปเปิ้ลโซดา',      price: 35, image: IMG(24), productType: 'drink-ready' },
+    { id: 'soda4', name: 'ส้มโซดา',           price: 35, image: IMG(25), productType: 'drink-ready' },
+    { id: 'soda5', name: 'สตรอเบอร์รี่โซดา',  price: 35, image: IMG(30), productType: 'drink-ready' },
+    { id: 'soda6', name: 'บลูเบอร์รี่โซดา',   price: 35, image: IMG(21), productType: 'drink-ready' },
   ],
 };
 
-// โหลด LS cache ก่อน API ตอบ → ผู้ใช้เห็นเมนูทันที ไม่รู้สึกรอ
-const _lsMenu = _loadMenuFromLS();
-if (_lsMenu) PRODUCTS = _lsMenu;
-
-// ==================== โหลดเมนู (API + WebSocket realtime) ====================
+// ==================== โหลดเมนู: LS ก่อน (fast) → API + WebSocket (realtime) ====================
+const _lsMenuPOS = _loadMenuFromLS();
+if (_lsMenuPOS) products = _lsMenuPOS;
 
 let _menuRawCache = null;
 let _menuDebounce = null;
-let _menuSocket   = null;
 
-function _startMenuSubscribe() {
+async function _startMenuSubscribe() {
   const lsRaw = localStorage.getItem('ks90-menu');
-
-  // โหลดจาก API ครั้งแรก
-  api.getMenu().then(raw => {
-    if (!raw || Object.keys(raw).length === 0) return;
-    const rawStr = JSON.stringify(raw);
-    if (rawStr === _menuRawCache && lsRaw === rawStr) {
-      // เมนูไม่เปลี่ยน → ไม่ต้อง re-render
+  try {
+    const menuData = await api.getMenu();
+    if (!menuData) return;
+    const rawStr = JSON.stringify(menuData);
+    if (rawStr === lsRaw) {
+      _menuRawCache = rawStr;
       return;
     }
     _menuRawCache = rawStr;
     try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
-    const parsed = parseMenuFromRaw(raw, 'img');
-    if (Object.keys(parsed).length) {
-      PRODUCTS = parsed;
-      if (document.getElementById('productGrid')) renderProducts();
-    }
-  }).catch(() => {});
-
-  // subscribe realtime ผ่าน WebSocket (table room — ไม่ต้องการ admin key)
-  if (_menuSocket) { _menuSocket.close(); _menuSocket = null; }
-  _menuSocket = ws.connect(`table-${tableNum || '0'}`, (msg) => {
-    if (msg.type === 'menu_updated') {
-      api.getMenu().then(raw => {
-        if (!raw) return;
-        const rawStr = JSON.stringify(raw);
-        if (rawStr === _menuRawCache) return;
-        _menuRawCache = rawStr;
-        try { localStorage.setItem('ks90-menu', rawStr); } catch (_) {}
-        clearTimeout(_menuDebounce);
-        _menuDebounce = setTimeout(() => {
-          const parsed = parseMenuFromRaw(raw, 'img');
-          if (Object.keys(parsed).length) {
-            PRODUCTS = parsed;
-            if (document.getElementById('productGrid')) renderProducts();
-          }
-        }, 300);
-      }).catch(() => {});
-    }
-  });
+    const parsed = parseMenuFromRaw(menuData, 'image');
+    if (Object.keys(parsed).length) { products = parsed; renderProducts(); }
+  } catch (err) {
+    console.warn('menu load error:', err);
+  }
 }
 
 // ==================== Option Configs แยกตาม productType ====================
-// productType: 'food' | 'drink-brew' | 'drink-ready' | 'simple'
-// food        = อาหาร → เผ็ด + ท็อปปิ้ง + หมายเหตุ
-// drink-brew  = ชง (กาแฟ, ชา, มัทฉะ) → ร้อน/เย็น + ความหวาน + extra + หมายเหตุ
-// drink-ready = น้ำขวด/กระป๋อง/สำเร็จรูป → ไม่มี option (แค่ qty + note)
-// simple      = เมนูเดี่ยวไม่มีตัวเลือก (แคบหมู ไข่ต้ม) → qty เท่านั้น
-
 const OPTION_CONFIGS = {
   'kaosoi': {
     groups: [
@@ -267,637 +231,304 @@ const OPTION_CONFIGS = {
     ],
     hasNote: true,
   },
-  'setkao': {
-    groups: [],
-    hasNote: true,
-  },
-  'drink-ready': {
-    groups: [],
-    hasNote: true,
-  },
-  'simple': {
-    groups: [],
-    hasNote: false,
-  },
+  'setkao':      { groups: [], hasNote: true, },
+  'drink-ready': { groups: [], hasNote: true },
+  'simple':      { groups: [], hasNote: false },
 };
 
 // ==================== State ====================
-let tableNum      = null;
-let currentCat    = 'setkao';
+let cart = [];
+let orderNumber = 1001;
+let currentCategory = 'setkao';
 
-// subscribe defaultCat จาก API — set เป็นค่าเริ่มต้นก่อน categories โหลด
+// subscribe defaultCat จาก menu-manager — set เป็นค่าเริ่มต้นก่อน categories โหลด
 subscribeDefaultCat(null, catId => {
-  if (catId) currentCat = catId;
+  if (catId) currentCategory = catId;
 });
-let searchQuery   = '';         // ข้อความค้นหาเมนู
-let cart          = [];
-let pendingProduct = null;
-let optionQty     = 1;
+let selectedTable = null;
 
-// สถานะ order ปัจจุบันของโต๊ะ
-let activeOrderKey    = null; // Firebase key ของ order ที่ยังไม่ได้จ่าย
-let activeOrderNumber = null; // order number ที่ active
-let popularItems      = [];   // ── Feature #1: รายชื่อเมนูยอดนิยม ──
+// สถานะ order ปัจจุบันของโต๊ะที่เลือก
+let currentTableOrderId = null;     // id ของ order ที่กำลัง active
+let currentTableOrderNumber = null; // order number ที่ active
 
-// ==================== Cart Persistence (sessionStorage) ====================
-// เก็บตะกร้าไว้ใน sessionStorage แยกตามโต๊ะ
-// → กดรีหน้า / เน็ตหลุดแล้วกลับมา → ตะกร้าคืนมาได้
-function cartStorageKey(t) { return 'cart_t' + t; }
+// WebSocket connection
+let _wsConn = null;
 
-function saveCart() {
-  if (!tableNum) return;
-  try {
-    if (cart.length > 0) {
-      sessionStorage.setItem(cartStorageKey(tableNum), JSON.stringify(cart));
-    } else {
-      sessionStorage.removeItem(cartStorageKey(tableNum));
-    }
-  } catch (_) {}
-}
-
-function loadCart() {
-  if (!tableNum) return;
-  try {
-    const raw = sessionStorage.getItem(cartStorageKey(tableNum));
-    if (raw) cart = JSON.parse(raw);
-  } catch (_) { cart = []; }
-}
-
-function clearSavedCart() {
-  if (!tableNum) return;
-  try { sessionStorage.removeItem(cartStorageKey(tableNum)); } catch (_) {}
-}
+// ==================== DOM ====================
+const currentDateEl    = document.getElementById('currentDate');
+const orderNumberEl    = document.getElementById('orderNumber');
+const tableChipEl      = document.getElementById('tableChip');
+const productsGrid     = document.getElementById('productsGrid');
+const productsOverlay  = document.getElementById('productsOverlay');
+const cartItemsEl      = document.getElementById('cartItems');
+const cartEmptyEl      = document.getElementById('cartEmpty');
+const totalEl          = document.getElementById('total');
+const clearCartBtn     = document.getElementById('clearCart');
+const completeOrderBtn = document.getElementById('completeOrder');
+const receiptModal     = document.getElementById('receiptModal');
+const receiptOrderNum  = document.getElementById('receiptOrderNum');
+const receiptTableEl   = document.getElementById('receiptTable');
+const receiptDate      = document.getElementById('receiptDate');
+const receiptItemsEl   = document.getElementById('receiptItems');
+const receiptTotal     = document.getElementById('receiptTotal');
+const printReceiptBtn  = document.getElementById('printReceipt');
+const newOrderBtn      = document.getElementById('newOrder');
+const confirmOrderModal  = document.getElementById('confirmOrderModal');
+const confirmTableLabel  = document.getElementById('confirmTableLabel');
+const confirmOrderList   = document.getElementById('confirmOrderList');
+const confirmTotal       = document.getElementById('confirmTotal');
+const confirmOrderCancel = document.getElementById('confirmOrderCancel');
+const confirmOrderOk     = document.getElementById('confirmOrderOk');
 
 // ==================== Helpers ====================
-function fmt(n) {
+function formatMoney(n) {
   return '฿' + Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function esc(str) {
-  return String(str)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function setDate() {
+  currentDateEl.textContent = new Date().toLocaleDateString('th-TH', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  });
 }
 
-// ==================== Init: Read URL param ====================
-// รองรับ ?table=1-99 (โต๊ะ) หรือ ?table=takeaway1/2/3 (กลับบ้าน)
-const TAKEAWAY_IDS = ['takeaway1', 'takeaway2', 'takeaway3'];
+// ==================== XSS helpers ====================
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escapeAttr(str) {
+  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
-function isTakeaway(t) { return TAKEAWAY_IDS.includes(String(t)); }
-function tableLabel(t) { return isTakeaway(t) ? `กลับบ้าน (${String(t).replace('takeaway','')})` : `โต๊ะ ${t}`; }
+// ==================== Table Selection ====================
+async function selectTable(tableNum) {
+  selectedTable = tableNum;
 
-async function init() {
-  const params = new URLSearchParams(location.search);
-  const raw    = params.get('table') || '';
-  const tNum   = parseInt(raw, 10);
-  const isTA   = TAKEAWAY_IDS.includes(raw);
-
-  // ตรวจสอบ: โต๊ะ 1-99 หรือ takeaway1/2/3
-  if (!isTA && (!tNum || tNum < 1 || tNum > 99)) {
-    show('invalidScreen');
-    return;
-  }
-
-  tableNum = isTA ? raw : tNum;
-  show('mainScreen');
-  requestAnimationFrame(updateStickyOffsets);
-  const lbl = tableLabel(tableNum);
-  document.getElementById('tableLabel').textContent     = lbl;
-  document.getElementById('cartTableLabel').textContent = lbl;
-
-  // ปรับสไตล์ badge ถ้าเป็นกลับบ้าน
-  if (isTA) {
-    // เพิ่ม class สีเขียวเฉพาะ badge เล็กๆ ไม่เป็น background ทั้งแถว
-    const tableEl = document.getElementById('tableLabel');
-    const cartTableEl = document.getElementById('cartTableLabel');
-    if (tableEl) {
-      tableEl.style.background = '#1a7a4a';
-      tableEl.style.color = '#fff';
-    }
-    // cartTableLabel ให้แค่ข้อความ + icon ไม่เป็น full-width green bar
-    if (cartTableEl) {
-      cartTableEl.style.cssText = 'display:inline-block;background:#e8f5e9;color:#1a7a4a;border:1.5px solid #1a7a4a;font-weight:700;';
-    }
-    // ซ่อนปุ่มเรียกพนักงาน (ไม่ใช่โต๊ะในร้าน)
-    const callBtn = document.getElementById('callStaffBtn');
-    if (callBtn) callBtn.style.display = 'none';
-  }
-
-  // ─── โหลดตะกร้าที่ค้างไว้ (กรณีรีหน้า / เน็ตหลุด) ───
-  loadCart();
-
-  // แสดง skeleton ทันทีทุกกรณี → ไม่รู้สึกว่ารอ
-  const grid = document.getElementById('productGrid');
-  if (grid) _renderSkeleton(grid, 8);
-
-  // render จาก cache ถ้ามี (จะ replace skeleton ทันที < 16ms)
-  renderProducts();
-  initSearchBar();
-  updateCartBar();
-
-  // ── Feature #1: โหลด popular items ──
-  loadPopularItems();
-
-  // subscribe Firebase menu realtime
-  _startMenuSubscribe();
-
-  // ตรวจ order active ของโต๊ะ (background — ไม่บล็อก render)
-  checkActiveOrder().then(() => {
-    if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
+  document.querySelectorAll('.table-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.table === String(tableNum));
   });
 
-  bindCats();
+  productsOverlay.classList.add('hidden');
+  tableChipEl.textContent = ` · โต๊ะ ${tableNum}`;
+
+  await checkTableActiveOrder(tableNum);
+  renderProducts();
 }
 
-async function checkActiveOrder() {
+/**
+ * ตรวจสอบ order ที่ active อยู่สำหรับโต๊ะ ผ่าน REST API
+ */
+async function checkTableActiveOrder(tableNum) {
   try {
     const data = await api.getTableOrder(tableNum);
-    if (data && data.order_id) {
-      // ตรวจสอบสถานะ order จริง
-      const order = await api.getOrder(data.order_id);
-      if (order) {
-        if (order.status === 'paid' || order.status === 'canceled') {
-          // order ปิดแล้ว → ล้าง
-          await api.clearTable(tableNum).catch(() => {});
-          activeOrderKey    = null;
-          activeOrderNumber = null;
-          clearSavedCart();
-          return;
-        }
-        activeOrderKey    = data.order_id;
-        activeOrderNumber = order.order_num;
-        showOrderBanner();
-      } else {
-        // order ถูกลบ → ล้าง
-        await api.clearTable(tableNum).catch(() => {});
-        activeOrderKey    = null;
-        activeOrderNumber = null;
-        clearSavedCart();
-      }
+    if (data && data.id) {
+      currentTableOrderId     = data.id;
+      currentTableOrderNumber = data.order_num;
+      orderNumber             = data.order_num;
+      orderNumberEl.textContent = orderNumber;
+      showTableOrderBanner(tableNum, orderNumber);
     } else {
-      // ไม่มี order active จริงๆ → ล้าง cart
-      activeOrderKey    = null;
-      activeOrderNumber = null;
-      clearSavedCart();
+      currentTableOrderId     = null;
+      currentTableOrderNumber = null;
+      hideTableOrderBanner();
     }
   } catch (err) {
-    // เน็ตหลุด → ไม่ล้าง cart เพราะยังไม่รู้สถานะจริง
-    console.error('checkActiveOrder error:', err);
-    activeOrderKey = null;
+    // 404 = ไม่มี active order
+    currentTableOrderId     = null;
+    currentTableOrderNumber = null;
+    hideTableOrderBanner();
   }
 }
 
-function showOrderBanner() {
-  let banner = document.getElementById('activeBanner');
+function showTableOrderBanner(tableNum, orderNum) {
+  let banner = document.getElementById('tableOrderBanner');
   if (!banner) {
     banner = document.createElement('div');
-    banner.id = 'activeBanner';
-    banner.style.cssText = `
-      background:#fff8e1; border-left:4px solid #c8853a;
-      padding:0.55rem 1rem; font-size:0.85rem; color:#5c3d2e;
-      position:sticky; top:calc(var(--header-h, 52px) + var(--kitchen-h, 0px)); z-index:38;
-    `;
-    document.getElementById('mainScreen').insertBefore(
-      banner,
-      document.getElementById('productGrid')
-    );
+    banner.id = 'tableOrderBanner';
+    banner.className = 'table-order-banner';
+    document.querySelector('.table-bar').insertAdjacentElement('afterend', banner);
   }
-  banner.innerHTML = `🔄 ออเดอร์ <strong>#${activeOrderNumber}</strong> ยังค้างอยู่ — การสั่งเพิ่มจะต่อท้ายออเดอร์นี้`;
+  banner.innerHTML = `
+    <span class="table-order-banner-text">
+      🔄 โต๊ะ ${tableNum} มีออเดอร์ <strong>#${orderNum}</strong> ค้างอยู่ — จะเพิ่มรายการต่อท้ายออเดอร์นี้
+    </span>
+  `;
+  banner.style.display = '';
 }
 
-// ==================== Kitchen Status Real-time ====================
-let kitchenStatusUnsubscribe = null;
+function hideTableOrderBanner() {
+  const banner = document.getElementById('tableOrderBanner');
+  if (banner) banner.style.display = 'none';
+}
 
-const KITCHEN_STATUS_MAP = {
-  pending:  { icon: '⏳', msg: 'รอครัวรับออเดอร์',   cls: '' },
-  cooking:  { icon: '👨‍🍳', msg: 'ครัวกำลังทำอาหาร',  cls: 'status-cooking' },
-  served:   { icon: '🍽',  msg: 'อาหารเสิร์ฟแล้ว! 🎉', cls: 'status-served' },
-  paid:     { icon: '✅',  msg: 'ชำระเงินแล้ว ขอบคุณ', cls: 'status-paid' },
-};
+// ==================== Table Buttons (dynamic, sync กับ qr.html) ====================
+const TABLE_COUNT_KEY = 'ks90-table-count';
 
-function startKitchenStatusWatcher(orderKey) {
-  if (kitchenStatusUnsubscribe) { kitchenStatusUnsubscribe(); kitchenStatusUnsubscribe = null; }
-  if (!orderKey) { hideKitchenBar(); return; }
-
-  // โหลด status ครั้งแรก
-  api.getOrder(orderKey).then(order => {
-    updateKitchenBar(order ? order.status : 'pending');
-  }).catch(() => {});
-
-  // subscribe realtime ผ่าน WebSocket (table room)
-  const socket = ws.connect(`table-${tableNum}`, (msg) => {
-    if ((msg.type === 'order_updated' || msg.type === 'status_changed') &&
-        (msg.id === orderKey || msg.order?.id === orderKey)) {
-      updateKitchenBar(msg.status || msg.order?.status || 'pending');
-    }
+function renderTableButtons() {
+  const grid = document.getElementById('tableGrid');
+  if (!grid) return;
+  const count = Math.max(1, Math.min(99, parseInt(localStorage.getItem(TABLE_COUNT_KEY) || '9', 10)));
+  grid.innerHTML = Array.from({ length: count }, (_, i) => {
+    const t = i + 1;
+    return `<button type="button" class="table-btn" data-table="${t}">${t}</button>`;
+  }).join('');
+  grid.querySelectorAll('.table-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectTable(parseInt(btn.dataset.table)));
   });
-
-  kitchenStatusUnsubscribe = () => socket.close();
-}
-
-const STATUS_ORDER = ['pending', 'cooking', 'served', 'paid'];
-
-function updateKitchenBar(status) {
-  const bar  = document.getElementById('kitchenBar');
-  const icon = document.getElementById('kitchenIcon');
-  const msg  = document.getElementById('kitchenMsg');
-  if (!bar) return;
-  const info = KITCHEN_STATUS_MAP[status] || KITCHEN_STATUS_MAP.pending;
-  icon.textContent = info.icon;
-  msg.textContent  = info.msg;
-  bar.className    = 'cust-kitchen-bar' + (info.cls ? ' ' + info.cls : '');
-  bar.classList.remove('hidden');
-  requestAnimationFrame(updateStickyOffsets);
-
-  // เมื่อ status เป็น paid → ล้าง activeOrderKey ทันที
-  // เพื่อให้การสั่งครั้งถัดไปสร้างออเดอร์ใหม่แทนการต่อท้าย
-  if (status === 'paid' || status === 'canceled') {
-    activeOrderKey    = null;
-    activeOrderNumber = null;
-    clearSavedCart();
-    const banner = document.getElementById('activeBanner');
-    if (banner) banner.remove();
-    // ล้าง table mapping ผ่าน API (background)
-    if (tableNum) api.clearTable(tableNum).catch(() => {});
+  // ถ้าโต๊ะที่เลือกอยู่เกินจำนวนใหม่ ให้ deselect
+  if (selectedTable && selectedTable > count) {
+    selectedTable = null;
+    document.getElementById('productsOverlay')?.classList.remove('hidden');
   }
-
-  // อัปเดต timeline steps
-  const currentIdx = STATUS_ORDER.indexOf(status);
-  document.querySelectorAll('.cust-status-step').forEach((step, i) => {
-    step.classList.remove('active', 'done');
-    if (i < currentIdx)        step.classList.add('done');
-    else if (i === currentIdx) step.classList.add('active');
-  });
-  ['stepLine1', 'stepLine2', 'stepLine3'].forEach((id, i) => {
-    const line = document.getElementById(id);
-    if (line) line.classList.toggle('filled', i < currentIdx);
-  });
 }
 
-function hideKitchenBar() {
-  const bar = document.getElementById('kitchenBar');
-  if (bar) bar.classList.add('hidden');
-  requestAnimationFrame(updateStickyOffsets);
-}
+renderTableButtons();
 
-// ==================== Call Staff ====================
-let callCooldown = false;
-
-document.getElementById('callStaffBtn').addEventListener('click', async () => {
-  if (callCooldown || !tableNum) return;
-  callCooldown = true;
-  const btn = document.getElementById('callStaffBtn');
-  btn.disabled = true;
-
-  try {
-    await api.callStaff(tableNum);
-    const toast = document.getElementById('callToast');
-    toast.classList.remove('hidden');
-    setTimeout(() => toast.classList.add('hidden'), 3000);
-  } catch (err) {
-    console.error('callStaff error:', err);
-  }
-
-  // cooldown 30 วิ ป้องกันกดซ้ำ + countdown
-  let remaining = 30;
-  const btn2 = document.getElementById('callStaffBtn');
-  const origText = btn2 ? btn2.textContent : '🔔 เรียกพนักงาน';
-  const countdownInterval = setInterval(() => {
-    remaining--;
-    if (btn2) btn2.textContent = `⏳ ${remaining}s`;
-    if (remaining <= 0) clearInterval(countdownInterval);
-  }, 1000);
-  setTimeout(() => {
-    callCooldown = false;
-    if (btn2) { btn2.disabled = false; btn2.textContent = origText; }
-    clearInterval(countdownInterval);
-  }, 30000);
+// sync แบบ realtime ถ้าแท็บอื่นเปลี่ยนค่า (เช่น เปิด qr.html แล้วกด สร้าง QR)
+window.addEventListener('storage', (e) => {
+  if (e.key === TABLE_COUNT_KEY) renderTableButtons();
 });
 
-function show(id) {
-  ['invalidScreen','mainScreen'].forEach(sid => {
-    document.getElementById(sid).classList.toggle('hidden', sid !== id);
-  });
-}
-
-// ==================== Sticky offset: วัด header + kitchen bar จริง ====================
-// set CSS var --header-h และ --kitchen-h เพื่อให้ tabs/banner ไม่ทับ
-function updateStickyOffsets() {
-  const header  = document.querySelector('.cust-header');
-  const kitchen = document.getElementById('kitchenBar');
-  const root    = document.documentElement;
-  const hH = header  ? header.offsetHeight  : 0;
-  const kH = (kitchen && !kitchen.classList.contains('hidden')) ? kitchen.offsetHeight : 0;
-  root.style.setProperty('--header-h',  hH + 'px');
-  root.style.setProperty('--kitchen-h', kH + 'px');
-}
-if (typeof ResizeObserver !== 'undefined') {
-  const _stickyRO = new ResizeObserver(updateStickyOffsets);
-  document.addEventListener('DOMContentLoaded', () => {
-    const h = document.querySelector('.cust-header');
-    const k = document.getElementById('kitchenBar');
-    if (h) _stickyRO.observe(h);
-    if (k) _stickyRO.observe(k);
-  });
-}
-window.addEventListener('resize', updateStickyOffsets);
-
-// ==================== Popular Items ====================
-function loadPopularItems() {
-  // ใช้ get() ครั้งเดียวแทน onValue — popular items ไม่ต้องการ realtime
-  api.getMeta().then(meta => {
-    let items = [];
-    try { items = JSON.parse(meta?.popularItems || '[]'); } catch { items = []; }
-    if (!Array.isArray(items)) items = [];
-    popularItems = items;
-    renderProducts();
-  }).catch(() => {});
-}
-
 // ==================== Products ====================
-function _renderSkeleton(grid, count = 8) {
-  // skeleton เต็มหน้าจอมือถือ (8 card = 4 แถว x 2 คอลัมน์)
-  grid.innerHTML = Array.from({ length: count }, (_, i) =>
-    `<div class="cust-product-card cust-product-skeleton" aria-hidden="true"
-          style="animation-delay:${i * 0.05}s">
-      <div class="cust-product-img-wrap skel-img"></div>
-      <div class="cust-product-info">
-        <div class="skel-line skel-name"></div>
-        <div class="skel-line skel-price"></div>
-      </div>
-    </div>`
-  ).join('');
-}
-
 function renderProducts() {
-  const grid = document.getElementById('productGrid');
-  // กรองตาม search query ถ้ามี
-  const allList = searchQuery
-    ? Object.values(PRODUCTS).flat().filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : (PRODUCTS[currentCat] || []);
-  const list = allList;
-  const QUICKADD_TYPES = ['simple', 'drink-ready'];
-  grid.innerHTML = list.map((p, idx) => {
-    const isDisabled = p.enabled === false;
-    const hasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
-    const isQuick    = !isDisabled && QUICKADD_TYPES.includes(p.productType) && !hasOptions;
-    const isPopular  = !isDisabled && popularItems.includes(p.name);
-    // 4 รูปแรกโหลดทันที (eager) ที่เหลือ lazy — ลดเวลา render ครั้งแรก
-    const loadAttr   = idx < 4 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
-    return `
-    <button class="cust-product-card${isQuick ? ' cust-product-card--quick' : ''}${isDisabled ? ' cust-product-card--disabled' : ''}"
-      data-id="${p.id}" type="button" ${isDisabled ? 'disabled aria-disabled="true"' : ''}>
-      ${isDisabled ? '<span class="cust-soldout-badge">หมดชั่วคราว</span>' : ''}
-      ${isPopular ? '<span class="cust-popular-badge">🔥 ยอดนิยม</span>' : ''}
-      ${isQuick && !isPopular ? '<span class="cust-quick-badge">+</span>' : ''}
-      <div class="cust-product-img-wrap img-loading">
-        <img class="cust-product-img" src="${esc(p.img)}" alt="${esc(p.name)}"
-             ${loadAttr} decoding="async"
-             onload="this.classList.add('loaded');this.parentNode.classList.remove('img-loading')"
-             onerror="this.parentNode.classList.remove('img-loading');this.parentNode.innerHTML='<span class=cust-product-img-fallback>🍽</span>'">
+  productsGrid.innerHTML = (products[currentCategory] || []).map((p, idx) => `
+    <button type="button" class="product-card"
+      data-id="${p.id}" data-name="${escapeAttr(p.name)}"
+      data-price="${p.price}" data-image="${escapeAttr(p.image)}">
+      <div class="product-img-wrap pos-img-skeleton">
+        <img class="product-img" src="${p.image}" alt="${escapeAttr(p.name)}"
+             loading="${idx < 6 ? 'eager' : 'lazy'}" decoding="async"
+             onload="this.parentNode.classList.remove('pos-img-skeleton')"
+             onerror="this.parentNode.classList.remove('pos-img-skeleton');this.style.display='none'">
       </div>
-      <div class="cust-product-info">
-        <div class="cust-product-name">${esc(p.name)}</div>
-        <div class="cust-product-price">${fmt(p.price)}</div>
-      </div>
-    </button>`;
-  }).join('');
+      <p class="product-name">${escapeHtml(p.name)}</p>
+      <p class="product-price">${formatMoney(p.price)}</p>
+    </button>
+  `).join('');
 
-  grid.querySelectorAll('.cust-product-card').forEach(btn => {
+  productsGrid.querySelectorAll('.product-card').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const p = (PRODUCTS[currentCat] || []).find(x => x.id === btn.dataset.id);
-      if (!p) return;
-
-      // ── Quick-add: เมนูไม่มี options และ productType เป็น simple/drink-ready → เพิ่มตะกร้าทันที ──
-      const QUICKADD_TYPES = ['simple', 'drink-ready'];
-      const pHasOptions = p.options && Array.isArray(p.options) && p.options.length > 0;
-      if (QUICKADD_TYPES.includes(p.productType) && !pHasOptions) {
-        const cartKey = p.id + '|';
-        const existing = cart.find(i => i.cartKey === cartKey);
-        if (existing) {
-          existing.qty++;
-        } else {
-          cart.push({ cartKey, id: p.id, name: p.name, price: p.price, qty: 1, optionLabel: '' });
-        }
-        saveCart();
-        updateCartBar();
-        // flash feedback
-        btn.classList.add('quick-add-flash');
-        setTimeout(() => btn.classList.remove('quick-add-flash'), 400);
-        return;
-      }
-
-      openOptionModal(p);
+      if (!selectedTable) return;
+      openOptionModal(btn.dataset);
     });
-  });
-}
-
-const _catBar = document.getElementById('catBar');
-
-function renderCategoryTabs(cats) {
-  if (!_catBar) return;
-  const ids = Object.keys(cats);
-  if (!ids.includes(currentCat)) currentCat = ids[0] || 'setkao';
-
-  _catBar.innerHTML = ids.map((id, i) =>
-    `<button class="cust-cat${currentCat === id ? ' active' : ''}" data-cat="${id}">${cats[id]}</button>`
-  ).join('');
-
-  _catBar.querySelectorAll('.cust-cat').forEach(btn => {
-    btn.addEventListener('click', () => {
-      _catBar.querySelectorAll('.cust-cat').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentCat = btn.dataset.cat;
-      renderProducts();
-    });
-  });
-  renderProducts();
-}
-
-// โหลด categories จาก LocalStorage ทันที → tabs แสดงเร็ว
-try {
-  const _lsCats = localStorage.getItem('ks90-categories');
-  if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
-} catch (_) {}
-
-// Subscribe ผ่าน api-client → อัปเดต realtime (dedup ใน menu-manager ป้องกัน render ซ้ำ)
-subscribeCategoriesAndSync(null, renderCategoryTabs);
-
-// ชื่อเดิมยังคงอยู่สำหรับ backward compat (ถูกเรียกใน init())
-function bindCats() { /* no-op: handled by renderCategoryTabs */ }
-
-// ==================== Search Bar ====================
-function initSearchBar() {
-  const catBar = document.getElementById('catBar');
-  if (!catBar || document.getElementById('menuSearchBar')) return;
-
-  const bar = document.createElement('div');
-  bar.id = 'menuSearchBar';
-  bar.innerHTML = `
-    <div class="cust-search-wrap">
-      <input class="cust-search-input" id="menuSearchInput" type="search"
-        placeholder="ค้นหาเมนู..." autocomplete="off" maxlength="60">
-      <button class="cust-search-clear hidden" id="menuSearchClear" type="button">✕</button>
-    </div>`;
-  catBar.insertAdjacentElement('afterend', bar);
-
-  const input   = document.getElementById('menuSearchInput');
-  const clearBtn = document.getElementById('menuSearchClear');
-
-  input.addEventListener('input', () => {
-    searchQuery = input.value.trim();
-    clearBtn.classList.toggle('hidden', !searchQuery);
-    // ซ่อน/แสดง cat tabs เมื่อค้นหา
-    catBar.style.display = searchQuery ? 'none' : '';
-    renderProducts();
-  });
-
-  clearBtn.addEventListener('click', () => {
-    input.value = '';
-    searchQuery = '';
-    clearBtn.classList.add('hidden');
-    catBar.style.display = '';
-    input.focus();
-    renderProducts();
   });
 }
 
 // ==================== Option Modal (Dynamic) ====================
+const optionModal = document.getElementById('optionModal');
+let pendingProduct = null;
+let currentOptionValues = {};
 
-// state ของ option modal รอบนี้
-let currentOptionValues = {}; // { groupId: value | value[] }
+function openOptionModal(dataset) {
+  let product = null;
+  for (const cat of Object.values(products)) {
+    product = cat.find(p => p.id === dataset.id);
+    if (product) break;
+  }
+  if (!product) return;
 
-/**
- * resolveOptionConfig — เลือก config ที่จะใช้แสดง option modal
- *
- * Priority:
- *   1. product.options (custom options ที่ตั้งใน Admin) — ถ้ามี
- *   2. OPTION_CONFIGS[productType] — fallback ตาม productType legacy
- *   3. { groups:[], hasNote:true } — เมนูใหม่ที่ไม่มี options = แค่หมายเหตุ
- */
-function resolveOptionConfig(product) {
-  // custom options จาก Firebase → ใช้เลย
+  pendingProduct = product;
+
+  const config = _resolveOptionConfig(product);
+
+  currentOptionValues = {};
+  config.groups.forEach(g => {
+    currentOptionValues[g.id] = g.type === 'single' ? (g.defaultValue ?? '') : [];
+  });
+
+  renderOptionModalBody(product, config);
+  optionModal.setAttribute('aria-hidden', 'false');
+}
+
+function _resolveOptionConfig(product) {
   if (product.options && Array.isArray(product.options) && product.options.length > 0) {
     return { groups: product.options, hasNote: true };
   }
-  // productType 'custom' แต่ options ว่าง → note only
   if (product.productType === 'custom') {
     return { groups: [], hasNote: true };
   }
-  // legacy productType (kaosoi, drink-brew ฯลฯ) → ใช้ OPTION_CONFIGS เดิม
-  if (OPTION_CONFIGS[product.productType]) {
-    return OPTION_CONFIGS[product.productType];
-  }
-  // เมนูใหม่ที่ไม่มี options → แค่ช่องหมายเหตุ
-  return { groups: [], hasNote: true };
-}
-
-function openOptionModal(product) {
-  pendingProduct = product;
-  optionQty = 1;
-
-  const config = resolveOptionConfig(product);
-
-  // reset state
-  currentOptionValues = {};
-  config.groups.forEach(g => {
-    if (g.type === 'single') currentOptionValues[g.id] = g.defaultValue ?? '';
-    else currentOptionValues[g.id] = [];
-  });
-
-  // render modal content
-  renderOptionModalBody(product, config);
-  openModal('optionModal');
+  return OPTION_CONFIGS[product.productType] || OPTION_CONFIGS['simple'];
 }
 
 function renderOptionModalBody(product, config) {
-  const modal = document.getElementById('optionModal');
-  const box   = modal.querySelector('.cust-modal-box');
+  const box = optionModal.querySelector('.option-modal-content');
 
-  // สร้าง HTML groups
+  const TYPE_BADGE = {
+    food:          '<span class="pos-option-badge pos-badge-food">🍽 อาหาร</span>',
+    'drink-brew':  '<span class="pos-option-badge pos-badge-brew">☕ เครื่องดื่มชง</span>',
+    'drink-ready': '<span class="pos-option-badge pos-badge-ready">🥤 เครื่องดื่ม</span>',
+    simple:        '',
+  };
+
   const groupsHtml = config.groups.map(g => {
     const pillsHtml = g.choices.map(c => {
       const isActive = g.type === 'single'
         ? currentOptionValues[g.id] === c.value
         : currentOptionValues[g.id].includes(c.value);
-      return `<button class="cust-pill${g.type === 'multi' ? ' toggle' : ''}${isActive ? ' active' : ''}"
-        data-group="${g.id}" data-type="${g.type}" data-value="${esc(c.value)}"
-        ${c.price ? `data-price="${c.price}"` : ''} type="button">${esc(c.label)}</button>`;
+      return `<button type="button"
+        class="option-pill${g.type === 'multi' ? ' toggle' : ''}${isActive ? ' active' : ''}"
+        data-group="${g.id}" data-gtype="${g.type}" data-value="${escapeAttr(c.value)}"
+        ${c.price ? `data-price="${c.price}"` : ''}
+      >${escapeHtml(c.label)}</button>`;
     }).join('');
-    return `
-      <div class="cust-option-group">
-        <p class="cust-option-label">${g.label}</p>
-        <div class="cust-pill-row" id="optGroup_${g.id}">${pillsHtml}</div>
-      </div>`;
+    return `<div class="option-group">
+      <p class="option-group-label">${g.label}</p>
+      <div class="option-pill-row">${pillsHtml}</div>
+    </div>`;
   }).join('');
 
   const noteHtml = config.hasNote ? `
-    <div class="cust-option-group">
-      <p class="cust-option-label">📝 หมายเหตุ</p>
-      <textarea class="cust-textarea" id="optionNote" rows="2" placeholder="เช่น ไม่ใส่ผักชี, หวานน้อย..." maxlength="200"></textarea>
+    <div class="option-group">
+      <p class="option-group-label">📝 หมายเหตุ</p>
+      <textarea class="option-note" id="optionNote" placeholder="เช่น ไม่ใส่ผักชี, หวานน้อย..." rows="2"></textarea>
     </div>` : '';
 
   box.innerHTML = `
-    <button class="cust-modal-close" id="optionClose">✕</button>
-    <h3 class="cust-modal-title" id="optionProductName">${esc(product.name)}</h3>
-    <span class="cust-option-type-badge cust-option-type-${product.productType}">${getProductTypeLabel(product.productType)}</span>
+    <h3 class="modal-title">ตั้งค่าเมนู</h3>
+    <p class="option-product-name">${escapeHtml(product.name)}</p>
+    ${TYPE_BADGE[product.productType] || ''}
     ${groupsHtml}
     ${noteHtml}
-    <div class="cust-option-group cust-qty-row">
-      <p class="cust-option-label">จำนวน</p>
-      <div class="cust-qty-ctrl">
-        <button class="cust-qty-btn" id="qtyMinus" type="button">−</button>
-        <span class="cust-qty-num" id="qtyNum">1</span>
-        <button class="cust-qty-btn" id="qtyPlus" type="button">+</button>
-      </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="optionCancel">ยกเลิก</button>
+      <button type="button" class="btn btn-primary" id="optionConfirm">🛒 เพิ่มในตะกร้า</button>
     </div>
-    <button class="cust-btn-add" id="optionConfirm" type="button">🛒 เพิ่มในตะกร้า</button>
   `;
 
-  // bind pill events
-  box.querySelectorAll('.cust-pill').forEach(btn => {
+  box.querySelectorAll('.option-pill').forEach(btn => {
     btn.addEventListener('click', () => {
       const gid   = btn.dataset.group;
-      const type  = btn.dataset.type;
-      const value = btn.dataset.value;
-
-      if (type === 'single') {
-        currentOptionValues[gid] = value;
-        box.querySelectorAll(`.cust-pill[data-group="${gid}"]`).forEach(p =>
-          p.classList.toggle('active', p.dataset.value === value));
+      const gtype = btn.dataset.gtype;
+      const val   = btn.dataset.value;
+      if (gtype === 'single') {
+        currentOptionValues[gid] = val;
+        box.querySelectorAll(`.option-pill[data-group="${gid}"]`).forEach(p =>
+          p.classList.toggle('active', p.dataset.value === val));
       } else {
         const arr = currentOptionValues[gid];
-        const idx = arr.indexOf(value);
-        if (idx === -1) arr.push(value); else arr.splice(idx, 1);
-        btn.classList.toggle('active', arr.includes(value));
+        const idx = arr.indexOf(val);
+        if (idx === -1) arr.push(val); else arr.splice(idx, 1);
+        btn.classList.toggle('active', arr.includes(val));
       }
     });
   });
 
-  // bind qty
-  document.getElementById('qtyMinus').addEventListener('click', () => {
-    if (optionQty > 1) { optionQty--; document.getElementById('qtyNum').textContent = optionQty; }
-  });
-  document.getElementById('qtyPlus').addEventListener('click', () => {
-    if (optionQty < 99) { optionQty++; document.getElementById('qtyNum').textContent = optionQty; }
-  });
-
-  // bind confirm
-  document.getElementById('optionConfirm').addEventListener('click', () => {
+  box.querySelector('#optionCancel').addEventListener('click', closeOptionModal);
+  box.querySelector('#optionConfirm').addEventListener('click', () => {
     if (!pendingProduct) return;
-    const config2 = resolveOptionConfig(pendingProduct);
-    const rawNote = document.getElementById('optionNote')?.value ?? '';
-    const note    = rawNote.trim().slice(0, 200);
-
+    const cfg2 = _resolveOptionConfig(pendingProduct);
+    const note  = document.getElementById('optionNote')?.value.trim() || '';
     const parts = [];
     let extraPrice = 0;
 
-    config2.groups.forEach(g => {
+    cfg2.groups.forEach(g => {
       const val = currentOptionValues[g.id];
       if (g.type === 'single') {
         if (val) {
           parts.push(val);
-          // ✅ Fix: บวกราคาของ single choice ด้วย (เช่น ปั่น +฿10)
           const choice = g.choices.find(c => c.value === val);
           if (choice?.price) extraPrice += choice.price;
         }
@@ -911,468 +542,435 @@ function renderOptionModalBody(product, config) {
     });
     if (note) parts.push(note);
 
-    const optionLabel = parts.join(' · ');
-    const finalPrice  = pendingProduct.price + extraPrice;
-    const cartKey     = pendingProduct.id + '|' + optionLabel;
-    const existing    = cart.find(i => i.cartKey === cartKey);
-
-    if (existing) {
-      existing.qty += optionQty;
-    } else {
-      cart.push({ cartKey, id: pendingProduct.id, name: pendingProduct.name, price: finalPrice, qty: optionQty, optionLabel });
-    }
-
-    saveCart(); // บันทึกตะกร้าทันที
-    closeModal('optionModal');
-    updateCartBar();
+    addToCart(pendingProduct, parts.join(' · '), extraPrice);
+    closeOptionModal();
   });
-
-  // bind close
-  document.getElementById('optionClose').addEventListener('click', () => closeModal('optionModal'));
 }
 
-function getProductTypeLabel(type) {
-  return { mapraopun: 'เมนูพิเศษ', kaomutod: '🍚 ข้าวหมูทอด', namngiao: '🍜 น้ำเงี้ยว', kaosoi: '🍜 ข้าวซอย', food: '🍽 อาหาร', 'drink-brew': '☕ เครื่องดื่มชง', 'drink-ready': '🥤 เครื่องดื่ม', simple: '' }[type] || '';
+function closeOptionModal() {
+  optionModal.setAttribute('aria-hidden', 'true');
+  pendingProduct = null;
 }
 
-// ==================== Cart Bar ====================
-function updateCartBar() {
-  const totalQty = cart.reduce((s, i) => s + i.qty, 0);
-  const totalAmt = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const bar = document.getElementById('cartBar');
-  bar.style.display = totalQty > 0 ? '' : 'none';
-  document.getElementById('cartCountBadge').textContent = `${totalQty} รายการ`;
-  document.getElementById('cartTotalBadge').textContent = fmt(totalAmt);
-}
-
-document.getElementById('openCartBtn').addEventListener('click', () => {
-  renderCartModal();
-  openModal('cartModal');
+optionModal.addEventListener('click', (e) => {
+  if (e.target === optionModal) closeOptionModal();
 });
-document.getElementById('cartClose').addEventListener('click', () => closeModal('cartModal'));
 
-// ==================== Cart Modal ====================
-function renderCartModal() {
-  const list     = document.getElementById('cartList');
-  const empty    = document.getElementById('cartEmpty');
-  const totalAmt = cart.reduce((s, i) => s + i.price * i.qty, 0);
-
-  if (cart.length === 0) {
-    empty.style.display = '';
-    list.querySelectorAll('.cust-cart-item').forEach(el => el.remove());
+// ==================== Cart ====================
+function addToCart({ id, name, price, image }, optionLabel = '', extraPrice = 0) {
+  const basePrice = parseFloat(price) + extraPrice;
+  const cartKey = id + '|' + optionLabel;
+  const existing = cart.find(i => i.cartKey === cartKey);
+  if (existing) {
+    existing.qty += 1;
   } else {
-    empty.style.display = 'none';
-    list.querySelectorAll('.cust-cart-item').forEach(el => el.remove());
-    cart.forEach((item, idx) => {
-      const li = document.createElement('li');
-      li.className = 'cust-cart-item';
-      li.innerHTML = `
-        <div class="cust-cart-item-info">
-          <div class="cust-cart-item-name">${esc(item.name)}</div>
-          ${item.optionLabel ? `<div class="cust-cart-item-note">${esc(item.optionLabel)}</div>` : ''}
-          <div class="cust-cart-item-price">${fmt(item.price)}</div>
-        </div>
-        <div class="cust-cart-item-qty">
-          <button class="cust-cart-qty-btn" data-idx="${idx}" data-d="-1">−</button>
-          <span class="cust-cart-qty-num">${item.qty}</span>
-          <button class="cust-cart-qty-btn" data-idx="${idx}" data-d="1">+</button>
-        </div>
-        <button class="cust-cart-item-del" data-idx="${idx}">✕</button>
-      `;
-      list.appendChild(li);
-    });
-
-    list.querySelectorAll('.cust-cart-qty-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const i = parseInt(btn.dataset.idx), d = parseInt(btn.dataset.d);
-        if (d > 0 && cart[i].qty >= 99) return; // max qty 99
-        cart[i].qty += d;
-        if (cart[i].qty <= 0) cart.splice(i, 1);
-        saveCart();
-        renderCartModal(); updateCartBar();
-      });
-    });
-    list.querySelectorAll('.cust-cart-item-del').forEach(btn => {
-      btn.addEventListener('click', () => {
-        cart.splice(parseInt(btn.dataset.idx), 1);
-        saveCart();
-        renderCartModal(); updateCartBar();
-      });
-    });
+    cart.push({ id, cartKey, name, price: basePrice, qty: 1, image, table: selectedTable, optionLabel });
   }
-
-  document.getElementById('cartTotal').textContent = fmt(totalAmt);
-
-  // ปรับปุ่ม send ให้บอกว่าสั่งเพิ่มหรือสั่งใหม่
-  const sendBtn = document.getElementById('sendOrderBtn');
-  if (activeOrderKey) {
-    sendBtn.textContent = `✓ เพิ่มในออเดอร์ #${activeOrderNumber}`;
-  } else {
-    sendBtn.textContent = '✓ ส่งออเดอร์';
-  }
+  renderCart();
 }
 
-// ==================== Send Order ====================
-document.getElementById('sendOrderBtn').addEventListener('click', async () => {
-  if (cart.length === 0) return;
-  const btn = document.getElementById('sendOrderBtn');
-  btn.disabled = true;
-  btn.textContent = 'กำลังส่ง...';
-
-  try {
-    const batchItems = cart.map(i => ({
-      name:  i.name,
-      price: i.price,
-      qty:   i.qty,
-      ...(i.optionLabel ? { option: i.optionLabel } : {}),
-    }));
-
-    let usedOrderNum = activeOrderNumber;
-
-    if (activeOrderKey) {
-      // ─── มี order active → ตรวจก่อนว่ายังไม่ได้จ่าย ───
-      const existingOrder = await api.getOrder(activeOrderKey).catch(() => null);
-
-      if (existingOrder) {
-        if (existingOrder.status === 'paid' || existingOrder.status === 'canceled') {
-          // order จ่ายแล้ว/ยกเลิกแล้ว → สร้างใหม่
-          await api.clearTable(tableNum).catch(() => {});
-          activeOrderKey    = null;
-          activeOrderNumber = null;
-          const banner = document.getElementById('activeBanner');
-          if (banner) banner.remove();
-        } else {
-          // ยังค้างอยู่ → เพิ่ม batch ต่อท้าย
-          const batches = existingOrder.batches || [existingOrder.items || []];
-          batches.push(batchItems);
-          const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
-
-          await api.updateOrder(activeOrderKey, {
-            batches,
-            total:          newTotal,
-            status:         'pending',
-            last_batch_at:  new Date().toISOString(),
-            from_customer:  true, // flag ให้ worker broadcast new_batch → admin เล่นเสียง
-          });
-        }
-      } else {
-        // order ถูกลบ → ล้าง แล้วสร้างใหม่
-        await api.clearTable(tableNum).catch(() => {});
-        activeOrderKey    = null;
-        activeOrderNumber = null;
-      }
-    }
-
-    if (!activeOrderKey) {
-      // ─── สร้าง order ใหม่ ───
-      const result = await api.createOrder({
-        table_num:   String(tableNum),
-        batches:     [batchItems],
-        source:      'qr',
-        ...(isTakeaway(tableNum) ? { is_takeaway: 1 } : {}),
-      });
-
-      activeOrderKey    = result.id;
-      activeOrderNumber = result.order_num;
-      usedOrderNum      = result.order_num;
-    }
-
-    // ─── success ───
-    cart = [];
-    clearSavedCart();
-    updateCartBar();
-    closeModal('cartModal');
-
-    document.getElementById('successMsg').textContent =
-      `ออเดอร์ #${usedOrderNum} ${tableLabel(tableNum)} ถูกส่งแล้ว 🙏`;
-    openModal('successModal');
-
-    showOrderBanner();
-    startKitchenStatusWatcher(activeOrderKey);
-
-  } catch (err) {
-    alert('เกิดข้อผิดพลาด กรุณาลองอีกครั้ง\n' + err.message);
-    console.error(err);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = activeOrderKey
-      ? `✓ เพิ่มในออเดอร์ #${activeOrderNumber}`
-      : '✓ ส่งออเดอร์';
-  }
-});
-
-document.getElementById('continueOrderBtn').addEventListener('click', () => {
-  closeModal('successModal');
-});
-
-document.getElementById('viewHistoryFromSuccessBtn').addEventListener('click', () => {
-  closeModal('successModal');
-  openHistoryModal();
-});
-
-// ==================== Order History Modal ====================
-let historyUnsubscribe = null;
-
-function openHistoryModal() {
-  document.getElementById('historyTableLabel').textContent = tableLabel(tableNum);
-  document.getElementById('historyLoading').classList.remove('hidden');
-  document.getElementById('historyEmpty').classList.add('hidden');
-  document.getElementById('historyContent').classList.add('hidden');
-  document.getElementById('historyOrderMoreBtn').style.display = 'none';
-
-  openModal('historyModal');
-  loadHistoryRealtime();
+function removeFromCart(index) {
+  cart.splice(index, 1);
+  renderCart();
 }
 
-function loadHistoryRealtime() {
-  if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
-
-  if (!activeOrderKey) {
-    // ลองดึง tableOrders ก่อน กรณี banner ยังไม่โหลด
-    api.getTableOrder(tableNum).then(data => {
-      if (data && data.order_id) {
-        activeOrderKey    = data.order_id;
-        activeOrderNumber = data.order_num;
-        attachHistoryListener();
-      } else {
-        showHistoryEmpty();
-      }
-    }).catch(() => showHistoryEmpty());
-  } else {
-    attachHistoryListener();
-  }
+function updateQty(index, delta) {
+  cart[index].qty += delta;
+  if (cart[index].qty <= 0) removeFromCart(index);
+  else renderCart();
 }
 
-function attachHistoryListener() {
-  // โหลดครั้งแรก
-  api.getOrder(activeOrderKey).then(order => {
-    if (!order) { showHistoryEmpty(); return; }
-    renderHistoryContent(_normalizeOrder(order));
-  }).catch(() => showHistoryEmpty());
+function renderCart() {
+  cartEmptyEl.style.display = cart.length ? 'none' : 'flex';
+  cartItemsEl.querySelectorAll('.cart-item').forEach((el) => el.remove());
 
-  // subscribe realtime ผ่าน WebSocket
-  const socket = ws.connect(`table-${tableNum}`, (msg) => {
-    if ((msg.type === 'order_updated' || msg.type === 'status_changed') &&
-        (msg.id === activeOrderKey || msg.order?.id === activeOrderKey)) {
-      api.getOrder(activeOrderKey).then(order => {
-        if (!order) { showHistoryEmpty(); return; }
-        renderHistoryContent(_normalizeOrder(order));
-      }).catch(() => {});
-    }
-  });
+  cart.forEach((item, index) => {
+    const li = document.createElement('li');
+    li.className = 'cart-item';
 
-  historyUnsubscribe = () => socket.close();
-}
+    const img = item.image
+      ? `<img class="cart-item-img" src="${item.image}" alt="" onerror="this.style.display='none'">`
+      : '<span class="cart-item-img-placeholder"></span>';
 
-/**
- * แปลง order จาก Worker API → format ที่ renderHistoryContent ใช้
- * (Worker ใช้ snake_case, ของเก่าใช้ camelCase)
- */
-function _normalizeOrder(order) {
-  return {
-    orderNumber:   order.order_num,
-    table:         order.table_num,
-    date:          order.created_at,
-    lastBatchDate: order.last_batch_at,
-    batches:       typeof order.batches === 'string' ? JSON.parse(order.batches) : (order.batches || []),
-    status:        order.status,
-    total:         order.total,
-  };
-}
-
-function showHistoryEmpty() {
-  document.getElementById('historyLoading').classList.add('hidden');
-  document.getElementById('historyContent').classList.add('hidden');
-  document.getElementById('historyEmpty').classList.remove('hidden');
-  document.getElementById('historyOrderMoreBtn').style.display = 'none';
-}
-
-function renderHistoryContent(order) {
-  document.getElementById('historyLoading').classList.add('hidden');
-  document.getElementById('historyEmpty').classList.add('hidden');
-  document.getElementById('historyContent').classList.remove('hidden');
-
-  // Meta chips
-  const metaEl = document.getElementById('historyMeta');
-  const orderDate = order.date ? new Date(order.date) : null;
-  const dateStr = orderDate
-    ? orderDate.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })
-    : '';
-  metaEl.innerHTML = `
-    <span class="cust-history-meta-chip">ออเดอร์ #${esc(String(order.orderNumber))}</span>
-    <span class="cust-history-meta-chip">โต๊ะ ${esc(String(order.table))}</span>
-    ${dateStr ? `<span class="cust-history-meta-chip">🕐 ${dateStr}</span>` : ''}
-  `;
-
-  // Batches
-  const batchesEl = document.getElementById('historyBatches');
-  const batches = order.batches || (order.items ? [order.items] : []);
-  batchesEl.innerHTML = batches.map((batch, bi) => {
-    const batchTime = bi === 0
-      ? (order.date ? new Date(order.date) : null)
-      : (bi === batches.length - 1 && order.lastBatchDate
-          ? new Date(order.lastBatchDate)
-          : null);
-    const timeStr = batchTime
-      ? batchTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-      : '';
-
-    const itemsHtml = batch.map(item => `
-      <div class="cust-history-item">
-        <span class="cust-history-item-qty">${item.qty}x</span>
-        <div class="cust-history-item-info">
-          <div class="cust-history-item-name">${esc(item.name)}</div>
-          ${item.option ? `<div class="cust-history-item-option">${esc(item.option)}</div>` : ''}
-        </div>
-        <span class="cust-history-item-price">${fmt(item.price * item.qty)}</span>
+    li.innerHTML = `
+      ${img}
+      <div class="cart-item-info">
+        <div class="cart-item-name">${escapeHtml(item.name)}</div>
+        ${item.optionLabel ? `<div class="cart-item-note">${escapeHtml(item.optionLabel)}</div>` : ''}
+        <div class="cart-item-price">${formatMoney(item.price)} × ${item.qty}</div>
       </div>
-    `).join('');
-
-    return `
-      <div class="cust-history-batch">
-        <div class="cust-history-batch-header">
-          <span class="cust-history-batch-label">ครั้งที่ ${bi + 1}</span>
-          ${timeStr ? `<span class="cust-history-batch-time">${timeStr}</span>` : ''}
-        </div>
-        <div class="cust-history-batch-items">${itemsHtml}</div>
+      <div class="cart-item-qty">
+        <button type="button" class="qty-btn" aria-label="ลดจำนวน">−</button>
+        <span class="qty-num">${item.qty}</span>
+        <button type="button" class="qty-btn" aria-label="เพิ่มจำนวน">+</button>
       </div>
+      <button type="button" class="cart-item-remove" aria-label="ลบรายการ">✕</button>
     `;
-  }).join('');
 
-  // Grand total
-  const grandTotal = batches.flat().reduce((s, i) => s + i.price * i.qty, 0);
-  document.getElementById('historyGrandTotal').innerHTML = `
-    <span>รวมทั้งหมด</span>
-    <span class="cust-history-grand-amt">${fmt(grandTotal)}</span>
-  `;
+    li.querySelector('.qty-btn:first-child').addEventListener('click', () => updateQty(index, -1));
+    li.querySelector('.qty-btn:last-child').addEventListener('click', () => updateQty(index, 1));
+    li.querySelector('.cart-item-remove').addEventListener('click', () => removeFromCart(index));
+    cartItemsEl.appendChild(li);
+  });
 
-  // Status badge
-  const statusMap = {
-    pending:  { label: '⏳ รอดำเนินการ',   cls: 'status-pending'  },
-    cooking:  { label: '👨‍🍳 กำลังทำอาหาร', cls: 'status-cooking'  },
-    served:   { label: '🍽 เสิร์ฟแล้ว!',    cls: 'status-served'   },
-    paid:     { label: '✅ ชำระแล้ว',       cls: 'status-paid'     },
-    canceled: { label: '❌ ยกเลิก',         cls: 'status-canceled' },
-  };
-  const s = statusMap[order.status] || statusMap.pending;
-  document.getElementById('historyStatusRow').innerHTML = `
-    <span class="cust-history-status-badge ${s.cls}">${s.label}</span>
-  `;
+  const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
+  const badge = document.getElementById('cartBadge');
+  if (badge) {
+    badge.textContent = totalQty;
+    badge.style.display = totalQty > 0 ? 'inline-flex' : 'none';
+  }
 
-  // ถ้า pending → แสดงปุ่ม "สั่งเพิ่ม"
-  const moreBtn = document.getElementById('historyOrderMoreBtn');
-  if (order.status !== 'paid') {
-    moreBtn.style.display = '';
+  totalEl.textContent = formatMoney(cart.reduce((sum, i) => sum + i.price * i.qty, 0));
+}
+
+function clearCart() {
+  cart = [];
+  renderCart();
+}
+
+// orderNumber แสดงผลจาก API response ของ checkTableActiveOrder / saveOrder โดยตรง
+// ไม่ต้องโหลดแยกอีกแล้ว — ลบ loadOrderNumber ออก
+
+// ==================== API: Save Order (batch-aware) ====================
+async function saveOrder(isRetry = false) {
+  const batchItems = cart.map((i) => ({
+    name: i.name,
+    price: i.price,
+    qty: i.qty,
+    ...(i.optionLabel ? { option: i.optionLabel } : {}),
+  }));
+
+  if (!currentTableOrderId) {
+    // สร้าง order ใหม่
+    const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const newOrder = await api.createOrder({
+      table_num: String(selectedTable),
+      batches: [batchItems],
+      total,
+    });
+
+    currentTableOrderId     = newOrder.id;
+    currentTableOrderNumber = newOrder.order_num;
+    orderNumber             = newOrder.order_num;
+    orderNumberEl.textContent = orderNumber;
+
+    return { allBatches: [batchItems], grandTotal: total };
+
   } else {
-    moreBtn.style.display = 'none';
+    // เพิ่ม batch เข้า order เดิม
+    const existingOrder = await api.getOrder(currentTableOrderId);
+    if (!existingOrder) {
+      // order หายไปแล้ว → สร้างใหม่ (เรียกซ้ำได้แค่ครั้งเดียว)
+      if (isRetry) throw new Error('ไม่พบออเดอร์ กรุณาลองใหม่');
+      currentTableOrderId = null;
+      return saveOrder(true);
+    }
+
+    const batches = existingOrder.batches || [existingOrder.items || []];
+    batches.push(batchItems);
+    const newTotal = batches.flat().reduce((sum, i) => sum + i.price * i.qty, 0);
+
+    await api.updateOrder(currentTableOrderId, {
+      batches,
+      total: newTotal,
+      last_batch_at: new Date().toISOString(),
+      from_customer: true,
+    });
+
+    return { allBatches: batches, grandTotal: newTotal };
   }
 }
 
-document.getElementById('historyClose').addEventListener('click', () => {
-  if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
-  closeModal('historyModal');
-});
+// ==================== Receipt ====================
+function showReceipt({ allBatches, grandTotal }) {
+  receiptOrderNum.textContent = currentTableOrderNumber || orderNumber;
+  receiptTableEl.textContent  = `โต๊ะ ${selectedTable}`;
+  receiptDate.textContent     = new Date().toLocaleString('th-TH');
 
-document.getElementById('historyOrderMoreBtn').addEventListener('click', () => {
-  if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
-  closeModal('historyModal');
-});
+  const allItems = allBatches.flat();
+  receiptItemsEl.innerHTML = allItems.map((i) =>
+    `<div class="receipt-item">
+      <span>${escapeHtml(i.name)}${i.option ? ` (${escapeHtml(i.option)})` : ''} × ${i.qty}</span>
+      <span>${formatMoney(i.price * i.qty)}</span>
+    </div>`
+  ).join('');
 
-document.getElementById('openHistoryBtn').addEventListener('click', () => {
-  openHistoryModal();
-});
+  receiptTotal.textContent = formatMoney(grandTotal);
+  receiptModal.setAttribute('aria-hidden', 'false');
+}
 
-document.getElementById('historyModal').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('historyModal')) {
-    if (historyUnsubscribe) { historyUnsubscribe(); historyUnsubscribe = null; }
-    closeModal('historyModal');
+function closeReceipt() {
+  receiptModal.setAttribute('aria-hidden', 'true');
+}
+
+// ==================== Confirm Modal ====================
+function openConfirmOrderModal() {
+  const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+  if (currentTableOrderId) {
+    confirmTableLabel.innerHTML = `โต๊ะ ${selectedTable} · <span style="color:var(--accent)">เพิ่มในออเดอร์ #${currentTableOrderNumber}</span>`;
+  } else {
+    confirmTableLabel.textContent = `โต๊ะ ${selectedTable} · ออเดอร์ใหม่`;
   }
-});
 
-// ==================== Modal helpers ====================
-function openModal(id)  { document.getElementById(id).setAttribute('aria-hidden','false'); }
-function closeModal(id) { document.getElementById(id).setAttribute('aria-hidden','true'); }
+  confirmOrderList.innerHTML = cart.map((i) =>
+    `<div class="confirm-order-item">
+      <span>${escapeHtml(i.name)}${i.optionLabel ? `<br><small style="color:var(--accent);font-size:0.78rem">${escapeHtml(i.optionLabel)}</small>` : ''} × ${i.qty}</span>
+      <span>${formatMoney(i.price * i.qty)}</span>
+    </div>`
+  ).join('');
+  confirmTotal.innerHTML = `<span>รวมทั้งหมด</span><span>${formatMoney(total)}</span>`;
+  confirmOrderModal.setAttribute('aria-hidden', 'false');
+}
 
-['optionModal','cartModal','successModal'].forEach(id => {
-  document.getElementById(id).addEventListener('click', (e) => {
-    if (e.target === document.getElementById(id)) closeModal(id);
+function closeConfirmOrderModal() {
+  confirmOrderModal.setAttribute('aria-hidden', 'true');
+}
+
+// ==================== New Order (after payment) ====================
+async function startNewOrder() {
+  if (currentTableOrderId && selectedTable) {
+    try {
+      const order = await api.getOrder(currentTableOrderId).catch(() => null);
+      if (!order || order.status === 'paid') {
+        // order จ่ายแล้วหรือหายไป → clear table
+        await api.clearTable(String(selectedTable)).catch(() => {});
+      }
+    } catch (err) {
+      console.error('startNewOrder error:', err);
+    }
+  }
+
+  cart = [];
+  selectedTable = null;
+  currentTableOrderId     = null;
+  currentTableOrderNumber = null;
+  tableChipEl.textContent = '';
+  document.querySelectorAll('.table-btn').forEach(b => b.classList.remove('active'));
+  productsOverlay.classList.remove('hidden');
+  hideTableOrderBanner();
+  renderCart();
+  closeReceipt();
+  // orderNumber จะ reset เมื่อเลือกโต๊ะใหม่ผ่าน checkTableActiveOrder
+}
+
+// ==================== Event Listeners ====================
+
+// ─── Dynamic category tabs ────────────────────────────────────────
+const _categoriesNav = document.getElementById('categoriesNav');
+
+function renderCategoryTabs(cats) {
+  if (!_categoriesNav) return;
+  const ids = Object.keys(cats);
+  if (!ids.includes(currentCategory)) currentCategory = ids[0] || 'setkao';
+
+  _categoriesNav.innerHTML = ids.map((id, i) =>
+    `<button class="category-btn${i === 0 && currentCategory === id || currentCategory === id ? ' active' : ''}" data-category="${id}">${cats[id]}</button>`
+  ).join('');
+
+  _categoriesNav.querySelectorAll('.category-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _categoriesNav.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategory = btn.dataset.category;
+      renderProducts();
+    });
   });
+  renderProducts();
+}
+
+// โหลด categories จาก LocalStorage ทันที
+try {
+  const _lsCats = localStorage.getItem('ks90-categories');
+  if (_lsCats) renderCategoryTabs(JSON.parse(_lsCats));
+} catch (_) {}
+
+// Subscribe categories ผ่าน menu-manager (จะ fetch จาก API แทน Firebase)
+subscribeCategoriesAndSync(null, renderCategoryTabs);
+
+clearCartBtn.addEventListener('click', clearCart);
+
+completeOrderBtn.addEventListener('click', () => {
+  if (cart.length === 0) return;
+  closeCartOnMobile();
+  openConfirmOrderModal();
 });
 
-// ==================== Start ====================
+printReceiptBtn.addEventListener('click', () => window.print());
+newOrderBtn.addEventListener('click', startNewOrder);
 
-init();
-// ==================== Inject CSS (new features) ====================
-(function injectFeatureStyles() {
+confirmOrderCancel.addEventListener('click', closeConfirmOrderModal);
+confirmOrderModal.addEventListener('click', (e) => {
+  if (e.target === confirmOrderModal) closeConfirmOrderModal();
+});
+receiptModal.addEventListener('click', (e) => {
+  if (e.target === receiptModal) closeReceipt();
+});
+
+confirmOrderOk.addEventListener('click', async () => {
+  confirmOrderOk.disabled = true;
+  closeConfirmOrderModal();
+  let receiptData;
+  try {
+    receiptData = await saveOrder();
+  } catch (err) {
+    console.error('saveOrder error:', err);
+    alert('เกิดข้อผิดพลาดในการบันทึกออเดอร์ กรุณาตรวจสอบการเชื่อมต่อ');
+    confirmOrderOk.disabled = false;
+    return;
+  }
+  confirmOrderOk.disabled = false;
+  cart = [];
+  renderCart();
+  showTableOrderBanner(selectedTable, currentTableOrderNumber);
+  showReceipt(receiptData);
+});
+
+// ==================== Mobile Cart Toggle + Smooth Drag ====================
+const cartSection = document.querySelector('.cart-section');
+const cartHeader  = document.querySelector('.cart-header');
+
+const cartBackdrop = document.createElement('div');
+cartBackdrop.className = 'cart-backdrop';
+document.body.appendChild(cartBackdrop);
+
+function isMobile() { return window.innerWidth <= 900; }
+
+let cartH        = 0;
+let closedOffset = 0;
+let currentOffset = 0;
+let isOpen       = false;
+
+function getCartMetrics() {
+  cartH        = cartSection.offsetHeight;
+  closedOffset = cartH - 58;
+}
+
+function setOffset(offset, animate = false) {
+  currentOffset = Math.max(0, Math.min(offset, closedOffset));
+  cartSection.style.transition = animate ? 'transform 0.32s cubic-bezier(0.34,1.1,0.64,1)' : 'none';
+  cartSection.style.transform  = `translateY(${currentOffset}px)`;
+
+  const progress = closedOffset > 0 ? 1 - currentOffset / closedOffset : 0;
+  cartBackdrop.style.opacity        = Math.max(0, Math.min(progress * 0.5, 0.5));
+  cartBackdrop.style.visibility     = currentOffset < closedOffset ? 'visible' : 'hidden';
+  cartBackdrop.style.pointerEvents  = currentOffset < closedOffset ? 'auto' : 'none';
+}
+
+function openCart(animate = true)  { isOpen = true;  setOffset(0, animate);            cartSection.classList.add('open'); }
+function closeCart(animate = true) { isOpen = false; getCartMetrics(); setOffset(closedOffset, animate); cartSection.classList.remove('open'); }
+
+function openCartOnMobile()  { if (isMobile()) { getCartMetrics(); openCart(); } }
+function closeCartOnMobile() { if (isMobile()) closeCart(); }
+
+cartBackdrop.addEventListener('click', () => closeCart());
+
+let dragStartY     = 0;
+let dragStartOffset = 0;
+let isDragging     = false;
+let rafId          = null;
+let latestY        = 0;
+
+function onPointerStart(clientY) {
+  if (!isMobile()) return;
+  getCartMetrics();
+  isDragging      = true;
+  dragStartY      = clientY;
+  dragStartOffset = currentOffset;
+  cartSection.style.transition = 'none';
+  document.body.style.overflow = 'hidden';
+}
+
+function onPointerMove(clientY) {
+  if (!isDragging) return;
+  latestY = clientY;
+  if (!rafId) {
+    rafId = requestAnimationFrame(() => {
+      const delta     = latestY - dragStartY;
+      const newOffset = Math.max(0, Math.min(dragStartOffset + delta, closedOffset));
+      currentOffset   = newOffset;
+      cartSection.style.transform = `translateY(${newOffset}px)`;
+      const progress = closedOffset > 0 ? 1 - newOffset / closedOffset : 0;
+      cartBackdrop.style.opacity       = Math.max(0, Math.min(progress * 0.5, 0.5));
+      cartBackdrop.style.visibility    = newOffset < closedOffset ? 'visible' : 'hidden';
+      cartBackdrop.style.pointerEvents = newOffset < closedOffset ? 'auto' : 'none';
+      rafId = null;
+    });
+  }
+}
+
+function onPointerEnd(clientY) {
+  if (!isDragging) return;
+  isDragging = false;
+  document.body.style.overflow = '';
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+
+  const delta    = clientY - dragStartY;
+  const velocity = delta;
+
+  if (velocity > 80 || currentOffset > closedOffset * 0.5) {
+    closeCart(true);
+  } else {
+    openCart(true);
+  }
+}
+
+cartHeader.addEventListener('touchstart', (e) => { onPointerStart(e.touches[0].clientY); }, { passive: true });
+document.addEventListener('touchmove',   (e) => { if (isDragging) onPointerMove(e.touches[0].clientY); }, { passive: true });
+document.addEventListener('touchend',    (e) => { onPointerEnd(e.changedTouches[0].clientY); });
+
+cartHeader.addEventListener('mousedown', (e) => { onPointerStart(e.clientY); e.preventDefault(); });
+document.addEventListener('mousemove',   (e) => { if (isDragging) onPointerMove(e.clientY); });
+document.addEventListener('mouseup',     (e) => { if (isDragging) onPointerEnd(e.clientY); });
+
+cartHeader.addEventListener('click', () => {
+  if (!isMobile() || isDragging) return;
+  const didDrag = Math.abs(currentOffset - dragStartOffset) > 5;
+  if (didDrag) return;
+  if (isOpen) closeCart(); else { getCartMetrics(); openCart(); }
+});
+
+window.addEventListener('load',   () => { getCartMetrics(); setOffset(closedOffset); });
+window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0 : closedOffset); });
+
+// ==================== CSS for banner (inject once) ====================
+(function injectBannerStyle() {
   const style = document.createElement('style');
   style.textContent = `
-    /* ── Search Bar ── */
-    #menuSearchBar { padding: 0.5rem 1rem 0; background: var(--cream, #faf6f0); }
-    .cust-search-wrap {
-      position: relative; display: flex; align-items: center;
-      background: #fff; border: 2px solid #e2d8cb; border-radius: 999px;
-      padding: 0.4rem 0.9rem; gap: 0.4rem; transition: border-color 0.2s;
+    .table-order-banner {
+      background: #fff8e1;
+      border-left: 4px solid var(--accent, #c8853a);
+      padding: 0.55rem 1rem;
+      font-size: 0.88rem;
+      color: #5c3d2e;
     }
-    .cust-search-wrap:focus-within { border-color: #c8853a; }
-    .cust-search-input {
-      flex: 1; border: none; outline: none; font-family: 'Sarabun', sans-serif;
-      font-size: 0.95rem; background: transparent; color: #3d2b1f;
-    }
-    .cust-search-input::placeholder { color: #b5a090; }
-    .cust-search-clear {
-      border: none; background: none; color: #8b6655; cursor: pointer;
-      font-size: 0.85rem; padding: 0; line-height: 1;
-    }
-    .cust-search-clear.hidden { display: none; }
+    .table-order-banner strong { color: var(--accent, #c8853a); }
 
-    /* ── Quick-add badge & flash ── */
-    .cust-product-card--quick { position: relative; }
-    .cust-quick-badge {
-      position: absolute; top: 6px; right: 6px;
-      background: #c8853a; color: #fff;
-      font-size: 0.75rem; font-weight: 700; font-family: 'Mitr', sans-serif;
-      width: 22px; height: 22px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 2px 6px rgba(200,133,58,0.35); z-index: 2;
+    /* ── Skeleton loader รูปภาพ POS ── */
+    .product-img-wrap {
+      width: 100%; aspect-ratio: 1; overflow: hidden;
+      border-radius: 8px 8px 0 0;
     }
-    .quick-add-flash { animation: qaFlash 0.4s ease; }
-    @keyframes qaFlash {
-      0%   { transform: scale(1); }
-      40%  { transform: scale(0.93); background: #e8a055; }
-      100% { transform: scale(1); }
+    @keyframes pos-shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position:  400px 0; }
     }
-
-    /* ── Popular badge ── */
-    .cust-popular-badge {
-      position: absolute; top: 6px; left: 6px;
-      background: linear-gradient(135deg, #ff6b35, #f7c59f);
-      color: #fff; font-size: 0.68rem; font-weight: 700;
-      font-family: 'Mitr', sans-serif;
-      padding: 0.15rem 0.5rem; border-radius: 999px;
-      box-shadow: 0 2px 6px rgba(255,107,53,0.35);
-      z-index: 2; white-space: nowrap;
+    .pos-img-skeleton {
+      background: linear-gradient(90deg, #ede8e0 25%, #f5f2ec 50%, #ede8e0 75%);
+      background-size: 800px 100%;
+      animation: pos-shimmer 1.4s infinite linear;
     }
-    .cust-product-card { position: relative; }
-
-    /* Disabled / sold-out menu item */
-    .cust-product-card--disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      pointer-events: none;
-      filter: grayscale(60%);
-    }
-    .cust-soldout-badge {
-      position: absolute; top: 6px; left: 6px;
-      background: rgba(61,43,31,0.75);
-      color: #fff; font-size: 0.68rem; font-weight: 700;
-      font-family: 'Mitr', sans-serif;
-      padding: 0.15rem 0.5rem; border-radius: 999px;
-      z-index: 2; white-space: nowrap;
-      letter-spacing: 0.02em;
-    }
+    .pos-img-skeleton img { opacity: 0; transition: opacity 0.2s; }
+    .product-img-wrap:not(.pos-img-skeleton) img { opacity: 1; }
   `;
   document.head.appendChild(style);
 })();
+
+// ==================== Init ====================
+setDate();
+renderProducts();
+renderCart();
+_startMenuSubscribe();
 // ==================== Dark Mode ====================
 applyTheme(getTheme());
 document.getElementById('darkToggleBtn')?.addEventListener('click', toggleTheme);

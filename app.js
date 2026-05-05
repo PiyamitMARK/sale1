@@ -628,31 +628,11 @@ function clearCart() {
   renderCart();
 }
 
-// ==================== API: Order Number ====================
-function getTodayTH() {
-  const now = new Date();
-  const th = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return th.toISOString().slice(0, 10);
-}
-
-async function loadOrderNumber() {
-  try {
-    const meta = await api.getMeta();
-    if (!meta) return;
-    const today = getTodayTH();
-    if (meta.lastOrderDate !== today) {
-      orderNumber = 1001;
-    } else {
-      orderNumber = meta.orderNumber || 1001;
-    }
-    orderNumberEl.textContent = orderNumber;
-  } catch (err) {
-    console.error('loadOrderNumber error:', err);
-  }
-}
+// orderNumber แสดงผลจาก API response ของ checkTableActiveOrder / saveOrder โดยตรง
+// ไม่ต้องโหลดแยกอีกแล้ว — ลบ loadOrderNumber ออก
 
 // ==================== API: Save Order (batch-aware) ====================
-async function saveOrder() {
+async function saveOrder(isRetry = false) {
   const batchItems = cart.map((i) => ({
     name: i.name,
     price: i.price,
@@ -667,7 +647,6 @@ async function saveOrder() {
       table_num: String(selectedTable),
       batches: [batchItems],
       total,
-      status: 'pending',
     });
 
     currentTableOrderId     = newOrder.id;
@@ -681,9 +660,10 @@ async function saveOrder() {
     // เพิ่ม batch เข้า order เดิม
     const existingOrder = await api.getOrder(currentTableOrderId);
     if (!existingOrder) {
-      // order หายไปแล้ว → สร้างใหม่
+      // order หายไปแล้ว → สร้างใหม่ (เรียกซ้ำได้แค่ครั้งเดียว)
+      if (isRetry) throw new Error('ไม่พบออเดอร์ กรุณาลองใหม่');
       currentTableOrderId = null;
-      return saveOrder();
+      return saveOrder(true);
     }
 
     const batches = existingOrder.batches || [existingOrder.items || []];
@@ -693,9 +673,8 @@ async function saveOrder() {
     await api.updateOrder(currentTableOrderId, {
       batches,
       total: newTotal,
-      status: 'pending',
       last_batch_at: new Date().toISOString(),
-      from_customer: true, // flag ให้ worker broadcast new_batch → admin เล่นเสียง
+      from_customer: true,
     });
 
     return { allBatches: batches, grandTotal: newTotal };
@@ -772,8 +751,7 @@ async function startNewOrder() {
   hideTableOrderBanner();
   renderCart();
   closeReceipt();
-
-  await loadOrderNumber();
+  // orderNumber จะ reset เมื่อเลือกโต๊ะใหม่ผ่าน checkTableActiveOrder
 }
 
 // ==================== Event Listeners ====================
@@ -992,7 +970,6 @@ window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0
 setDate();
 renderProducts();
 renderCart();
-loadOrderNumber();
 _startMenuSubscribe();
 // ==================== Dark Mode ====================
 applyTheme(getTheme());
