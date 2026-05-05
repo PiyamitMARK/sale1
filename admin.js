@@ -12,7 +12,7 @@ import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-fea
 import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout, applyTheme, toggleTheme, getTheme } from './api-client.js';
 
 // ==================== Config ====================
-const AUTH_KEY = 'krua-khun-mae-auth';
+const AUTH_KEY = 'kaosoi-auth'; // ต้องตรงกับ api-client.js (localStorage key)
 
 // ==================== Rate Limiting ====================
 const LOGIN_MAX_ATTEMPTS = 5;
@@ -255,6 +255,35 @@ async function updatePopularItems(orders) {
   }, 2000);
 }
 
+// ==================== Toast Notifications ====================
+function showOrderToast(order) {
+  const toast = document.createElement('div');
+  toast.className = 'new-order-toast';
+  const orderNum = order.order_num || order.orderNumber;
+  const tableNum = order.table_num || order.table;
+  toast.innerHTML = `
+    <strong>🔔 ออเดอร์ใหม่!</strong>
+    ออเดอร์ #${sanitizeNum(orderNum)} โต๊ะ ${sanitizeNum(tableNum)}
+    <button type="button" class="toast-close" style="margin-left:8px">✕</button>`;
+  document.body.appendChild(toast);
+  toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+  setTimeout(() => toast.remove(), 8000);
+}
+
+function showBatchToast(order, batchCount) {
+  const toast = document.createElement('div');
+  toast.className = 'new-order-toast new-batch-toast';
+  const orderNum = order.order_num || order.orderNumber;
+  const tableNum = order.table_num || order.table;
+  toast.innerHTML = `
+    <strong>🍽 สั่งเพิ่ม!</strong>
+    ออเดอร์ #${sanitizeNum(orderNum)} โต๊ะ ${sanitizeNum(tableNum)} (รอบ ${batchCount})
+    <button type="button" class="toast-close" style="margin-left:8px">✕</button>`;
+  document.body.appendChild(toast);
+  toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
+  setTimeout(() => toast.remove(), 8000);
+}
+
 // ==================== WebSocket: Real-time Listener ====================
 let callLogEntries = [];
 let knownCallIds   = new Set();
@@ -277,60 +306,52 @@ function startRealtimeListener() {
       _loadOrders();
     }
     if (msg.type === 'order_updated') {
-      _loadOrders();
+      _loadOrders({ silent: true }); // admin แก้เอง ไม่เล่นเสียง
     }
     if (msg.type === 'new_batch') {
-      // สั่งเพิ่ม → เล่นเสียงทันที แล้ว reload
+      // ลูกค้าสั่งเพิ่ม → เล่นเสียงทันที + แสดง toast + reload โดยไม่เล่นเสียงซ้ำ
       playBatchAlert();
-      _loadOrders();
+      if (msg.order) showBatchToast(msg.order, (msg.order.batches || []).length);
+      _loadOrders({ silent: true });
     }
     if (msg.type === 'call_staff') {
       _handleCallStaffMsg(msg);
     }
   }, () => {
     // WS reconnect สำเร็จ → sync orders + call log ที่อาจหายไปตอนขาดการเชื่อมต่อ
-    _loadOrders();
+    _loadOrders({ silent: true });
     _loadCallLog();
   });
 }
 
-async function _loadOrders() {
+// เรียกจาก WS event เท่านั้น (ไม่ใช่ polling) เพื่อป้องกันเสียงซ้อน
+
+async function _loadOrders(opts = {}) {
+  // opts.silent = true → ไม่เล่นเสียง (ใช้ตอน WS reconnect หรือ admin แก้เอง)
+  const silent = opts.silent === true;
   try {
     const orders = await api.getOrders({ limit: 500 });
-    const newOrders = (orders || []).map(o => ({
-      ...o,
-      firebaseKey: o.id, // alias สำหรับ compatibility กับ render functions
+    const newOrders = (orders || []).map(o => ({\n      ...o,
+      firebaseKey: o.id,
     }));
     newOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    if (!isFirstLoad) {
+    if (!isFirstLoad && !silent) {
       let hasNewOrder = false;
-      let hasNewBatch = false;
       newOrders.forEach((o) => {
         if (!knownOrderIds.has(o.id) && o.status === 'pending') {
           hasNewOrder = true;
           showOrderToast(o);
-        } else if (knownOrderIds.has(o.id) && o.last_batch_at) {
-          const old = allOrders.find(x => x.id === o.id);
-          if (old) {
-            const oldBatchCount = (old.batches || [old.items || []]).length;
-            const newBatchCount = (o.batches || [o.items || []]).length;
-            if (newBatchCount > oldBatchCount) {
-              hasNewBatch = true;
-              showBatchToast(o, newBatchCount);
-            }
-          }
         }
+        // ไม่เช็ค batch ที่นี่ — ให้ WS new_batch event จัดการเสียงแทน
       });
       if (hasNewOrder) playOrderAlert();
-      else if (hasNewBatch) playBatchAlert();
     }
 
     knownOrderIds = new Set(newOrders.map(o => o.id));
     isFirstLoad   = false;
     allOrders     = newOrders;
 
-    // map date field: created_at → date (สำหรับ render functions ที่ใช้ order.date)
     allOrders = allOrders.map(o => ({ ...o, date: o.date || o.created_at, table: o.table || o.table_num, orderNumber: o.orderNumber || o.order_num }));
 
     updatePopularItems(allOrders);
@@ -1299,7 +1320,11 @@ function renderTakeawayOrders() {
 function checkAuth() {
   if (isLoggedIn()) {
     sessionStorage.setItem(AUTH_KEY, 'true');
+    sessionStorage.setItem('kaosoi-auth', 'true'); // sync สำหรับ POS auth guard
     showScreen(dashboardScreen);
+    // unlock audio ทันทีที่ dashboard โหลด (user เคย interact ไปแล้วตอน login ก่อนหน้า)
+    // ต้องใช้ setTimeout เล็กน้อยให้ DOM พร้อมก่อน
+    setTimeout(() => unlockIOSSpeech(), 100);
     startRealtimeListener();
     startCallStaffListener();
     startMenuListener();

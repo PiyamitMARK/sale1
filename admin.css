@@ -1017,6 +1017,13 @@ body {
   border-left: 4px solid var(--accent);
 }
 
+/* toast สั่งเพิ่ม — สีเขียว แยกจาก order ใหม่ */
+.new-batch-toast {
+  background: #1a7a4a;
+  border-left-color: #2ecc71;
+  top: 5rem; /* เลื่อนลงมาเล็กน้อย ไม่ทับ order toast */
+}
+
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(60px) scale(0.92); }
   to   { opacity: 1; transform: translateX(0) scale(1); }

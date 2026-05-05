@@ -257,8 +257,9 @@ async function handleUpdateOrder(request, path, env, ctx) {
   // Broadcast (waitUntil ป้องกัน cut-off)
   ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'order_updated', order: updated }));
 
-  // ถ้ามี batches ใหม่ → broadcast new_batch แยก เพื่อให้ admin เล่นเสียงได้ทันที
-  if (body.batches !== undefined) {
+  // new_batch: broadcast เฉพาะเมื่อลูกค้าสั่งเพิ่ม (from_customer: true)
+  // ป้องกันเสียงดังผิดที่เมื่อ admin แก้ไขออเดอร์
+  if (body.batches !== undefined && body.from_customer === true) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'new_batch', order: updated }));
   }
 

@@ -695,6 +695,7 @@ async function saveOrder() {
       total: newTotal,
       status: 'pending',
       last_batch_at: new Date().toISOString(),
+      from_customer: true, // flag ให้ worker broadcast new_batch → admin เล่นเสียง
     });
 
     return { allBatches: batches, grandTotal: newTotal };
