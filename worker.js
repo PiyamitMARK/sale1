@@ -104,9 +104,9 @@ export default {
     try {
       if (path === '/api/orders' && method === 'GET') return handleGetOrders(request, env);
       if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'GET')  return handleGetOrder(path, env);
-      if (path === '/api/orders' && method === 'POST')                return handleCreateOrder(request, env);
-      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'PATCH') return handleUpdateOrder(request, path, env);
-      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'DELETE') return handleDeleteOrder(path, env);
+      if (path === '/api/orders' && method === 'POST')                return handleCreateOrder(request, env, ctx);
+      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'PATCH') return handleUpdateOrder(request, path, env, ctx);
+      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'DELETE') return handleDeleteOrder(path, env, ctx);
 
       if (path.match(/^\/api\/table\/[^/]+$/) && method === 'GET')    return handleGetTable(path, env);
       if (path.match(/^\/api\/table\/[^/]+$/) && method === 'DELETE') return handleClearTable(path, env);
@@ -170,7 +170,7 @@ async function handleGetOrder(path, env) {
   return json(deserializeOrder(row));
 }
 
-async function handleCreateOrder(request, env) {
+async function handleCreateOrder(request, env, ctx) {
   const body = await request.json();
   const { table_num, items, batches, is_takeaway, note } = body;
 
@@ -209,13 +209,13 @@ async function handleCreateOrder(request, env) {
 
   const order = { id, order_num: orderNum, table_num, status: 'pending', batches: batchArr, total, note, is_takeaway: !!is_takeaway, created_at: now, updated_at: now };
 
-  // Broadcast ไปทุก admin WebSocket
-  await broadcastToRoom(env, 'admin', { type: 'new_order', order });
+  // Broadcast ไปทุก admin WebSocket (waitUntil ป้องกัน cut-off)
+  ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'new_order', order }));
 
   return json(order, 201);
 }
 
-async function handleUpdateOrder(request, path, env) {
+async function handleUpdateOrder(request, path, env, ctx) {
   const id   = path.split('/')[3];
   const body = await request.json();
 
@@ -254,18 +254,18 @@ async function handleUpdateOrder(request, path, env) {
 
   const updated = deserializeOrder(await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first());
 
-  // Broadcast
-  await broadcastToRoom(env, 'admin', { type: 'order_updated', order: updated });
+  // Broadcast (waitUntil ป้องกัน cut-off)
+  ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'order_updated', order: updated }));
 
   // ถ้ามี status → แจ้งห้องโต๊ะด้วย
   if (body.status) {
-    await broadcastToRoom(env, `table-${updated.table_num}`, { type: 'order_updated', id: updated.id, status: body.status, order: updated });
+    ctx.waitUntil(broadcastToRoom(env, `table-${updated.table_num}`, { type: 'order_updated', id: updated.id, status: body.status, order: updated }));
   }
 
   return json(updated);
 }
 
-async function handleDeleteOrder(path, env) {
+async function handleDeleteOrder(path, env, ctx) {
   const id  = path.split('/')[3];
   const row = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
   if (!row) return err('Order not found', 404);
@@ -275,7 +275,7 @@ async function handleDeleteOrder(path, env) {
   // Clear tableOrders ถ้าชี้ไปที่ order นี้
   await env.DB.prepare('DELETE FROM table_orders WHERE order_id = ?').bind(id).run();
 
-  await broadcastToRoom(env, 'admin', { type: 'order_deleted', id });
+  ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'order_deleted', id }));
 
   return json({ ok: true });
 }

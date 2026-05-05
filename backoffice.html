@@ -2769,24 +2769,54 @@ function renderMenuTable() {
     });
   });
 
-  // drag sort
+  // drag sort — reorder DOM live on dragover, save final order on dragend
   let draggingRow = null;
+  let _dragSaveTimer = null;
+
   body.querySelectorAll('tr[draggable]').forEach(row => {
-    row.addEventListener('dragstart', () => { draggingRow = row; row.classList.add('dragging'); });
-    row.addEventListener('dragend',   () => { row.classList.remove('dragging'); draggingRow = null; });
-    row.addEventListener('dragover',  e => { e.preventDefault(); if (draggingRow && draggingRow !== row) row.classList.add('drag-over'); });
+    row.addEventListener('dragstart', (e) => {
+      draggingRow = row;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // เก็บ id ไว้กรณี drop ข้าม element (Firefox)
+      e.dataTransfer.setData('text/plain', row.dataset.id);
+    });
+
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      body.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+      // บันทึก order จาก DOM จริงหลัง drop เสร็จ
+      clearTimeout(_dragSaveTimer);
+      _dragSaveTimer = setTimeout(() => {
+        const ids = [...body.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
+        if (ids.length > 0) {
+          updateSortOrdersLocal(ids).catch(e => console.error('sort save error:', e));
+        }
+      }, 50);
+      draggingRow = null;
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!draggingRow || row === draggingRow) return;
+      body.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+      row.classList.add('drag-over');
+
+      // reorder DOM ทันที ให้เห็น feedback จริง
+      const rows = [...body.querySelectorAll('tr[data-id]')];
+      const srcIdx = rows.indexOf(draggingRow);
+      const tgtIdx = rows.indexOf(row);
+      if (srcIdx < tgtIdx) row.after(draggingRow);
+      else row.before(draggingRow);
+    });
+
     row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-    row.addEventListener('drop', e => {
+
+    row.addEventListener('drop', (e) => {
       e.preventDefault();
       row.classList.remove('drag-over');
-      if (!draggingRow || draggingRow === row) return;
-      const ids = [...body.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
-      const fromIdx = ids.indexOf(draggingRow.dataset.id);
-      const toIdx   = ids.indexOf(row.dataset.id);
-      const filtered = getFilteredMenu();
-      const moved = filtered.splice(fromIdx, 1)[0];
-      filtered.splice(toIdx, 0, moved);
-      updateSortOrdersLocal(filtered.map(m => m.id)).catch(e => console.error(e));
+      // DOM ถูก reorder แล้วใน dragover — dragend จะ save
     });
   });
 }
