@@ -1,0 +1,8 @@
+.git
+node_modules
+*.pack
+*.log
+migrate-from-firebase.js
+setup-admin-key.js
+seed.sql
+firebase-export.json
