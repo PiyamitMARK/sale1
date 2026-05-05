@@ -16,7 +16,9 @@
  *   PATCH  /api/meta                → อัปเดต meta
  *
  *   GET    /api/menu                → ดึงเมนู (จาก KV)
- *   PUT    /api/menu                → อัปเดตเมนู (admin only)
+ *   PUT    /api/menu                → อัปเดตเมนูทั้งก้อน (admin only)
+ *   PATCH  /api/menu/:id            → อัปเดตรายการเดียว (admin only)
+ *   DELETE /api/menu/:id            → ลบรายการเดียว (admin only)
  *
  *   POST   /api/call-staff          → เรียกพนักงาน
  *   GET    /api/call-staff          → ดึง call log วันนี้
@@ -114,6 +116,8 @@ export default {
 
       if (path === '/api/menu' && method === 'GET') return handleGetMenu(env);
       if (path === '/api/menu' && method === 'PUT') return handlePutMenu(request, env);
+      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  return handlePatchMenuItem(request, path, env);
+      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') return handleDeleteMenuItem(path, env);
 
       if (path === '/api/call-staff' && method === 'POST')   return handleCallStaff(request, env);
       if (path === '/api/call-staff' && method === 'GET')    return handleGetCallLog(env);
@@ -332,6 +336,33 @@ async function handlePutMenu(request, env) {
   });
   // Broadcast เมนูเปลี่ยน
   await broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  return json({ ok: true });
+}
+
+async function handlePatchMenuItem(request, path, env) {
+  const id   = decodeURIComponent(path.split('/')[3]);
+  const body = await request.json();
+
+  // ดึงเมนูทั้งก้อน แก้แค่รายการเดียว แล้ว save กลับ
+  const menu = await env.KV.get('menu', 'json') || {};
+  if (!menu[id] && body._delete) return json({ ok: true }); // ไม่มีก็จบ
+  menu[id] = { ...(menu[id] || {}), ...body, id };
+  await env.KV.put('menu', JSON.stringify(menu));
+
+  // broadcast แบบ fire-and-forget — ไม่ block response
+  const broadcastDone = broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+
+  return json({ ok: true, item: menu[id] });
+}
+
+async function handleDeleteMenuItem(path, env) {
+  const id   = decodeURIComponent(path.split('/')[3]);
+  const menu = await env.KV.get('menu', 'json') || {};
+  delete menu[id];
+  await env.KV.put('menu', JSON.stringify(menu));
+
+  broadcastToRoom(env, 'admin', { type: 'menu_updated' }); // fire-and-forget
+
   return json({ ok: true });
 }
 

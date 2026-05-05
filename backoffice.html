@@ -1229,7 +1229,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
 <!-- =============== AUTH GUARD =============== -->
 <script>
 (function() {
-  if (localStorage.getItem('kaosoi-auth') !== 'true' && sessionStorage.getItem('kaosoi-auth') !== 'true') {
+  if (localStorage.getItem('krua-khun-mae-auth') !== 'true' && sessionStorage.getItem('krua-khun-mae-auth') !== 'true') {
     document.body.innerHTML = [
       '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;',
       'justify-content:center;font-family:Sarabun,sans-serif;background:#faf6f0;',
@@ -1772,14 +1772,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
         </div>
       </div>
 
-      <!-- Options -->
-      <div class="field">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
-          <label class="field-label" style="margin-bottom:0">ตัวเลือก / Topping</label>
-          <button type="button" class="btn btn-ghost btn-sm" id="addOptionGroupBtn">＋ เพิ่มกลุ่ม</button>
-        </div>
-        <div id="optionGroupsWrap" style="display:flex;flex-direction:column;gap:.65rem"></div>
-      </div>
+
     </div>
     <div class="bo-modal-footer">
       <button class="btn btn-outline" data-close="menuModal">ยกเลิก</button>
@@ -1915,37 +1908,35 @@ function getMenuLocal() { return LIVE_MENU; }
 
 // ── เมนู ──
 async function saveMenuItemLocal(item) {
-  // PUT เมนูทั้งก้อน (merge รายการเดิม + item ใหม่)
-  const updated = { ...LIVE_MENU, [item.id]: item };
-  await api.putMenu(updated);
-  LIVE_MENU = updated;
+  // PATCH แค่รายการเดียว — เร็วกว่า PUT ทั้งก้อนมาก
+  LIVE_MENU[item.id] = item;
   MOCK_MENU = Object.values(LIVE_MENU);
-  try { localStorage.setItem('ks90-menu', JSON.stringify(updated)); } catch(_) {}
+  try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
+  await api.patchMenuItem(item.id, item);
 }
 
 async function deleteMenuItemLocal(id) {
-  const updated = { ...LIVE_MENU };
-  delete updated[id];
-  await api.putMenu(updated);
-  LIVE_MENU = updated;
+  delete LIVE_MENU[id];
   MOCK_MENU = Object.values(LIVE_MENU);
-  try { localStorage.setItem('ks90-menu', JSON.stringify(updated)); } catch(_) {}
+  try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
+  await api.deleteMenuItem(id);
 }
 
 async function toggleMenuItemLocal(id, enabled) {
   if (!LIVE_MENU[id]) return;
   LIVE_MENU[id] = { ...LIVE_MENU[id], enabled };
-  await api.putMenu(LIVE_MENU);
   MOCK_MENU = Object.values(LIVE_MENU);
   try { localStorage.setItem('ks90-menu', JSON.stringify(LIVE_MENU)); } catch(_) {}
+  await api.patchMenuItem(id, { enabled });
 }
 
 async function updateSortOrdersLocal(ids) {
+  // sort ต้องแก้หลายรายการพร้อมกัน — ยัง PUT ทั้งก้อน แต่เกิดน้อยมาก
   ids.forEach((id, i) => {
     if (LIVE_MENU[id]) LIVE_MENU[id].sortOrder = i + 1;
   });
-  await api.putMenu(LIVE_MENU);
   MOCK_MENU = Object.values(LIVE_MENU);
+  await api.putMenu(LIVE_MENU);
 }
 
 async function duplicateMenuItemLocal(id) {
@@ -2684,7 +2675,6 @@ let menuLoaded    = false;
 let menuCatFilter = 'all';
 let menuSearch    = '';
 let editingMenuId = null;
-let optionGroups  = [];
 
 const CAT_CSS = { setkao:'cat-setkao', kao:'cat-kao', nam:'cat-nam', coffee:'cat-coffee', soda:'cat-soda' };
 
@@ -2821,7 +2811,6 @@ document.getElementById('menuSearchInput').addEventListener('input', e => {
 // ---- menu modal ----
 function clearMenuModal() {
   editingMenuId = null;
-  optionGroups  = [];
   document.getElementById('menuModalTitle').textContent = '＋ เพิ่มเมนู';
   ['menuName','menuDesc','menuImgUrl'].forEach(id => document.getElementById(id).value = '');
   ['menuPrice','menuSortOrder','menuPromoPrice'].forEach(id => document.getElementById(id).value = '');
@@ -2830,7 +2819,6 @@ function clearMenuModal() {
   document.getElementById('menuPromoEnabled').checked = false;
   document.getElementById('menuPromoFields').style.display = 'none';
   document.getElementById('menuPromoLabel').value = '';
-  document.getElementById('optionGroupsWrap').innerHTML = '';
   document.getElementById('imgUploadArea').innerHTML = `
     <span style="font-size:2rem">📷</span>
     <span class="img-upload-label">คลิกเพื่ออัปโหลดรูป</span>
@@ -2862,33 +2850,12 @@ function openMenuModal(id = null) {
       document.getElementById('menuPromoPrice').value = m.promo.promoPrice || '';
       document.getElementById('menuPromoLabel').value = m.promo.label || '';
     }
-    const rawOpts = m.options || m.optionGroups || [];
-    optionGroups = rawOpts.map(g => ({
-      id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
-      name:    g.label || g.name || '',
-      label:   g.label || g.name || '',
-      type:    g.type || 'single',
-      choices: (g.choices || []).map(c =>
-        typeof c === 'string'
-          ? { value: c, label: c, price: 0 }
-          : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
-      ),
-    }));
-    renderOptionGroups();
   }
   openModal('menuModal');
   if (!id) {
     const ptVal   = document.getElementById('menuProductType').value;
     const defaults = LIVE_PT_TOPPINGS[ptVal];
     if (defaults && Array.isArray(defaults) && defaults.length > 0) {
-      optionGroups = defaults.map(g => ({
-        id:      g.id || ('g' + Math.random().toString(36).slice(2,6)),
-        name:    g.label || '', label: g.label || '', type: g.type || 'single',
-        choices: (g.choices || []).map(c =>
-          typeof c === 'string' ? { value: c, label: c, price: 0 } : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
-        ),
-      }));
-      renderOptionGroups();
     }
   }
 }
@@ -2901,15 +2868,6 @@ document.getElementById('menuProductType').addEventListener('change', function()
   if (editingMenuId) return;
   const ptVal   = this.value;
   const defaults = LIVE_PT_TOPPINGS[ptVal];
-  if (!defaults || !Array.isArray(defaults) || defaults.length === 0 || optionGroups.length > 0) return;
-  optionGroups = defaults.map(g => ({
-    id: g.id || ('g' + Math.random().toString(36).slice(2,6)),
-    name: g.label || '', label: g.label || '', type: g.type || 'single',
-    choices: (g.choices || []).map(c =>
-      typeof c === 'string' ? { value: c, label: c, price: 0 } : { value: c.value||'', label: c.label||c.value||'', price: c.price||0 }
-    ),
-  }));
-  renderOptionGroups();
 });
 
 document.getElementById('menuAddBtn').addEventListener('click', () => openMenuModal());
@@ -2940,15 +2898,7 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
     sortOrder:   parseInt(document.getElementById('menuSortOrder').value) || (Object.keys(LIVE_MENU).length + 1),
     enabled:     editingMenuId ? (LIVE_MENU[editingMenuId]?.enabled ?? true) : true,
     imageUrl:    document.getElementById('menuImgUrl').value.trim() || null,
-    options: optionGroups.length > 0 ? optionGroups.map(g => ({
-      id: g.id || g.name, label: g.label || g.name, type: g.type,
-      choices: g.choices.map(c =>
-        typeof c === 'string'
-          ? { value: c, label: c }
-          : { value: c.value, label: c.label || c.value, ...(c.price ? { price: c.price } : {}) }
-      ),
-      hasNote: false,
-    })) : null,
+    options: null, // ใช้ตัวเลือกจากประเภทสินค้า (productType) แทน
     promo: promoEnabled ? {
       enabled:    true,
       promoPrice: parseFloat(document.getElementById('menuPromoPrice').value) || price,
@@ -2975,71 +2925,6 @@ function duplicateMenu(id) {
 }
 
 // ---- option groups ----
-function renderOptionGroups() {
-  const wrap = document.getElementById('optionGroupsWrap');
-  wrap.innerHTML = '';
-  optionGroups.forEach((g, gi) => {
-    const div = document.createElement('div');
-    div.className = 'opts-group';
-    div.innerHTML = `
-      <div class="opts-group-top">
-        <input type="text" class="field-input" placeholder="ชื่อกลุ่ม เช่น ระดับความเผ็ด" value="${escHtml(g.name||'')}">
-        <select class="field-input" style="flex:0 0 90px;font-size:.82rem">
-          <option value="single" ${g.type==='single'?'selected':''}>เลือก 1</option>
-          <option value="multi"  ${g.type==='multi' ?'selected':''}>หลายอย่าง</option>
-        </select>
-        <button type="button" class="btn-icon del opts-rm-group" data-gi="${gi}" title="ลบกลุ่ม">🗑</button>
-      </div>
-      <div class="opts-choices">
-        ${(g.choices||[]).map((c,ci) => {
-          const cLabel = typeof c === 'string' ? c : (c.label || c.value || '');
-          const cPrice = typeof c === 'object' ? (c.price || '') : '';
-          return `<div class="opts-choice-row" style="display:flex;gap:.4rem;align-items:center">
-            <input type="text"   class="field-input" placeholder="เช่น ไม่เผ็ด" value="${escHtml(cLabel)}" style="flex:1">
-            <input type="number" class="field-input" placeholder="±ราคา" value="${escHtml(String(cPrice))}" style="width:80px">
-            <button type="button" class="opts-rm" data-gi="${gi}" data-ci="${ci}">✕</button>
-          </div>`;
-        }).join('')}
-      </div>
-      <button type="button" class="btn btn-ghost btn-sm opts-add-choice" data-gi="${gi}" style="align-self:flex-start;margin-top:.25rem">＋ เพิ่มตัวเลือก</button>`;
-
-    const nameInput = div.querySelector('input[type=text]');
-    nameInput.addEventListener('input', () => { optionGroups[gi].name = nameInput.value; });
-    const typeSelect = div.querySelector('select');
-    typeSelect.addEventListener('change', () => { optionGroups[gi].type = typeSelect.value; });
-    div.querySelector('.opts-rm-group').addEventListener('click', () => {
-      optionGroups.splice(gi, 1); renderOptionGroups();
-    });
-    div.querySelectorAll('.opts-rm').forEach(btn => {
-      btn.addEventListener('click', () => {
-        optionGroups[gi].choices.splice(parseInt(btn.dataset.ci), 1); renderOptionGroups();
-      });
-    });
-    const choiceRows = div.querySelectorAll('.opts-choices .opts-choice-row');
-    choiceRows.forEach((row, ci) => {
-      const [labelInp, priceInp] = row.querySelectorAll('input');
-      if (labelInp) labelInp.addEventListener('input', () => {
-        if (!optionGroups[gi].choices[ci]) optionGroups[gi].choices[ci] = { value: '', label: '' };
-        optionGroups[gi].choices[ci].value = labelInp.value;
-        optionGroups[gi].choices[ci].label = labelInp.value;
-      });
-      if (priceInp) priceInp.addEventListener('input', () => {
-        if (!optionGroups[gi].choices[ci]) optionGroups[gi].choices[ci] = { value: '', label: '' };
-        const p = parseFloat(priceInp.value);
-        optionGroups[gi].choices[ci].price = isNaN(p) ? undefined : p;
-      });
-    });
-    div.querySelector('.opts-add-choice').addEventListener('click', () => {
-      optionGroups[gi].choices.push({ value: '', label: '' }); renderOptionGroups();
-    });
-    wrap.appendChild(div);
-  });
-}
-
-document.getElementById('addOptionGroupBtn').addEventListener('click', () => {
-  optionGroups.push({ id: 'g'+Date.now(), name: '', label: '', type: 'single', choices: [{ value: '', label: '' }] });
-  renderOptionGroups();
-});
 
 // ============================================================
 //  CATEGORY MANAGER MODAL

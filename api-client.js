@@ -83,6 +83,14 @@ export const api = {
     return apiFetch('/api/menu', { method: 'PUT', body: JSON.stringify(menuData) });
   },
 
+  async patchMenuItem(id, data) {
+    return apiFetch(`/api/menu/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+
+  async deleteMenuItem(id) {
+    return apiFetch(`/api/menu/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
   async callStaff(tableNum, message = '') {
     return apiFetch('/api/call-staff', {
       method: 'POST',
