@@ -210,7 +210,7 @@ export async function adminLogin(username, password) {
 
   if (res.ok) {
     localStorage.setItem('ks90-admin-key', hash);
-    localStorage.setItem('krua-khun-mae-auth', 'true');
+    localStorage.setItem('kaosoi-auth', 'true');
     return true;
   }
   return false;
@@ -218,37 +218,9 @@ export async function adminLogin(username, password) {
 
 export function adminLogout() {
   localStorage.removeItem('ks90-admin-key');
-  localStorage.removeItem('krua-khun-mae-auth');
+  localStorage.removeItem('kaosoi-auth');
 }
 
 export function isLoggedIn() {
-  return !!localStorage.getItem('krua-khun-mae-auth');
+  return !!localStorage.getItem('kaosoi-auth');
 }
-
-// ─── Dark Mode (shared) ──────────────────────────────────────────────────────
-const _THEME_KEY = 'theme';
-
-export function getTheme() {
-  return localStorage.getItem(_THEME_KEY) || 'light';
-}
-
-export function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  const btn = document.getElementById('darkToggleBtn');
-  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
-}
-
-export function toggleTheme() {
-  const next = getTheme() === 'dark' ? 'light' : 'dark';
-  localStorage.setItem(_THEME_KEY, next);
-  applyTheme(next);
-}
-
-// apply ทันทีเพื่อ prevent flash
-applyTheme(getTheme());
-
-document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('darkToggleBtn');
-  if (btn) btn.addEventListener('click', toggleTheme);
-  applyTheme(getTheme());
-});

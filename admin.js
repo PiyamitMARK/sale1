@@ -8,17 +8,18 @@
  *   - จ่ายแล้ว → clearTable เพื่อให้โต๊ะนั้นได้ order number ใหม่
  */
 
+import './darkmode.js';
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
 import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout } from './api-client.js';
 
 // ==================== Config ====================
-const AUTH_KEY = 'krua-khun-mae-auth';
+const AUTH_KEY = 'kaosoi-auth';
 
 // ==================== Rate Limiting ====================
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS   = 5 * 60 * 1000;
-const ATTEMPT_KEY        = 'krua-login-attempts';
-const LOCKOUT_KEY        = 'krua-login-lockout';
+const ATTEMPT_KEY        = 'kaosoi-login-attempts';
+const LOCKOUT_KEY        = 'kaosoi-login-lockout';
 
 function getAttempts()    { return parseInt(sessionStorage.getItem(ATTEMPT_KEY) || '0', 10); }
 function getLockoutUntil(){ return parseInt(sessionStorage.getItem(LOCKOUT_KEY) || '0', 10); }
