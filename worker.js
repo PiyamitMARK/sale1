@@ -115,8 +115,9 @@ export default {
       if (path === '/api/meta' && method === 'PATCH') return handleUpdateMeta(request, env);
 
       if (path === '/api/menu' && method === 'GET') return handleGetMenu(env);
-      if (path === '/api/menu' && method === 'PUT') return handlePutMenu(request, env);
+      if (path === '/api/menu' && method === 'PUT') return handlePutMenu(request, env, ctx);
       if (path === '/api/menu-sort' && method === 'PATCH') return handleMenuSort(request, env, ctx);
+      if (path.match(/^\/api\/menu-img\/[^/]+$/) && method === 'GET') return handleGetMenuImg(path, env);
       if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  return handlePatchMenuItem(request, path, env, ctx);
       if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') return handleDeleteMenuItem(path, env, ctx);
 
@@ -412,6 +413,18 @@ async function handlePatchMenuItem(request, path, env, ctx) {
   const id   = decodeURIComponent(path.split('/')[3]);
   const body = await request.json();
 
+  // ถ้า imageUrl เป็น base64 → แยกเก็บใน KV, เก็บแค่ key ใน D1
+  if (body.imageUrl && body.imageUrl.startsWith('data:')) {
+    const imgKey = `img:${id}`;
+    if (env.KV) {
+      await env.KV.put(imgKey, body.imageUrl); // เก็บ base64 ใน KV
+      body.imageUrl = `/api/menu-img/${encodeURIComponent(id)}`; // แทนด้วย URL
+    } else {
+      // ไม่มี KV → ปฏิเสธรูป base64 ใหญ่
+      delete body.imageUrl;
+    }
+  }
+
   // ดึงเฉพาะ row นั้น (ไม่ GET ทั้งก้อนแล้ว)
   const existing = await env.DB.prepare('SELECT data FROM menu_items WHERE id = ?').bind(id).first();
   const current  = existing ? JSON.parse(existing.data) : {};
@@ -442,6 +455,22 @@ async function handleDeleteMenuItem(path, env, ctx) {
   }
 
   return json({ ok: true });
+}
+
+// GET /api/menu-img/:id — serve รูป base64 ที่เก็บใน KV
+async function handleGetMenuImg(path, env) {
+  const id  = decodeURIComponent(path.split('/')[3]);
+  const img = env.KV ? await env.KV.get(`img:${id}`).catch(() => null) : null;
+  if (!img) return new Response('Not found', { status: 404 });
+  // img เป็น data:image/jpeg;base64,...
+  const [header, b64] = img.split(',');
+  const mime = (header.match(/data:(.*);base64/) || [])[1] || 'image/jpeg';
+  const binary = atob(b64);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Response(bytes, {
+    headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400', ...CORS },
+  });
 }
 
 /**
