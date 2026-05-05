@@ -136,6 +136,41 @@ export const PRODUCT_TYPES = [
 // ==================== API helpers (แทน Firebase) ====================
 
 /**
+ * In-memory cache — หลีกเลี่ยง GET ทุกครั้งก่อน PATCH/PUT
+ * เก็บ raw menu { [id]: item } ที่โหลดล่าสุดไว้ใน memory
+ */
+let _menuCache = null;          // raw menu object หรือ null ถ้ายังไม่โหลด
+let _menuCachePromise = null;   // promise กำลัง fetch อยู่ (กันซ้ำ)
+
+/** ดึง raw menu จาก cache หรือ API (fetch ครั้งแรกเท่านั้น) */
+async function _getMenuCached() {
+  if (_menuCache !== null) return _menuCache;
+  if (_menuCachePromise) return _menuCachePromise;
+  _menuCachePromise = api.getMenu().then(raw => {
+    _menuCache = raw && Object.keys(raw).length > 0 ? raw : {};
+    _menuCachePromise = null;
+    _syncMenuToLS(_menuCache);
+    return _menuCache;
+  }).catch(() => {
+    _menuCachePromise = null;
+    return _menuCache || {};
+  });
+  return _menuCachePromise;
+}
+
+/** อัปเดต cache และ LS พร้อมกัน */
+function _updateMenuCache(raw) {
+  _menuCache = raw;
+  _syncMenuToLS(raw);
+}
+
+/** ล้าง cache (เมื่อได้รับ menu_updated จาก WS — ข้าม browser อื่นแก้) */
+function _invalidateMenuCache() {
+  _menuCache = null;
+  _menuCachePromise = null;
+}
+
+/**
  * Sync raw menu object → LocalStorage 'ks90-menu'
  * เพื่อให้ customer.js (LS fallback) อ่านได้
  */
@@ -148,13 +183,12 @@ function _syncCatsToLS(catsObj) {
 }
 
 /**
- * โหลดเมนูจาก Worker API
+ * โหลดเมนูจาก Worker API (ใช้ cache)
  * คืน products format (เหมือนเดิม)
  */
 export async function loadMenuFromFirebase(_db) {
-  const raw = await api.getMenu(); // { [id]: menuItem }
+  const raw = await _getMenuCached();
   if (!raw || Object.keys(raw).length === 0) return buildProductsFromDefault();
-  _syncMenuToLS(raw);
   return parseMenuSnapshot(raw);
 }
 
@@ -163,22 +197,22 @@ export async function loadMenuFromFirebase(_db) {
  * ส่งคืน unsubscribe function (เหมือน onValue เดิม)
  */
 export function subscribeMenu(_db, callback) {
-  // โหลดครั้งแรกทันที
-  api.getMenu().then(raw => {
+  // โหลดครั้งแรกจาก cache (เร็วมากถ้ามีข้อมูลแล้ว)
+  _getMenuCached().then(raw => {
     if (!raw || Object.keys(raw).length === 0) {
       callback(buildProductsFromDefault());
       return;
     }
-    _syncMenuToLS(raw);
     callback(parseMenuSnapshot(raw));
   }).catch(() => callback(buildProductsFromDefault()));
 
   // subscribe realtime updates จาก WebSocket
   const socket = ws.connect('admin', (msg) => {
     if (msg.type === 'menu_updated') {
-      api.getMenu().then(raw => {
+      // invalidate cache แล้วโหลดใหม่ (เพราะ browser อื่นอาจแก้ไข)
+      _invalidateMenuCache();
+      _getMenuCached().then(raw => {
         if (!raw) return;
-        _syncMenuToLS(raw);
         callback(parseMenuSnapshot(raw));
       }).catch(() => {});
     }
@@ -195,27 +229,49 @@ export async function saveDefaultCat(_db, catId) {
   await api.updateMeta({ defaultCat: catId });
 }
 
+// ─── Meta cache (ลด getMeta round-trips ซ้ำซ้อน) ───────────────────────────
+let _metaCache = null;
+let _metaCachePromise = null;
+
+async function _getMetaCached() {
+  if (_metaCache !== null) return _metaCache;
+  if (_metaCachePromise) return _metaCachePromise;
+  _metaCachePromise = api.getMeta().then(meta => {
+    _metaCache = meta || {};
+    _metaCachePromise = null;
+    try { localStorage.setItem('ks90-meta', JSON.stringify(_metaCache)); } catch (_) {}
+    return _metaCache;
+  }).catch(() => {
+    _metaCachePromise = null;
+    return _metaCache || {};
+  });
+  return _metaCachePromise;
+}
+
+function _invalidateMetaCache() {
+  _metaCache = null;
+  _metaCachePromise = null;
+}
+
 /**
- * Subscribe defaultCat — โหลดครั้งเดียวจาก meta (ไม่ realtime เพราะเปลี่ยนน้อยมาก)
- * ถ้า meta เปลี่ยน → Worker จะ broadcast ผ่าน ws ซึ่ง admin จะ reload เองอยู่แล้ว
+ * Subscribe defaultCat — ใช้ meta cache ร่วมกับ subscribeCategories
  */
 export function subscribeDefaultCat(_db, cb) {
-  // ดึงจาก LS cache ก่อน (เร็ว, ไม่ block render)
+  // LS cache → render ทันที (ไม่ block)
   const lsMeta = (() => {
     try { return JSON.parse(localStorage.getItem('ks90-meta') || '{}'); } catch { return {}; }
   })();
   if (lsMeta.defaultCat) cb(lsMeta.defaultCat);
 
-  // ดึงจาก API (background)
-  api.getMeta().then(meta => {
+  // fetch จาก cache (อาจเป็น request เดียวกับที่ subscribeCategoriesAndSync ยิงอยู่)
+  _getMetaCached().then(meta => {
     if (!meta) return;
-    try { localStorage.setItem('ks90-meta', JSON.stringify(meta)); } catch (_) {}
     cb(meta.defaultCat || null);
   }).catch(() => {});
 }
 
 /**
- * Subscribe categories + sort ผ่าน API (แทน Firebase onValue)
+ * Subscribe categories + sort ผ่าน API — ใช้ meta cache ไม่ fetch ซ้ำ
  * คืน unsubscribe function
  */
 export function subscribeCategoriesAndSync(_db, cb) {
@@ -232,14 +288,14 @@ export function subscribeCategoriesAndSync(_db, cb) {
     cb(sorted);
   }
 
-  // LS cache → render ทันที
+  // LS cache → render ทันที (ไม่ block)
   const lsCats = (() => {
     try { return JSON.parse(localStorage.getItem('ks90-categories') || ''); } catch { return null; }
   })();
   if (lsCats) _buildAndEmit(lsCats, {});
 
-  // ดึงข้อมูลจาก meta (categories + categories_sort เก็บใน meta)
-  api.getMeta().then(meta => {
+  // ดึงจาก meta cache (fetch เดียวกับ subscribeDefaultCat ถ้าเกิดพร้อมกัน)
+  _getMetaCached().then(meta => {
     if (!meta) return;
     const rawCats = meta.categories || { ...CATEGORY_LABELS };
     const sortMap = meta.categoriesSort || {};
@@ -248,10 +304,11 @@ export function subscribeCategoriesAndSync(_db, cb) {
     if (!lsCats) _buildAndEmit({ ...CATEGORY_LABELS }, {});
   });
 
-  // subscribe realtime ผ่าน WebSocket — เมื่อ menu/meta อัปเดต
+  // subscribe realtime ผ่าน WebSocket
   const socket = ws.connect('admin', (msg) => {
     if (msg.type === 'meta_updated' || msg.type === 'categories_updated') {
-      api.getMeta().then(meta => {
+      _invalidateMetaCache();
+      _getMetaCached().then(meta => {
         if (!meta) return;
         _buildAndEmit(meta.categories || { ...CATEGORY_LABELS }, meta.categoriesSort || {});
       }).catch(() => {});
@@ -322,13 +379,15 @@ function buildProductsFromDefault() {
 
 /**
  * โหลดเมนูทั้งหมดในรูปแบบ raw { [id]: item } สำหรับ admin
+ * ใช้ cache — ไม่ fetch ซ้ำถ้าเคยโหลดแล้ว
  */
 export async function loadAllMenuAdmin(_db) {
-  const raw = await api.getMenu();
+  const raw = await _getMenuCached();
   if (!raw || Object.keys(raw).length === 0) {
     // seed default แล้ว save ขึ้น Worker
     const defaultRaw = _buildDefaultMenuRaw();
     await api.putMenu(defaultRaw);
+    _updateMenuCache(defaultRaw);
     return defaultRaw;
   }
   return raw;
@@ -336,23 +395,28 @@ export async function loadAllMenuAdmin(_db) {
 
 /**
  * Subscribe เมนู admin realtime ผ่าน WebSocket
+ * ใช้ cache สำหรับ initial load — ไม่ fetch ซ้ำ
  * คืน unsubscribe function
  */
 export function subscribeAllMenuAdmin(_db, callback) {
-  // โหลดครั้งแรก
-  api.getMenu().then(raw => {
+  // initial load จาก cache
+  _getMenuCached().then(raw => {
     if (!raw || Object.keys(raw).length === 0) {
       const defaultRaw = _buildDefaultMenuRaw();
-      api.putMenu(defaultRaw).then(() => callback(defaultRaw)).catch(() => callback(defaultRaw));
+      api.putMenu(defaultRaw).then(() => {
+        _updateMenuCache(defaultRaw);
+        callback(defaultRaw);
+      }).catch(() => callback(defaultRaw));
     } else {
       callback(raw);
     }
   }).catch(() => {});
 
-  // realtime ผ่าน WebSocket
+  // realtime ผ่าน WebSocket — เมื่อ browser อื่นแก้เมนู
   const socket = ws.connect('admin', (msg) => {
     if (msg.type === 'menu_updated') {
-      api.getMenu().then(raw => { if (raw) callback(raw); }).catch(() => {});
+      _invalidateMenuCache();
+      _getMenuCached().then(raw => { if (raw) callback(raw); }).catch(() => {});
     }
   });
 
@@ -361,59 +425,75 @@ export function subscribeAllMenuAdmin(_db, callback) {
 
 /**
  * บันทึก menu item เดี่ยว
- * กลยุทธ์: GET เมนูทั้งหมด → แก้ item → PUT กลับขึ้น Worker
+ * ใช้ PATCH /api/menu/:id — 1 round-trip (ไม่ GET ทั้งก้อนก่อน)
+ * อัปเดต cache ทันทีโดยไม่รอ broadcast กลับมา
  */
 export async function saveMenuItem(_db, item) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  raw[item.id] = item;
-  await api.putMenu(raw);
-  // sync LS ทันที
-  _syncMenuToLS(raw);
+  // optimistic: อัปเดต cache ก่อน เพื่อให้ UI refresh ทันที
+  const cached = _menuCache || {};
+  cached[item.id] = item;
+  _updateMenuCache(cached);
+
+  // ส่ง PATCH เฉพาะ item นี้
+  await api.patchMenuItem(item.id, item);
 }
 
 export async function toggleMenuItem(_db, id, enabled) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  if (raw[id]) raw[id].enabled = enabled;
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  // optimistic update
+  const cached = _menuCache || {};
+  if (cached[id]) { cached[id] = { ...cached[id], enabled }; _updateMenuCache(cached); }
+
+  await api.patchMenuItem(id, { enabled });
 }
 
 export async function deleteMenuItem(_db, id) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  delete raw[id];
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  // optimistic update
+  const cached = _menuCache || {};
+  delete cached[id];
+  _updateMenuCache(cached);
+
+  await api.deleteMenuItem(id);
 }
 
 export async function updateMenuPrice(_db, id, price) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  if (raw[id]) raw[id].price = Number(price);
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  const priceNum = Number(price);
+  const cached = _menuCache || {};
+  if (cached[id]) { cached[id] = { ...cached[id], price: priceNum }; _updateMenuCache(cached); }
+
+  await api.patchMenuItem(id, { price: priceNum });
 }
 
 export async function updateMenuName(_db, id, name) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  if (raw[id]) raw[id].name = name;
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  const cached = _menuCache || {};
+  if (cached[id]) { cached[id] = { ...cached[id], name }; _updateMenuCache(cached); }
+
+  await api.patchMenuItem(id, { name });
 }
 
 export function generateMenuId(category) {
   return category + '_' + Date.now().toString(36);
 }
 
-/** อัปเดต sortOrder หลาย items พร้อมกัน (สำหรับ drag & drop) */
+/**
+ * อัปเดต sortOrder หลาย items พร้อมกัน (สำหรับ drag & drop)
+ * ใช้ PATCH แบบ bulk ผ่าน patchMenuItem หลายตัวพร้อมกัน (Promise.all)
+ * เร็วกว่าเดิมมาก — ไม่ต้อง GET ทั้งก้อน
+ */
 export async function updateSortOrders(_db, orderedIds) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
+  // optimistic: อัปเดต cache ก่อน
+  const cached = _menuCache || {};
   orderedIds.forEach((id, idx) => {
-    if (raw[id]) raw[id].sortOrder = idx;
+    if (cached[id]) cached[id] = { ...cached[id], sortOrder: idx };
   });
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  _updateMenuCache(cached);
+
+  // ส่ง PATCH พร้อมกันทุก item ที่เปลี่ยน sortOrder
+  await Promise.all(
+    orderedIds.map((id, idx) => api.patchMenuItem(id, { sortOrder: idx }))
+  );
 }
 
-/** Duplicate เมนู */
+/** Duplicate เมนู — ใช้ saveMenuItem ที่ปรับปรุงแล้ว */
 export async function duplicateMenuItem(_db, item) {
   const newId   = generateMenuId(item.category);
   const newItem = {
@@ -427,20 +507,20 @@ export async function duplicateMenuItem(_db, item) {
   return newId;
 }
 
-/** บันทึกโปรโมชั่น */
+/** บันทึกโปรโมชั่น — ใช้ PATCH เฉพาะ field */
 export async function savePromo(_db, id, promo) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  if (raw[id]) raw[id].promo = promo;
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  const cached = _menuCache || {};
+  if (cached[id]) { cached[id] = { ...cached[id], promo }; _updateMenuCache(cached); }
+
+  await api.patchMenuItem(id, { promo });
 }
 
-/** บันทึก options/toppings */
+/** บันทึก options/toppings — ใช้ PATCH เฉพาะ field */
 export async function saveMenuOptions(_db, id, options) {
-  const raw = await api.getMenu().catch(() => ({})) || {};
-  if (raw[id]) raw[id].options = options;
-  await api.putMenu(raw);
-  _syncMenuToLS(raw);
+  const cached = _menuCache || {};
+  if (cached[id]) { cached[id] = { ...cached[id], options }; _updateMenuCache(cached); }
+
+  await api.patchMenuItem(id, { options });
 }
 
 /** สร้าง raw menu object จาก DEFAULT_MENU สำหรับ seed */
@@ -1480,50 +1560,53 @@ tr[draggable="true"]:active { cursor: grabbing; }
 }
 // ==================== Category Management ====================
 
-/** โหลด categories จาก Worker meta (fallback เป็น CATEGORY_LABELS) */
+/** โหลด categories จาก Worker meta (ใช้ cache) */
 export async function loadCategories(_db) {
-  const meta = await api.getMeta().catch(() => null);
+  const meta = await _getMetaCached().catch(() => null);
   return (meta?.categories) || { ...CATEGORY_LABELS };
 }
 
-/** subscribe categories realtime ผ่าน WebSocket */
+/** subscribe categories realtime ผ่าน WebSocket (ใช้ meta cache) */
 export function subscribeCategories(_db, cb) {
-  api.getMeta().then(meta => {
+  _getMetaCached().then(meta => {
     cb((meta?.categories) || { ...CATEGORY_LABELS });
   }).catch(() => cb({ ...CATEGORY_LABELS }));
 
   const socket = ws.connect('admin', (msg) => {
     if (msg.type === 'meta_updated' || msg.type === 'categories_updated') {
-      api.getMeta().then(meta => cb((meta?.categories) || { ...CATEGORY_LABELS })).catch(() => {});
+      _invalidateMetaCache();
+      _getMetaCached().then(meta => cb((meta?.categories) || { ...CATEGORY_LABELS })).catch(() => {});
     }
   });
   return () => socket.close();
 }
 
-/** บันทึก category ใหม่ */
+/** บันทึก category ใหม่ — ใช้ meta cache */
 export async function addCategory(_db, id, label) {
   if (!id || !label) throw new Error('ต้องระบุ id และชื่อหมวด');
   id = id.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   if (!id) throw new Error('id ต้องเป็นตัวอักษรภาษาอังกฤษ/ตัวเลขเท่านั้น');
-  const meta = await api.getMeta().catch(() => ({})) || {};
-  const cats = meta.categories || { ...CATEGORY_LABELS };
-  cats[id] = label.trim();
+  const meta = await _getMetaCached().catch(() => ({})) || {};
+  const cats = { ...(meta.categories || { ...CATEGORY_LABELS }), [id]: label.trim() };
   await api.updateMeta({ categories: cats });
+  // อัปเดต meta cache ทันที
+  if (_metaCache) _metaCache = { ..._metaCache, categories: cats };
   return id;
 }
 
-/** แก้ชื่อ category */
+/** แก้ชื่อ category — ใช้ meta cache */
 export async function renameCategory(_db, id, newLabel) {
-  const meta = await api.getMeta().catch(() => ({})) || {};
-  const cats = meta.categories || { ...CATEGORY_LABELS };
-  cats[id] = newLabel.trim();
+  const meta = await _getMetaCached().catch(() => ({})) || {};
+  const cats = { ...(meta.categories || { ...CATEGORY_LABELS }), [id]: newLabel.trim() };
   await api.updateMeta({ categories: cats });
+  if (_metaCache) _metaCache = { ..._metaCache, categories: cats };
 }
 
-/** ลบ category */
+/** ลบ category — ใช้ meta cache */
 export async function deleteCategory(_db, id) {
-  const meta = await api.getMeta().catch(() => ({})) || {};
-  const cats = meta.categories || { ...CATEGORY_LABELS };
+  const meta = await _getMetaCached().catch(() => ({})) || {};
+  const cats = { ...(meta.categories || { ...CATEGORY_LABELS }) };
   delete cats[id];
   await api.updateMeta({ categories: cats });
+  if (_metaCache) _metaCache = { ..._metaCache, categories: cats };
 }

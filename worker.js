@@ -116,8 +116,8 @@ export default {
 
       if (path === '/api/menu' && method === 'GET') return handleGetMenu(env);
       if (path === '/api/menu' && method === 'PUT') return handlePutMenu(request, env);
-      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  return handlePatchMenuItem(request, path, env);
-      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') return handleDeleteMenuItem(path, env);
+      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  return handlePatchMenuItem(request, path, env, ctx);
+      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') return handleDeleteMenuItem(path, env, ctx);
 
       if (path === '/api/call-staff' && method === 'POST')   return handleCallStaff(request, env);
       if (path === '/api/call-staff' && method === 'GET')    return handleGetCallLog(env);
@@ -339,7 +339,7 @@ async function handlePutMenu(request, env) {
   return json({ ok: true });
 }
 
-async function handlePatchMenuItem(request, path, env) {
+async function handlePatchMenuItem(request, path, env, ctx) {
   const id   = decodeURIComponent(path.split('/')[3]);
   const body = await request.json();
 
@@ -350,18 +350,26 @@ async function handlePatchMenuItem(request, path, env) {
   await env.KV.put('menu', JSON.stringify(menu));
 
   // broadcast แบบ fire-and-forget — ไม่ block response
-  const broadcastDone = broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
+  } else {
+    broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  }
 
   return json({ ok: true, item: menu[id] });
 }
 
-async function handleDeleteMenuItem(path, env) {
+async function handleDeleteMenuItem(path, env, ctx) {
   const id   = decodeURIComponent(path.split('/')[3]);
   const menu = await env.KV.get('menu', 'json') || {};
   delete menu[id];
   await env.KV.put('menu', JSON.stringify(menu));
 
-  broadcastToRoom(env, 'admin', { type: 'menu_updated' }); // fire-and-forget
+  if (ctx?.waitUntil) {
+    ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
+  } else {
+    broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+  }
 
   return json({ ok: true });
 }
