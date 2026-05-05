@@ -60,7 +60,7 @@ let _wsConn   = null;
 let tableFilter = '';
 
 // ==================== Auth ====================
-function isLoggedIn()     { return localStorage.getItem(AUTH_KEY) === 'true'; }
+// isLoggedIn() → ใช้ apiIsLoggedIn ที่ import มาจาก api-client.js แทน
 function setLoggedIn(val) {
   if (val) {
     localStorage.setItem(AUTH_KEY, 'true');
@@ -824,7 +824,6 @@ function renderOrders() {
       <input type="search" class="table-filter-input" id="tableFilterInput"
         placeholder="🔍 กรองโต๊ะ... (เช่น 3)" maxlength="20" autocomplete="off">
       <button type="button" class="btn btn-outline table-filter-clear hidden" id="tableFilterClear">✕ ล้าง</button>`;
-    const tabRecent = document.getElementById('tabRecent');
     if (tabRecent) tabRecent.prepend(bar);
 
     document.getElementById('tableFilterInput').addEventListener('input', (e) => {
@@ -1318,9 +1317,8 @@ function renderTakeawayOrders() {
 
 // ==================== Auth Events ====================
 function checkAuth() {
-  if (isLoggedIn()) {
+  if (apiIsLoggedIn()) {
     sessionStorage.setItem(AUTH_KEY, 'true');
-    sessionStorage.setItem('kaosoi-auth', 'true'); // sync สำหรับ POS auth guard
     showScreen(dashboardScreen);
     // unlock audio ทันทีที่ dashboard โหลด (user เคย interact ไปแล้วตอน login ก่อนหน้า)
     // ต้องใช้ setTimeout เล็กน้อยให้ DOM พร้อมก่อน
@@ -1437,7 +1435,6 @@ function applySoundMode(mode) {
   updateSoundBtnLabel();
 }
 applySoundMode(soundMode);
-updateSoundBtnLabel();
 
 let _longPressTimer = null;
 let _didOpenDropdown = false;

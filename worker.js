@@ -112,14 +112,29 @@ export default {
       if (path.match(/^\/api\/table\/[^/]+$/) && method === 'DELETE') return handleClearTable(path, env);
 
       if (path === '/api/meta' && method === 'GET')   return handleGetMeta(env);
-      if (path === '/api/meta' && method === 'PATCH') return handleUpdateMeta(request, env);
+      if (path === '/api/meta' && method === 'PATCH') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleUpdateMeta(request, env);
+      }
 
       if (path === '/api/menu' && method === 'GET') return handleGetMenu(env);
-      if (path === '/api/menu' && method === 'PUT') return handlePutMenu(request, env, ctx);
-      if (path === '/api/menu-sort' && method === 'PATCH') return handleMenuSort(request, env, ctx);
+      if (path === '/api/menu' && method === 'PUT') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handlePutMenu(request, env, ctx);
+      }
+      if (path === '/api/menu-sort' && method === 'PATCH') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleMenuSort(request, env, ctx);
+      }
       if (path.match(/^\/api\/menu-img\/[^/]+$/) && method === 'GET') return handleGetMenuImg(path, env);
-      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  return handlePatchMenuItem(request, path, env, ctx);
-      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') return handleDeleteMenuItem(path, env, ctx);
+      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'PATCH')  {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handlePatchMenuItem(request, path, env, ctx);
+      }
+      if (path.match(/^\/api\/menu\/[^/]+$/) && method === 'DELETE') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleDeleteMenuItem(path, env, ctx);
+      }
 
       if (path === '/api/call-staff' && method === 'POST')   return handleCallStaff(request, env);
       if (path === '/api/call-staff' && method === 'GET')    return handleGetCallLog(env);
@@ -585,7 +600,6 @@ async function broadcastToRoom(env, roomName, msg) {
 export class TableRoom {
   constructor(state) {
     this.state = state;
-    this.ctx   = state; // alias
   }
 
   async fetch(request) {
@@ -618,11 +632,11 @@ export class TableRoom {
     if (message === 'ping') ws.send('pong');
   }
 
-  async webSocketClose(ws) {
+  async webSocketClose() {
     // ไม่ต้องทำอะไร runtime จัดการเอง
   }
 
-  async webSocketError(ws) {
+  async webSocketError() {
     // ไม่ต้องทำอะไร
   }
 }
