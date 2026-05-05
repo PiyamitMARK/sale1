@@ -4,24 +4,11 @@
  *
  * ใช้งาน:
  *   import { api, ws } from './api-client.js';
- *
- *   // REST
- *   const orders = await api.getOrders({ today: true });
- *   const order  = await api.createOrder({ table_num: '3', batches: [...] });
- *   await api.updateOrder(id, { status: 'cooking' });
- *
- *   // Realtime
- *   const socket = ws.connect('admin', (msg) => { ... });
- *   socket.close();
  */
 
-// ─── Config ─────────────────────────────────────────────────────────────────
-// Worker deploy อยู่ที่ domain เดียวกับ static files
-// ถ้า dev local ให้เปลี่ยนเป็น 'http://localhost:8787'
+// ─── Config ──────────────────────────────────────────────────────────────────
 const BASE = '';  // '' = same origin
 
-// Admin key สำหรับการเรียก API ที่ต้องการสิทธิ์
-// เก็บใน localStorage หลัง login สำเร็จ
 function getAdminKey() {
   return localStorage.getItem('ks90-admin-key') || '';
 }
@@ -43,10 +30,9 @@ async function apiFetch(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-// ─── REST API ──────────────────────────────────────────────────────────────────
+// ─── REST API ─────────────────────────────────────────────────────────────────
 export const api = {
 
-  // Orders
   async getOrders({ status, table, today, limit } = {}) {
     const p = new URLSearchParams();
     if (status) p.set('status', status);
@@ -73,7 +59,6 @@ export const api = {
     return apiFetch(`/api/orders/${id}`, { method: 'DELETE' });
   },
 
-  // Table
   async getTableOrder(tableNum) {
     return apiFetch(`/api/table/${tableNum}`);
   },
@@ -82,7 +67,6 @@ export const api = {
     return apiFetch(`/api/table/${tableNum}`, { method: 'DELETE' });
   },
 
-  // Meta
   async getMeta() {
     return apiFetch('/api/meta');
   },
@@ -91,7 +75,6 @@ export const api = {
     return apiFetch('/api/meta', { method: 'PATCH', body: JSON.stringify(data) });
   },
 
-  // Menu
   async getMenu() {
     return apiFetch('/api/menu');
   },
@@ -100,7 +83,6 @@ export const api = {
     return apiFetch('/api/menu', { method: 'PUT', body: JSON.stringify(menuData) });
   },
 
-  // Call Staff
   async callStaff(tableNum, message = '') {
     return apiFetch('/api/call-staff', {
       method: 'POST',
@@ -121,14 +103,8 @@ export const api = {
   },
 };
 
-// ─── WebSocket (Realtime) ──────────────────────────────────────────────────────
+// ─── WebSocket (Realtime) ─────────────────────────────────────────────────────
 export const ws = {
-  /**
-   * เชื่อมต่อ WebSocket
-   * @param {'admin'|`table-${string}`} room  - ชื่อห้อง
-   * @param {(msg: object) => void} onMessage - callback รับ message
-   * @returns {{ close: () => void, send: (msg: object) => void }}
-   */
   connect(room, onMessage) {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const endpoint = room === 'admin'
@@ -145,15 +121,14 @@ export const ws = {
       socket = new WebSocket(endpoint);
 
       socket.addEventListener('open', () => {
-        retryMs = 1000; // reset backoff
-        // ping ทุก 25 วิ เพื่อกัน idle timeout
+        retryMs = 1000;
         pingTimer = setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) socket.send('ping');
         }, 25_000);
       });
 
       socket.addEventListener('message', (evt) => {
-        if (evt.data === 'pong') return; // ignore keepalive
+        if (evt.data === 'pong') return;
         try {
           const msg = JSON.parse(evt.data);
           onMessage(msg);
@@ -163,7 +138,6 @@ export const ws = {
       socket.addEventListener('close', () => {
         clearInterval(pingTimer);
         if (!closed) {
-          // auto-reconnect with exponential backoff
           setTimeout(connect, retryMs);
           retryMs = Math.min(retryMs * 1.5, 30_000);
         }
@@ -191,19 +165,12 @@ export const ws = {
   },
 };
 
-// ─── Auth helpers ──────────────────────────────────────────────────────────────
-
-/**
- * Login: ส่ง key ไปตรวจกับ Worker
- * ถ้าถูกต้อง → เก็บ key ใน localStorage
- */
+// ─── Auth helpers ─────────────────────────────────────────────────────────────
 export async function adminLogin(username, password) {
-  // สร้าง key = "username:password" แล้ว hash
   const raw  = `${username}:${password}`;
   const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
   const hash = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 
-  // ทดสอบโดย GET /api/meta ด้วย key นี้
   const res = await fetch('/api/meta', {
     headers: { 'X-Admin-Key': hash },
   });
@@ -224,3 +191,29 @@ export function adminLogout() {
 export function isLoggedIn() {
   return !!localStorage.getItem('kaosoi-auth');
 }
+
+// ─── Dark Mode (shared) ───────────────────────────────────────────────────────
+const _THEME_KEY = 'theme';
+
+export function getTheme() {
+  return localStorage.getItem(_THEME_KEY) || 'light';
+}
+
+export function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('darkToggleBtn');
+  if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+export function toggleTheme() {
+  const next = getTheme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(_THEME_KEY, next);
+  applyTheme(next);
+}
+
+// apply ทันทีเพื่อ prevent flash
+applyTheme(getTheme());
+
+document.addEventListener('DOMContentLoaded', () => {
+  applyTheme(getTheme());
+});
