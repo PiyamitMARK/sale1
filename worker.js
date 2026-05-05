@@ -257,7 +257,7 @@ async function handleUpdateOrder(request, path, env, ctx) {
   // Broadcast (waitUntil ป้องกัน cut-off)
   ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'order_updated', order: updated }));
 
-  // ถ้ามี batches ใหม่ → แจ้ง new_batch ด้วย เพื่อให้ admin ทราบและเล่นเสียง
+  // ถ้ามี batches ใหม่ → broadcast new_batch แยก เพื่อให้ admin เล่นเสียงได้ทันที
   if (body.batches !== undefined) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'new_batch', order: updated }));
   }
@@ -529,7 +529,6 @@ async function handleCallStaff(request, env) {
     .bind(id, table_num, message || '', now).run();
 
   const entry = { id, table_num, message, done: false, created_at: now };
-  // broadcast with both 'data' and 'entry' for compatibility
   await broadcastToRoom(env, 'admin', { type: 'call_staff', data: entry, entry });
 
   return json(entry, 201);
@@ -581,11 +580,11 @@ async function broadcastToRoom(env, roomName, msg) {
 }
 
 // ==================== Durable Object: TableRoom ====================
-// รับ WebSocket connections — ทำหน้าที่เป็น "ห้อง" สำหรับ broadcast
+// ใช้ WebSocket Hibernation API — DO จะ hibernate แล้ว sessions ไม่หาย
 export class TableRoom {
   constructor(state) {
-    this.state    = state;
-    this.sessions = new Set(); // Set<WebSocket>
+    this.state = state;
+    this.ctx   = state; // alias
   }
 
   async fetch(request) {
@@ -593,33 +592,36 @@ export class TableRoom {
 
     // Internal broadcast endpoint
     if (url.pathname === '/broadcast' && request.method === 'POST') {
-      const msg  = await request.text();
-      let closed = [];
-      this.sessions.forEach(ws => {
-        try { ws.send(msg); }
-        catch (_) { closed.push(ws); }
-      });
-      closed.forEach(ws => this.sessions.delete(ws));
+      const msg = await request.text();
+      // getWebSockets() คืน WS ทั้งหมดที่ยังเชื่อมอยู่ รวมถึงตอน DO hibernate
+      const sockets = this.state.getWebSockets();
+      for (const ws of sockets) {
+        try { ws.send(msg); } catch (_) {}
+      }
       return new Response('ok');
     }
 
-    // WebSocket upgrade
+    // WebSocket upgrade — ใช้ acceptWebSocket แทน accept() เพื่อรองรับ hibernation
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 });
     }
 
     const [client, server] = Object.values(new WebSocketPair());
-    server.accept();
-    this.sessions.add(server);
-
-    server.addEventListener('close', () => this.sessions.delete(server));
-    server.addEventListener('error', () => this.sessions.delete(server));
-
-    // ping-pong keep-alive
-    server.addEventListener('message', (evt) => {
-      if (evt.data === 'ping') server.send('pong');
-    });
+    this.state.acceptWebSocket(server); // hibernation-aware accept
 
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // Hibernation API callbacks — ถูกเรียกโดย runtime แทน addEventListener
+  async webSocketMessage(ws, message) {
+    if (message === 'ping') ws.send('pong');
+  }
+
+  async webSocketClose(ws) {
+    // ไม่ต้องทำอะไร runtime จัดการเอง
+  }
+
+  async webSocketError(ws) {
+    // ไม่ต้องทำอะไร
   }
 }

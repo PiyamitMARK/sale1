@@ -273,11 +273,14 @@ function startRealtimeListener() {
 
   // Subscribe realtime ผ่าน WebSocket
   _wsConn = ws.connect('admin', (msg) => {
-    if (msg.type === 'new_order' || msg.type === 'order_created' || msg.type === 'order_updated' || msg.type === 'order_deleted') {
+    if (msg.type === 'new_order' || msg.type === 'order_created' || msg.type === 'order_deleted') {
+      _loadOrders();
+    }
+    if (msg.type === 'order_updated') {
       _loadOrders();
     }
     if (msg.type === 'new_batch') {
-      // สั่งเพิ่ม → เล่นเสียงทันที ไม่ต้องรอ _loadOrders เปรียบเทียบ batch count
+      // สั่งเพิ่ม → เล่นเสียงทันที แล้ว reload
       playBatchAlert();
       _loadOrders();
     }
