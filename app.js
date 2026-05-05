@@ -365,8 +365,32 @@ function hideTableOrderBanner() {
   if (banner) banner.style.display = 'none';
 }
 
-document.querySelectorAll('.table-btn').forEach(btn => {
-  btn.addEventListener('click', () => selectTable(parseInt(btn.dataset.table)));
+// ==================== Table Buttons (dynamic, sync กับ qr.html) ====================
+const TABLE_COUNT_KEY = 'ks90-table-count';
+
+function renderTableButtons() {
+  const grid = document.getElementById('tableGrid');
+  if (!grid) return;
+  const count = Math.max(1, Math.min(99, parseInt(localStorage.getItem(TABLE_COUNT_KEY) || '9', 10)));
+  grid.innerHTML = Array.from({ length: count }, (_, i) => {
+    const t = i + 1;
+    return `<button type="button" class="table-btn" data-table="${t}">${t}</button>`;
+  }).join('');
+  grid.querySelectorAll('.table-btn').forEach(btn => {
+    btn.addEventListener('click', () => selectTable(parseInt(btn.dataset.table)));
+  });
+  // ถ้าโต๊ะที่เลือกอยู่เกินจำนวนใหม่ ให้ deselect
+  if (selectedTable && selectedTable > count) {
+    selectedTable = null;
+    document.getElementById('productsOverlay')?.classList.remove('hidden');
+  }
+}
+
+renderTableButtons();
+
+// sync แบบ realtime ถ้าแท็บอื่นเปลี่ยนค่า (เช่น เปิด qr.html แล้วกด สร้าง QR)
+window.addEventListener('storage', (e) => {
+  if (e.key === TABLE_COUNT_KEY) renderTableButtons();
 });
 
 // ==================== Products ====================

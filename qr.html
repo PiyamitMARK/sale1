@@ -214,9 +214,13 @@
   const urlPreview    = document.getElementById('urlPreview');
 
   // Auto-detect current URL base
-  // ตัด path ทั้งหมดออก เหลือแค่ origin เพื่อให้ได้ root URL เสมอ
   const autoBase = location.origin + '/';
   baseUrlInput.value = autoBase;
+
+  // โหลด / บันทึกจำนวนโต๊ะผ่าน localStorage (sync กับ index.html)
+  const TABLE_COUNT_KEY = 'ks90-table-count';
+  const savedCount = parseInt(localStorage.getItem(TABLE_COUNT_KEY) || '9', 10);
+  tableCountInput.value = savedCount;
 
   function getCustomerUrl(tableNum) {
     let base = baseUrlInput.value.trim();
@@ -232,6 +236,7 @@
 
   function generateQRs() {
     const count = Math.max(1, Math.min(99, parseInt(tableCountInput.value) || 9));
+    localStorage.setItem(TABLE_COUNT_KEY, String(count));
     qrGrid.innerHTML = '';
 
     for (let t = 1; t <= count; t++) {

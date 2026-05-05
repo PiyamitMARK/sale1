@@ -37,19 +37,11 @@
       <!-- Left: Products -->
       <section class="products-section">
 
-        <!-- Table selector -->
+        <!-- Table selector (จำนวนโต๊ะ sync กับ qr.html ผ่าน localStorage) -->
         <div class="table-bar">
           <span class="table-bar-label">🪑 เลือกโต๊ะ</span>
-          <div class="table-grid">
-            <button class="table-btn" data-table="1">1</button>
-            <button class="table-btn" data-table="2">2</button>
-            <button class="table-btn" data-table="3">3</button>
-            <button class="table-btn" data-table="4">4</button>
-            <button class="table-btn" data-table="5">5</button>
-            <button class="table-btn" data-table="6">6</button>
-            <button class="table-btn" data-table="7">7</button>
-            <button class="table-btn" data-table="8">8</button>
-            <button class="table-btn" data-table="9">9</button>
+          <div class="table-grid" id="tableGrid">
+            <!-- rendered by app.js จาก localStorage ks90-table-count -->
           </div>
         </div>
 
