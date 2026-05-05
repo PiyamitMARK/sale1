@@ -279,6 +279,10 @@ function startRealtimeListener() {
     if (msg.type === 'call_staff') {
       _handleCallStaffMsg(msg);
     }
+  }, () => {
+    // WS reconnect สำเร็จ → sync orders + call log ที่อาจหายไปตอนขาดการเชื่อมต่อ
+    _loadOrders();
+    _loadCallLog();
   });
 }
 

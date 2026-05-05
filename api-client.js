@@ -113,16 +113,17 @@ export const api = {
 
 // ─── WebSocket (Realtime) ─────────────────────────────────────────────────────
 export const ws = {
-  connect(room, onMessage) {
+  connect(room, onMessage, onReconnect) {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const endpoint = room === 'admin'
       ? `${protocol}//${location.host}/api/ws/admin`
       : `${protocol}//${location.host}/api/ws/table/${room.replace('table-', '')}`;
 
-    let socket    = null;
-    let closed    = false;
-    let retryMs   = 1000;
-    let pingTimer = null;
+    let socket           = null;
+    let closed           = false;
+    let retryMs          = 1000;
+    let pingTimer        = null;
+    let hasConnectedOnce = false;
 
     function connect() {
       if (closed) return;
@@ -133,6 +134,11 @@ export const ws = {
         pingTimer = setInterval(() => {
           if (socket.readyState === WebSocket.OPEN) socket.send('ping');
         }, 25_000);
+        // reconnect (ไม่ใช่ครั้งแรก) → แจ้ง caller ให้ sync ข้อมูลที่อาจหายไปตอน WS ขาด
+        if (hasConnectedOnce && typeof onReconnect === 'function') {
+          onReconnect();
+        }
+        hasConnectedOnce = true;
       });
 
       socket.addEventListener('message', (evt) => {
