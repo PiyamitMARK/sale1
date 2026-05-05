@@ -7,8 +7,6 @@
  *   - แต่ละ batch = การสั่งแต่ละรอบ
  *   - จ่ายแล้ว → clearTable เพื่อให้โต๊ะนั้นได้ order number ใหม่
  */
-
-import './darkmode.js';
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
 import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout } from './api-client.js';
 
