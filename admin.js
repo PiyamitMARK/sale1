@@ -276,6 +276,11 @@ function startRealtimeListener() {
     if (msg.type === 'new_order' || msg.type === 'order_created' || msg.type === 'order_updated' || msg.type === 'order_deleted') {
       _loadOrders();
     }
+    if (msg.type === 'new_batch') {
+      // สั่งเพิ่ม → เล่นเสียงทันที ไม่ต้องรอ _loadOrders เปรียบเทียบ batch count
+      playBatchAlert();
+      _loadOrders();
+    }
     if (msg.type === 'call_staff') {
       _handleCallStaffMsg(msg);
     }
@@ -359,7 +364,7 @@ async function _loadCallLog() {
 }
 
 function _handleCallStaffMsg(msg) {
-  const e = msg.data;
+  const e = msg.data || msg.entry;
   if (!e) return;
   callLogEntries = callLogEntries.filter(x => x.id !== e.id);
   callLogEntries.push(e);

@@ -257,6 +257,11 @@ async function handleUpdateOrder(request, path, env, ctx) {
   // Broadcast (waitUntil ป้องกัน cut-off)
   ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'order_updated', order: updated }));
 
+  // ถ้ามี batches ใหม่ → แจ้ง new_batch ด้วย เพื่อให้ admin ทราบและเล่นเสียง
+  if (body.batches !== undefined) {
+    ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'new_batch', order: updated }));
+  }
+
   // ถ้ามี status → แจ้งห้องโต๊ะด้วย
   if (body.status) {
     ctx.waitUntil(broadcastToRoom(env, `table-${updated.table_num}`, { type: 'order_updated', id: updated.id, status: body.status, order: updated }));
@@ -524,7 +529,8 @@ async function handleCallStaff(request, env) {
     .bind(id, table_num, message || '', now).run();
 
   const entry = { id, table_num, message, done: false, created_at: now };
-  await broadcastToRoom(env, 'admin', { type: 'call_staff', entry });
+  // broadcast with both 'data' and 'entry' for compatibility
+  await broadcastToRoom(env, 'admin', { type: 'call_staff', data: entry, entry });
 
   return json(entry, 201);
 }
