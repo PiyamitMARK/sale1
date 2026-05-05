@@ -1221,6 +1221,26 @@ tr.drag-over td { background: var(--cream-dark) !important; }
     break-inside: avoid;
     page-break-inside: avoid;
   }
+/* ---- Clear Mode Radio Options ---- */
+.clear-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--ease);
+  background: var(--cream);
+}
+.clear-mode-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--cream-mid);
+}
+.clear-mode-option input[type="radio"] { margin-top: .2rem; flex-shrink: 0; accent-color: var(--accent); }
+.clear-mode-title { font-weight: 700; font-size: .9rem; margin-bottom: .2rem; }
+.clear-mode-desc  { font-size: .8rem; color: var(--brown-light); line-height: 1.4; }
+
 }
   </style>
 </head>
@@ -1677,14 +1697,33 @@ tr.drag-over td { background: var(--cream-dark) !important; }
      MODAL: Clear Data
      ========================================================= -->
 <div class="bo-modal" id="clearDataModal">
-  <div class="bo-modal-box" style="max-width:420px">
+  <div class="bo-modal-box" style="max-width:440px">
     <div class="bo-modal-header">
-      <span class="bo-modal-title">🗑 ล้างรายการสั่งซื้อทั้งหมด</span>
+      <span class="bo-modal-title">🗑 ล้างข้อมูล</span>
       <button class="bo-modal-close" data-close="clearDataModal">✕</button>
     </div>
     <div class="bo-modal-body">
-      <p style="font-size:.88rem;color:var(--brown-light)">กรอกรหัสผ่านแอดมินเพื่อยืนยันการล้างข้อมูลและรีเซ็ตหมายเลขออเดอร์</p>
-      <div class="field">
+
+      <!-- เลือกโหมด -->
+      <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem">
+        <label class="clear-mode-option" id="clearModeOrdersLabel">
+          <input type="radio" name="clearMode" id="clearModeOrders" value="orders" checked>
+          <div class="clear-mode-text">
+            <div class="clear-mode-title">🗑 ล้างออเดอร์</div>
+            <div class="clear-mode-desc">ลบ orders + call log ทั้งหมด รีเซ็ตเลขออเดอร์เป็น 1001 — เมนูยังอยู่</div>
+          </div>
+        </label>
+        <label class="clear-mode-option" id="clearModeAllLabel">
+          <input type="radio" name="clearMode" id="clearModeAll" value="all">
+          <div class="clear-mode-text">
+            <div class="clear-mode-title" style="color:var(--red)">💥 Reset ทั้งหมด</div>
+            <div class="clear-mode-desc">ลบทุกอย่าง — orders, เมนู, call log, meta — เริ่มต้นใหม่ 100%</div>
+          </div>
+        </label>
+      </div>
+
+      <p style="font-size:.88rem;color:var(--brown-light)">กรอกรหัสผ่านแอดมินเพื่อยืนยัน</p>
+      <div class="field" style="margin-top:.5rem">
         <label class="field-label">รหัสยืนยัน</label>
         <input type="password" id="clearDataCode" class="field-input" placeholder="••••••" autocomplete="off">
       </div>
@@ -1692,7 +1731,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
     </div>
     <div class="bo-modal-footer">
       <button class="btn btn-outline" data-close="clearDataModal">ยกเลิก</button>
-      <button class="btn btn-danger" id="clearDataConfirm">ล้างข้อมูล</button>
+      <button class="btn btn-danger" id="clearDataConfirm">ยืนยัน</button>
     </div>
   </div>
 </div>
@@ -3327,6 +3366,7 @@ function openProductTypeModal() {
 document.getElementById('clearDataBtn').addEventListener('click', () => {
   document.getElementById('clearDataCode').value = '';
   document.getElementById('clearDataError').textContent = '';
+  document.getElementById('clearModeOrders').checked = true; // default
   document.getElementById('clearDataModal').classList.add('open');
 });
 
@@ -3334,6 +3374,8 @@ document.getElementById('clearDataConfirm').addEventListener('click', async () =
   const ADMIN_PASS_HASH = 'bfa474b7bef2a64f28c6d8ec0c668174f381bdfc7ad5e0736fb0a9fadf681be0';
   const code  = document.getElementById('clearDataCode').value;
   const errEl = document.getElementById('clearDataError');
+  const mode  = document.querySelector('input[name="clearMode"]:checked')?.value || 'orders';
+
   const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
   const hash    = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
   if (hash !== ADMIN_PASS_HASH) {
@@ -3342,20 +3384,54 @@ document.getElementById('clearDataConfirm').addEventListener('click', async () =
     document.getElementById('clearDataCode').focus();
     return;
   }
+
   errEl.textContent = '';
+  const confirmBtn = document.getElementById('clearDataConfirm');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'กำลังล้าง...';
+
   try {
     const today = new Date(Date.now() + 7*60*60*1000).toISOString().slice(0,10);
-    // ลบ orders ทั้งหมด + reset meta.orderNumber
-    const orders = await api.getOrders();
-    if (Array.isArray(orders)) {
-      await Promise.all(orders.map(o => api.deleteOrder(o.id).catch(() => {})));
+
+    if (mode === 'all') {
+      // ── Reset ALL ──────────────────────────────────────────
+      // 1. ลบ orders ทั้งหมด
+      const orders = await api.getOrders();
+      if (Array.isArray(orders)) {
+        await Promise.all(orders.map(o => api.deleteOrder(o.id).catch(() => {})));
+      }
+      // 2. ลบเมนูทั้งหมด (PUT empty object)
+      await api.putMenu({});
+      // 3. ล้าง call log
+      await api.clearCallLog().catch(() => {});
+      // 4. reset meta
+      await api.updateMeta({ orderNumber: 1000, lastOrderDate: today });
+      // 5. ล้าง in-memory + localStorage cache
+      LIVE_ORDERS = []; MOCK_ORDERS = [];
+      try { localStorage.removeItem('ks90-menu'); } catch(_) {}
+      try { localStorage.removeItem('ks90-categories'); } catch(_) {}
+      try { localStorage.removeItem('ks90-meta'); } catch(_) {}
+
+      document.getElementById('clearDataModal').classList.remove('open');
+      alert('💥 Reset เสร็จแล้ว! ข้อมูลทั้งหมดถูกลบ เริ่มต้นใหม่ได้เลย');
+
+    } else {
+      // ── ล้างแค่ orders ─────────────────────────────────────
+      const orders = await api.getOrders();
+      if (Array.isArray(orders)) {
+        await Promise.all(orders.map(o => api.deleteOrder(o.id).catch(() => {})));
+      }
+      await api.updateMeta({ orderNumber: 1000, lastOrderDate: today });
+      LIVE_ORDERS = []; MOCK_ORDERS = [];
+
+      document.getElementById('clearDataModal').classList.remove('open');
+      alert('✅ ล้างข้อมูลออเดอร์เรียบร้อย');
     }
-    await api.updateMeta({ orderNumber: 1000, lastOrderDate: today });
-    LIVE_ORDERS = []; MOCK_ORDERS = [];
-    document.getElementById('clearDataModal').classList.remove('open');
-    alert('✅ ล้างข้อมูลเรียบร้อย');
   } catch(e) {
     errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'ยืนยัน';
   }
 });
 
