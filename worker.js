@@ -372,7 +372,7 @@ async function handleGetMenu(env) {
   return json({});
 }
 
-async function handlePutMenu(request, env) {
+async function handlePutMenu(request, env, ctx) {
   await _ensureMenuTable(env);
   const body = await request.json(); // { [id]: item }
 
@@ -402,7 +402,7 @@ async function handlePutMenu(request, env) {
   if (ctx?.waitUntil) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'menu_updated' }));
   } else {
-    await broadcastToRoom(env, 'admin', { type: 'menu_updated' });
+    broadcastToRoom(env, 'admin', { type: 'menu_updated' });
   }
   return json({ ok: true });
 }
