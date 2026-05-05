@@ -99,9 +99,13 @@ function formatDateOnly(isoString) {
     weekday:'long', day:'numeric', month:'long', year:'numeric',
   });
 }
-function getDateKey(isoString) { return new Date(isoString).toISOString().slice(0, 10); }
+function getDateKey(isoString) {
+  // แปลงเป็น Bangkok time (UTC+7) ก่อน slice
+  return new Date(new Date(isoString).getTime() + 7*60*60*1000).toISOString().slice(0, 10);
+}
 function isToday(isoString) {
-  return getDateKey(isoString) === new Date().toISOString().slice(0, 10);
+  const todayBKK = new Date(Date.now() + 7*60*60*1000).toISOString().slice(0, 10);
+  return getDateKey(isoString) === todayBKK;
 }
 function getAllItems(order) {
   if (order.batches) return order.batches.flat();
@@ -270,7 +274,7 @@ function startRealtimeListener() {
 
   // Subscribe realtime ผ่าน WebSocket
   _wsConn = ws.connect('admin', (msg) => {
-    if (msg.type === 'order_created' || msg.type === 'order_updated' || msg.type === 'order_deleted') {
+    if (msg.type === 'new_order' || msg.type === 'order_created' || msg.type === 'order_updated' || msg.type === 'order_deleted') {
       _loadOrders();
     }
     if (msg.type === 'call_staff') {

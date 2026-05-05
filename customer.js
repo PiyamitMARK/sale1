@@ -120,6 +120,7 @@ function _startMenuSubscribe() {
   }).catch(() => {});
 
   // subscribe realtime ผ่าน WebSocket (table room — ไม่ต้องการ admin key)
+  if (_menuSocket) { _menuSocket.close(); _menuSocket = null; }
   _menuSocket = ws.connect(`table-${tableNum || '0'}`, (msg) => {
     if (msg.type === 'menu_updated') {
       api.getMenu().then(raw => {
@@ -485,12 +486,9 @@ function startKitchenStatusWatcher(orderKey) {
 
   // subscribe realtime ผ่าน WebSocket (table room)
   const socket = ws.connect(`table-${tableNum}`, (msg) => {
-    if (msg.type === 'order_updated' && msg.id === orderKey) {
-      updateKitchenBar(msg.status || 'pending');
-    }
-    // Worker broadcast 'order_status' message
-    if (msg.type === 'order_status' && msg.id === orderKey) {
-      updateKitchenBar(msg.status || 'pending');
+    if ((msg.type === 'order_updated' || msg.type === 'status_changed') &&
+        (msg.id === orderKey || msg.order?.id === orderKey)) {
+      updateKitchenBar(msg.status || msg.order?.status || 'pending');
     }
   });
 
@@ -1154,7 +1152,8 @@ function attachHistoryListener() {
 
   // subscribe realtime ผ่าน WebSocket
   const socket = ws.connect(`table-${tableNum}`, (msg) => {
-    if (msg.type === 'order_updated' && msg.id === activeOrderKey) {
+    if ((msg.type === 'order_updated' || msg.type === 'status_changed') &&
+        (msg.id === activeOrderKey || msg.order?.id === activeOrderKey)) {
       api.getOrder(activeOrderKey).then(order => {
         if (!order) { showHistoryEmpty(); return; }
         renderHistoryContent(_normalizeOrder(order));

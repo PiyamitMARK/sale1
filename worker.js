@@ -180,6 +180,7 @@ async function handleCreateOrder(request, env) {
     // วันใหม่ → reset เป็น 1001
     orderNum = 1001;
     await env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'lastOrderDate'").bind(today).run();
+    await env.DB.prepare("UPDATE meta SET value = '1001' WHERE key = 'orderNumber'").run();
   }
 
   const nextNum = orderNum + 1;
@@ -252,7 +253,7 @@ async function handleUpdateOrder(request, path, env) {
 
   // ถ้ามี status → แจ้งห้องโต๊ะด้วย
   if (body.status) {
-    await broadcastToRoom(env, `table-${updated.table_num}`, { type: 'status_changed', status: body.status, order: updated });
+    await broadcastToRoom(env, `table-${updated.table_num}`, { type: 'order_updated', id: updated.id, status: body.status, order: updated });
   }
 
   return json(updated);
