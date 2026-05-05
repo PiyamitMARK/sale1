@@ -27,6 +27,7 @@
   { "tag": "v1", "new_sqlite_classes": ["TableRoom"] }
 	],
 	"assets": {
-		"directory": "./"
+		"directory": "./",
+		"exclude": [".git", "node_modules", "*.pack", "*.log", "schema.sql"]
 	}
 }
