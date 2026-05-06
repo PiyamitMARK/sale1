@@ -1381,7 +1381,84 @@ tr.drag-over td { background: var(--cream-dark) !important; }
   }
 }
 /* ============================================================
-   KITCHEN DISPLAY PANEL
+   SHIFT / รายงานปิดกะ
+   ============================================================ */
+.shift-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: .85rem;
+}
+.shift-kpi {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+.shift-kpi-icon  { font-size: 1.4rem; line-height: 1; }
+.shift-kpi-label { font-size: .75rem; color: var(--brown-light); margin-top: .3rem; }
+.shift-kpi-val   { font-family: 'Mitr', sans-serif; font-size: 1.35rem; font-weight: 700; }
+.shift-kpi.accent { border-color: var(--accent); background: #fff8f0; }
+[data-theme="dark"] .shift-kpi.accent { background: #2a1a0a; }
+
+.shift-pay-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: .75rem;
+}
+.shift-pay-card {
+  background: var(--cream-mid);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: .85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.shift-pay-icon  { font-size: 1.5rem; }
+.shift-pay-label { font-size: .78rem; color: var(--brown-light); }
+.shift-pay-val   { font-family: 'Mitr', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--brown); }
+
+.shift-order-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.shift-order-table thead th {
+  background: var(--cream-mid);
+  padding: .5rem .75rem;
+  text-align: left;
+  font-family: 'Mitr', sans-serif;
+  font-size: .76rem; font-weight: 700;
+  color: var(--brown-light);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  border-bottom: 2px solid var(--cream-dark);
+  white-space: nowrap;
+}
+.shift-order-table td {
+  padding: .55rem .75rem;
+  border-bottom: 1px solid var(--cream-dark);
+  vertical-align: middle;
+}
+.shift-order-table tbody tr:last-child td { border-bottom: none; }
+.shift-order-table tbody tr:hover td { background: var(--cream-mid); }
+
+.shift-open-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .72rem; font-weight: 700;
+  padding: .18rem .55rem; border-radius: var(--pill);
+}
+.shift-badge-open   { background: #d1f7e5; color: #1a7a4a; }
+.shift-badge-closed { background: var(--cream-dark); color: var(--brown-light); }
+[data-theme="dark"] .shift-badge-open { background: #0a2a18; color: #5fe0a0; }
+
+/* Print receipt */
+@media print {
+  .shift-no-print { display: none !important; }
+  .shift-print-only { display: block !important; }
+}
+.shift-print-only { display: none; }
+
+  </style>
    ============================================================ */
 .kitchen-live-dot {
   width: 9px; height: 9px;
@@ -1570,6 +1647,9 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </button>
       <button class="bo-nav-item" data-panel="kitchen">
         <span class="bo-nav-icon">👨‍🍳</span>Kitchen Display
+      </button>
+      <button class="bo-nav-item" data-panel="shift">
+        <span class="bo-nav-icon">💰</span>รายงานปิดกะ
       </button>
       <button class="bo-nav-item" data-panel="topsellers">
         <span class="bo-nav-icon">🏆</span>เมนูขายดี
@@ -2056,6 +2136,115 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </div>
 
       <!-- =========================================================
+           PANEL: SHIFT / รายงานปิดกะ
+           ========================================================= -->
+      <div class="bo-panel" id="panelShift">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">💰 รายงานปิดกะ</div>
+            <div class="bo-panel-sub" id="shiftDateLabel">—</div>
+          </div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-ghost btn-sm" id="shiftRefreshBtn">🔄 รีเฟรช</button>
+            <button class="btn btn-outline btn-sm shift-no-print" id="shiftPrintBtn">🖨 พิมพ์ใบสรุปกะ</button>
+            <button class="btn btn-primary shift-no-print" id="shiftCloseBtn">🔒 ปิดกะ</button>
+          </div>
+        </div>
+
+        <!-- KPI summary -->
+        <div class="shift-kpi-row" id="shiftKpiRow">
+          <div class="shift-kpi accent">
+            <span class="shift-kpi-icon">💰</span>
+            <div class="shift-kpi-label">ยอดขายรวมกะนี้</div>
+            <div class="shift-kpi-val" id="shiftRevenue">฿0</div>
+          </div>
+          <div class="shift-kpi">
+            <span class="shift-kpi-icon">🧾</span>
+            <div class="shift-kpi-label">จำนวนออเดอร์ (จ่ายแล้ว)</div>
+            <div class="shift-kpi-val" id="shiftOrderCount">0</div>
+          </div>
+          <div class="shift-kpi">
+            <span class="shift-kpi-icon">📊</span>
+            <div class="shift-kpi-label">เฉลี่ย/ออเดอร์</div>
+            <div class="shift-kpi-val" id="shiftAvg">฿0</div>
+          </div>
+          <div class="shift-kpi">
+            <span class="shift-kpi-icon">🪑</span>
+            <div class="shift-kpi-label">โต๊ะที่ยังค้างอยู่</div>
+            <div class="shift-kpi-val" id="shiftOpenTables">0</div>
+          </div>
+        </div>
+
+        <!-- Payment breakdown -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">💳 ยอดแยกตามช่องทางชำระเงิน</div>
+            <div class="shift-pay-grid" id="shiftPayGrid">
+              <div class="loading-row"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ต้องนำส่ง -->
+        <div class="card">
+          <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
+            <div>
+              <div class="card-title" style="margin-bottom:.2rem">📦 ยอดที่ต้องนำส่ง</div>
+              <div style="font-size:.82rem;color:var(--brown-light)">เงินสดที่รับมา — ต้องนำส่งให้เจ้าของร้าน</div>
+            </div>
+            <div style="font-family:'Mitr',sans-serif;font-size:2rem;font-weight:700;color:var(--accent)" id="shiftCashToSubmit">฿0</div>
+          </div>
+        </div>
+
+        <!-- Order list for this shift -->
+        <div class="card">
+          <div class="card-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem">
+              <div class="card-title" style="margin-bottom:0">🧾 รายการออเดอร์กะนี้</div>
+              <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+                <select class="field-input" id="shiftStatusFilter" style="width:auto;padding:.3rem .65rem;font-size:.82rem">
+                  <option value="">ทั้งหมด</option>
+                  <option value="paid">จ่ายแล้ว</option>
+                  <option value="pending">รอรับ</option>
+                  <option value="cooking">กำลังทำ</option>
+                  <option value="served">เสิร์ฟแล้ว</option>
+                </select>
+                <span style="font-size:.8rem;color:var(--brown-light)" id="shiftOrderCountLabel">0 รายการ</span>
+              </div>
+            </div>
+            <div style="overflow-x:auto">
+              <table class="shift-order-table">
+                <thead>
+                  <tr>
+                    <th>ออเดอร์</th>
+                    <th>เวลา</th>
+                    <th>โต๊ะ</th>
+                    <th>รายการ</th>
+                    <th style="text-align:right">ยอด (฿)</th>
+                    <th>ชำระ</th>
+                    <th>สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody id="shiftOrderBody">
+                  <tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shift history -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">📋 ประวัติการปิดกะ</div>
+            <div id="shiftHistoryList" style="display:flex;flex-direction:column;gap:.5rem">
+              <div style="font-size:.85rem;color:var(--brown-light)">ยังไม่มีประวัติการปิดกะ</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================================
            PANEL: KITCHEN DISPLAY
            ========================================================= -->
       <div class="bo-panel" id="panelKitchen">
@@ -2298,13 +2487,14 @@ overlay.addEventListener('click', () => {
 
 // ---- panel nav ----
 const PANEL_TITLES = {
-  dashboard: 'Dashboard วันนี้',
-  kitchen: 'Kitchen Display',
-  export: 'Export Sheet',
+  dashboard:  'Dashboard วันนี้',
+  kitchen:    'Kitchen Display',
+  shift:      'รายงานปิดกะ',
+  export:     'Export Sheet',
   topsellers: 'เมนูขายดี',
-  history: 'ย้อนหลัง 1 เดือน',
-  menu: 'จัดการเมนู',
-  qr: 'QR Code โต๊ะ',
+  history:    'ย้อนหลัง 1 เดือน',
+  menu:       'จัดการเมนู',
+  qr:         'QR Code โต๊ะ',
 };
 
 let activePanelId = 'dashboard';
@@ -2323,6 +2513,7 @@ function switchPanel(id) {
   overlay.classList.remove('open');
   if (id === 'dashboard') loadDashboard();
   if (id === 'kitchen')   initKitchenDisplay();
+  if (id === 'shift')     initShiftPanel();
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
@@ -4105,6 +4296,215 @@ document.getElementById('clearDataConfirm').addEventListener('click', async () =
     errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
   }
 });
+
+// ============================================================
+//  SHIFT / รายงานปิดกะ
+// ============================================================
+let _shiftOrders  = [];
+let _shiftInited  = false;
+
+const SHIFT_HISTORY_KEY = 'ks90-shift-history';
+
+function initShiftPanel() {
+  const todayISO = new Date(Date.now() + 7*3600*1000).toISOString().slice(0,10);
+  document.getElementById('shiftDateLabel').textContent = 'กะวันที่ ' + todayISO;
+
+  if (!_shiftInited) {
+    _shiftInited = true;
+    document.getElementById('shiftRefreshBtn').addEventListener('click', loadShiftData);
+    document.getElementById('shiftStatusFilter').addEventListener('change', renderShiftTable);
+    document.getElementById('shiftPrintBtn').addEventListener('click', printShiftReport);
+    document.getElementById('shiftCloseBtn').addEventListener('click', closeShift);
+  }
+  loadShiftData();
+  renderShiftHistory();
+}
+
+async function loadShiftData() {
+  try {
+    const orders = await api.getOrders({ today: true });
+    _shiftOrders = orders || [];
+    renderShiftSummary();
+    renderShiftTable();
+  } catch(e) {
+    document.getElementById('shiftOrderBody').innerHTML =
+      `<tr><td colspan="7" style="color:var(--red);padding:.75rem">❌ โหลดไม่ได้: ${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderShiftSummary() {
+  const paid   = _shiftOrders.filter(o => o.status === 'paid');
+  const active = _shiftOrders.filter(o => ['pending','cooking','served'].includes(o.status));
+  const revenue = paid.reduce((s,o) => s + (o.total || 0), 0);
+  const avg     = paid.length ? revenue / paid.length : 0;
+
+  // payment breakdown
+  const payMap = { cash: 0, qr: 0, card: 0, transfer: 0, other: 0 };
+  paid.forEach(o => {
+    const k = o.payment || 'other';
+    payMap[k] = (payMap[k] || 0) + (o.total || 0);
+  });
+
+  document.getElementById('shiftRevenue').textContent    = '฿' + revenue.toLocaleString('th-TH', {minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('shiftOrderCount').textContent = paid.length;
+  document.getElementById('shiftAvg').textContent        = '฿' + avg.toLocaleString('th-TH', {minimumFractionDigits:0,maximumFractionDigits:0});
+  document.getElementById('shiftOpenTables').textContent = active.length;
+  document.getElementById('shiftCashToSubmit').textContent = '฿' + (payMap.cash || 0).toLocaleString('th-TH', {minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const payLabels = { cash:'เงินสด', qr:'QR พร้อมเพย์', card:'บัตรเครดิต', transfer:'โอน', other:'อื่นๆ' };
+  const payIcons  = { cash:'💵', qr:'📱', card:'💳', transfer:'🏦', other:'🪙' };
+  document.getElementById('shiftPayGrid').innerHTML = Object.entries(payLabels).map(([k,label]) =>
+    `<div class="shift-pay-card">
+      <div class="shift-pay-icon">${payIcons[k]}</div>
+      <div class="shift-pay-label">${label}</div>
+      <div class="shift-pay-val">฿${(payMap[k]||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+    </div>`
+  ).join('');
+}
+
+function renderShiftTable() {
+  const filter = document.getElementById('shiftStatusFilter').value;
+  const rows   = filter ? _shiftOrders.filter(o => o.status === filter) : _shiftOrders;
+
+  document.getElementById('shiftOrderCountLabel').textContent = rows.length + ' รายการ';
+
+  const statusLabel = { pending:'⏳ รอรับ', cooking:'🍳 กำลังทำ', served:'🍽 เสิร์ฟแล้ว', paid:'✅ จ่ายแล้ว', cancelled:'❌ ยกเลิก' };
+  const payLabel    = { cash:'💵 เงินสด', qr:'📱 QR', card:'💳 บัตร', transfer:'🏦 โอน' };
+
+  if (!rows.length) {
+    document.getElementById('shiftOrderBody').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;color:var(--brown-light);padding:1.5rem">ไม่มีรายการ</td></tr>`;
+    return;
+  }
+
+  document.getElementById('shiftOrderBody').innerHTML = [...rows]
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(o => {
+      let batches = []; try { batches = JSON.parse(o.batches||'[]'); } catch(_) {}
+      const items = batches.flatMap(b => Array.isArray(b) ? b : (b.items||[]));
+      const itemSummary = items.slice(0,3).map(i => escHtml(i.name||'')).join(', ')
+        + (items.length > 3 ? ` +${items.length-3}` : '');
+      const t = new Date(o.created_at);
+      const timeStr = t.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+      const st = o.status;
+      const badgeCls = st==='paid' ? 'shift-badge-open' : 'shift-badge-closed';
+      return `<tr>
+        <td><strong>#${o.order_num}</strong></td>
+        <td style="white-space:nowrap">${timeStr}</td>
+        <td>${o.is_takeaway ? '📦' : escHtml(String(o.table_num))}</td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(itemSummary)}">${itemSummary||'—'}</td>
+        <td style="text-align:right;font-weight:700">${(o.total||0).toLocaleString('th-TH',{minimumFractionDigits:2})}</td>
+        <td style="white-space:nowrap">${payLabel[o.payment]||'—'}</td>
+        <td><span class="shift-open-badge ${badgeCls}">${statusLabel[st]||st}</span></td>
+      </tr>`;
+    }).join('');
+}
+
+function closeShift() {
+  const paid    = _shiftOrders.filter(o => o.status === 'paid');
+  const revenue = paid.reduce((s,o) => s + (o.total||0), 0);
+  const cash    = paid.filter(o => o.payment === 'cash').reduce((s,o) => s + (o.total||0), 0);
+  const todayISO = new Date(Date.now() + 7*3600*1000).toISOString().slice(0,16).replace('T',' ');
+
+  if (!confirm(`ยืนยันปิดกะ?\n\nยอดรวม: ฿${revenue.toLocaleString('th-TH',{minimumFractionDigits:2})}\nเงินสดนำส่ง: ฿${cash.toLocaleString('th-TH',{minimumFractionDigits:2})}`)) return;
+
+  const history = JSON.parse(localStorage.getItem(SHIFT_HISTORY_KEY) || '[]');
+  const payMap = {};
+  paid.forEach(o => { const k = o.payment||'other'; payMap[k] = (payMap[k]||0) + (o.total||0); });
+  history.unshift({
+    closedAt: todayISO, revenue, cashToSubmit: cash,
+    orderCount: paid.length, payMap,
+  });
+  localStorage.setItem(SHIFT_HISTORY_KEY, JSON.stringify(history.slice(0,30)));
+  renderShiftHistory();
+  alert('✅ ปิดกะเรียบร้อย บันทึกแล้ว');
+}
+
+function renderShiftHistory() {
+  const history = JSON.parse(localStorage.getItem(SHIFT_HISTORY_KEY) || '[]');
+  const el = document.getElementById('shiftHistoryList');
+  if (!history.length) {
+    el.innerHTML = `<div style="font-size:.85rem;color:var(--brown-light)">ยังไม่มีประวัติการปิดกะ</div>`;
+    return;
+  }
+  const payIcons = { cash:'💵', qr:'📱', card:'💳', transfer:'🏦', other:'🪙' };
+  el.innerHTML = history.map((h,i) => `
+    <div style="background:var(--cream-mid);border:1.5px solid var(--cream-dark);border-radius:var(--radius-sm);padding:.75rem 1rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:.78rem;color:var(--brown-light)">ปิดกะ</div>
+        <div style="font-family:'Mitr',sans-serif;font-weight:700;font-size:.95rem">${escHtml(h.closedAt)}</div>
+        <div style="font-size:.78rem;color:var(--brown-light);margin-top:.15rem">${h.orderCount} ออเดอร์ · ${Object.entries(h.payMap||{}).map(([k,v]) => `${payIcons[k]||'🪙'} ฿${v.toLocaleString('th-TH',{minimumFractionDigits:0})}`).join(' · ')}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:.75rem;color:var(--brown-light)">ยอดรวม</div>
+        <div style="font-family:'Mitr',sans-serif;font-size:1.1rem;font-weight:700;color:var(--accent)">฿${h.revenue.toLocaleString('th-TH',{minimumFractionDigits:2})}</div>
+        <div style="font-size:.75rem;color:var(--brown-light)">เงินสดนำส่ง ฿${h.cashToSubmit.toLocaleString('th-TH',{minimumFractionDigits:2})}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="deleteShiftHistory(${i})" style="flex-shrink:0">🗑</button>
+    </div>`).join('');
+}
+
+function deleteShiftHistory(idx) {
+  if (!confirm('ลบรายการนี้?')) return;
+  const history = JSON.parse(localStorage.getItem(SHIFT_HISTORY_KEY) || '[]');
+  history.splice(idx, 1);
+  localStorage.setItem(SHIFT_HISTORY_KEY, JSON.stringify(history));
+  renderShiftHistory();
+}
+window.deleteShiftHistory = deleteShiftHistory;
+
+function printShiftReport() {
+  const paid    = _shiftOrders.filter(o => o.status === 'paid');
+  const revenue = paid.reduce((s,o) => s + (o.total||0), 0);
+  const cash    = paid.filter(o => o.payment==='cash').reduce((s,o) => s + (o.total||0), 0);
+  const qr      = paid.filter(o => o.payment==='qr').reduce((s,o) => s + (o.total||0), 0);
+  const card    = paid.filter(o => o.payment==='card').reduce((s,o) => s + (o.total||0), 0);
+  const transfer= paid.filter(o => o.payment==='transfer').reduce((s,o) => s + (o.total||0), 0);
+  const todayISO = new Date(Date.now() + 7*3600*1000).toISOString().slice(0,16).replace('T',' ');
+  const fmt = n => '฿' + n.toLocaleString('th-TH',{minimumFractionDigits:2});
+  const line = '--------------------------------';
+  const win  = window.open('', '_blank', 'width=340,height=600');
+  if (!win) { alert('กรุณาอนุญาต Pop-up ก่อน'); return; }
+  win.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
+<title>ใบสรุปกะ</title>
+<style>
+  @page { size:80mm auto; margin:4mm; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:'Courier New',monospace; font-size:11pt; color:#000; background:#fff; width:72mm; }
+  .c{ text-align:center; } .r{ text-align:right; }
+  .b{ font-weight:bold; } .lg{ font-size:14pt; }
+  hr{ border:none; border-top:1px dashed #000; margin:4pt 0; }
+  .row{ display:flex; justify-content:space-between; padding:1pt 0; }
+  .no-print{ display:flex; gap:8px; justify-content:center; margin-top:12pt; }
+  .no-print button{ padding:5px 16px; border-radius:6px; cursor:pointer; font-size:10pt; border:1.5px solid #333; }
+  .btn-do{ background:#3d2b1f; color:#fff; border-color:#3d2b1f; }
+  @media print{ .no-print{ display:none !important; } }
+</style></head><body>
+<div class="c b">🍛 ข้าวซอย 90</div>
+<div class="c" style="font-size:9pt;margin-top:2pt">ใบสรุปกะ</div>
+<hr>
+<div class="row"><span>วันที่/เวลา</span><span>${todayISO}</span></div>
+<hr>
+<div class="row"><span>ออเดอร์ทั้งหมด</span><span class="b">${paid.length} รายการ</span></div>
+<hr>
+<div class="row"><span>💵 เงินสด</span><span>${fmt(cash)}</span></div>
+<div class="row"><span>📱 QR พร้อมเพย์</span><span>${fmt(qr)}</span></div>
+<div class="row"><span>💳 บัตรเครดิต</span><span>${fmt(card)}</span></div>
+<div class="row"><span>🏦 โอน</span><span>${fmt(transfer)}</span></div>
+<hr>
+<div class="row b lg"><span>รวมยอดขาย</span><span>${fmt(revenue)}</span></div>
+<hr>
+<div class="row b"><span>📦 เงินสดนำส่ง</span><span>${fmt(cash)}</span></div>
+<hr>
+<div class="c" style="font-size:9pt;margin-top:4pt">ขอบคุณที่ใช้บริการ 🙏</div>
+<div class="no-print">
+  <button class="btn-do" onclick="window.print()">🖨 พิมพ์</button>
+  <button onclick="window.close()">✕ ปิด</button>
+</div>
+</body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 600);
+}
 
 // ============================================================
 //  KITCHEN DISPLAY
