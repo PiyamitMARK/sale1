@@ -1122,8 +1122,166 @@ tr.drag-over td { background: var(--cream-dark) !important; }
   .bo-topbar-title { font-size: .88rem; }
 }
 /* ============================================================
-   QR PANEL
+   DASHBOARD PANEL
    ============================================================ */
+.dash-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .85rem;
+}
+@media (min-width: 640px) { .dash-kpi-row { grid-template-columns: repeat(4, 1fr); } }
+
+.dash-kpi {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+.dash-kpi::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--accent);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.dash-kpi.kpi-green::before  { background: var(--green); }
+.dash-kpi.kpi-blue::before   { background: #1d4ed8; }
+.dash-kpi.kpi-purple::before { background: #7c3aed; }
+
+.dash-kpi-icon  { font-size: 1.3rem; line-height: 1; }
+.dash-kpi-label { font-size: .72rem; color: var(--brown-light); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.dash-kpi-val   { font-family: 'Mitr', sans-serif; font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--brown); }
+.dash-kpi-sub   { font-size: .75rem; color: var(--brown-light); }
+.dash-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: .12rem .45rem;
+  border-radius: var(--pill);
+}
+.trend-up   { background: #d4f0e5; color: #156a3a; }
+.trend-down { background: #fde8e8; color: #c0392b; }
+.trend-flat { background: var(--cream-dark); color: var(--brown-light); }
+[data-theme="dark"] .trend-up   { background: #14532d; color: #86efac; }
+[data-theme="dark"] .trend-down { background: #4c1d1d; color: #fca5a5; }
+
+/* hourly chart */
+.dash-hourly-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 80px;
+  padding-bottom: 1.4rem;
+  position: relative;
+}
+.dash-hour-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+}
+.dash-hour-bar {
+  width: 100%;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+  transition: opacity .15s;
+}
+.dash-hour-bar:hover { opacity: .75; }
+.dash-hour-bar.is-now { background: var(--green); }
+.dash-hour-label {
+  position: absolute;
+  bottom: -1.3rem;
+  font-size: .6rem;
+  color: var(--brown-light);
+  white-space: nowrap;
+}
+
+/* live orders grid */
+.dash-orders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: .75rem;
+}
+.dash-order-card {
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: .85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+.dash-order-card.status-pending { border-left: 4px solid #f59e0b; }
+.dash-order-card.status-cooking { border-left: 4px solid #f97316; }
+.dash-order-card.status-served  { border-left: 4px solid #3b82f6; }
+
+.dash-order-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dash-order-num  { font-family: 'Mitr', sans-serif; font-weight: 700; font-size: .9rem; color: var(--accent); }
+.dash-order-table { font-size: .8rem; color: var(--brown-light); }
+.dash-order-items { font-size: .8rem; color: var(--brown-mid); line-height: 1.5; }
+.dash-order-foot  { display: flex; justify-content: space-between; align-items: center; margin-top: .1rem; }
+.dash-order-total { font-family: 'Mitr', sans-serif; font-size: .95rem; font-weight: 700; color: var(--accent); }
+.dash-order-age   { font-size: .72rem; color: var(--brown-light); }
+
+/* table status grid */
+.dash-tables-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.dash-table-pill {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .35rem .75rem;
+  border-radius: var(--pill);
+  font-family: 'Mitr', sans-serif;
+  font-size: .82rem;
+  font-weight: 700;
+  border: 1.5px solid transparent;
+}
+.dash-table-pill.t-active  { background: #fff3cd; color: #856404; border-color: #ffc107; }
+.dash-table-pill.t-cooking { background: #ffe0b2; color: #b44d00; border-color: #f97316; }
+.dash-table-pill.t-served  { background: #dbeafe; color: #1d4ed8; border-color: #3b82f6; }
+.dash-table-pill.t-empty   { background: var(--cream-mid); color: var(--brown-light); border-color: var(--cream-dark); }
+[data-theme="dark"] .dash-table-pill.t-active  { background: #422006; color: #fcd34d; }
+[data-theme="dark"] .dash-table-pill.t-cooking { background: #431407; color: #fdba74; }
+[data-theme="dark"] .dash-table-pill.t-served  { background: #1e3a5f; color: #93c5fd; }
+
+.dash-refresh-chip {
+  font-size: .72rem;
+  color: var(--brown-light);
+}
+.dash-section-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.dash-empty {
+  text-align: center;
+  padding: 1.5rem;
+  color: var(--brown-light);
+  font-size: .88rem;
+}
+
 .qr-settings-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1261,8 +1419,8 @@ tr.drag-over td { background: var(--cream-dark) !important; }
     </div>
 
     <nav class="bo-nav">
-      <button class="bo-nav-item active" data-panel="export">
-        <span class="bo-nav-icon">📤</span>Export Sheet
+      <button class="bo-nav-item active" data-panel="dashboard">
+        <span class="bo-nav-icon">📊</span>Dashboard
       </button>
       <button class="bo-nav-item" data-panel="topsellers">
         <span class="bo-nav-icon">🏆</span>เมนูขายดี
@@ -1275,6 +1433,9 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </button>
 
       <hr class="bo-nav-divider">
+      <button class="bo-nav-item" data-panel="export">
+        <span class="bo-nav-icon">📤</span>Export Sheet
+      </button>
       <button class="bo-nav-item" data-panel="qr">
         <span class="bo-nav-icon">📱</span>QR โต๊ะ
       </button>
@@ -1309,6 +1470,112 @@ tr.drag-over td { background: var(--cream-dark) !important; }
     </div>
 
     <div class="bo-content">
+
+      <!-- =========================================================
+           PANEL: DASHBOARD
+           ========================================================= -->
+      <div class="bo-panel active" id="panelDashboard">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">📊 Dashboard วันนี้</div>
+            <div class="bo-panel-sub" id="dashDateLabel">—</div>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <span class="dash-refresh-chip" id="dashLastRefresh"></span>
+            <button class="btn btn-ghost btn-sm" id="dashRefreshBtn">🔄 รีเฟรช</button>
+          </div>
+        </div>
+
+        <!-- KPI Row -->
+        <div class="dash-kpi-row">
+          <div class="dash-kpi">
+            <span class="dash-kpi-icon">💰</span>
+            <div class="dash-kpi-label">ยอดขายวันนี้</div>
+            <div class="dash-kpi-val" id="dashRevenue">฿0</div>
+            <div class="dash-kpi-sub"><span class="dash-kpi-trend" id="dashRevenueTrend">—</span> เทียบเมื่อวาน</div>
+          </div>
+          <div class="dash-kpi kpi-green">
+            <span class="dash-kpi-icon">🧾</span>
+            <div class="dash-kpi-label">ออเดอร์จ่ายแล้ว</div>
+            <div class="dash-kpi-val" id="dashPaidCount">0</div>
+            <div class="dash-kpi-sub">เฉลี่ย <span id="dashAvgOrder">฿0</span>/ออเดอร์</div>
+          </div>
+          <div class="dash-kpi kpi-blue">
+            <span class="dash-kpi-icon">⏳</span>
+            <div class="dash-kpi-label">รอดำเนินการ</div>
+            <div class="dash-kpi-val" id="dashPendingCount">0</div>
+            <div class="dash-kpi-sub">pending + cooking</div>
+          </div>
+          <div class="dash-kpi kpi-purple">
+            <span class="dash-kpi-icon">🪑</span>
+            <div class="dash-kpi-label">โต๊ะที่ใช้อยู่</div>
+            <div class="dash-kpi-val" id="dashActiveTables">0</div>
+            <div class="dash-kpi-sub">จาก <span id="dashTotalTables">0</span> โต๊ะทั้งหมด</div>
+          </div>
+        </div>
+
+        <!-- Hourly Chart -->
+        <div class="card">
+          <div class="card-body">
+            <div class="dash-section-row" style="margin-bottom:.75rem">
+              <div class="card-title" style="margin-bottom:0">📈 ยอดขายรายชั่วโมงวันนี้</div>
+              <span style="font-size:.75rem;color:var(--green);font-weight:700" id="dashPeakHour"></span>
+            </div>
+            <div class="daily-chart-wrap">
+              <div class="dash-hourly-chart" id="dashHourlyChart">
+                <div class="loading-row"><div class="spinner"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table Status + Live Orders — side by side on large screen -->
+        <div style="display:grid;grid-template-columns:1fr;gap:.85rem" id="dashBottomGrid">
+
+          <!-- Table Status -->
+          <div class="card">
+            <div class="card-body">
+              <div class="dash-section-row" style="margin-bottom:.75rem">
+                <div class="card-title" style="margin-bottom:0">🪑 สถานะโต๊ะ</div>
+                <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+                  <span class="dash-table-pill t-cooking" style="font-size:.7rem;padding:.2rem .55rem">🍳 กำลังทำ</span>
+                  <span class="dash-table-pill t-active"  style="font-size:.7rem;padding:.2rem .55rem">⏳ รออาหาร</span>
+                  <span class="dash-table-pill t-served"  style="font-size:.7rem;padding:.2rem .55rem">🍽 เสิร์ฟแล้ว</span>
+                  <span class="dash-table-pill t-empty"   style="font-size:.7rem;padding:.2rem .55rem">ว่าง</span>
+                </div>
+              </div>
+              <div class="dash-tables-grid" id="dashTablesGrid">
+                <div class="loading-row"><div class="spinner"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Active Orders -->
+          <div class="card">
+            <div class="card-body">
+              <div class="dash-section-row" style="margin-bottom:.75rem">
+                <div class="card-title" style="margin-bottom:0">🔴 ออเดอร์ที่ยังค้างอยู่</div>
+                <span style="font-size:.75rem;color:var(--brown-light)" id="dashActiveOrderCount"></span>
+              </div>
+              <div id="dashActiveOrders">
+                <div class="loading-row"><div class="spinner"></div></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Today's Top 3 -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🏆 เมนูขายดีวันนี้ (Top 5)</div>
+            <div id="dashTopMenus">
+              <div class="loading-row"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
 
       <!-- =========================================================
            PANEL: EXPORT SHEET
@@ -1827,6 +2094,7 @@ overlay.addEventListener('click', () => {
 
 // ---- panel nav ----
 const PANEL_TITLES = {
+  dashboard: 'Dashboard วันนี้',
   export: 'Export Sheet',
   topsellers: 'เมนูขายดี',
   history: 'ย้อนหลัง 1 เดือน',
@@ -1834,7 +2102,7 @@ const PANEL_TITLES = {
   qr: 'QR Code โต๊ะ',
 };
 
-let activePanelId = 'export';
+let activePanelId = 'dashboard';
 function switchPanel(id) {
   document.querySelectorAll('.bo-panel').forEach(p => {
     p.classList.remove('active');
@@ -1848,6 +2116,7 @@ function switchPanel(id) {
   activePanelId = id;
   sidebar.classList.remove('open');
   overlay.classList.remove('open');
+  if (id === 'dashboard') loadDashboard();
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
@@ -2164,6 +2433,7 @@ async function initData() {
   renderCatBtns();
   rebuildProductTypeSelect();
   if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+  if (activePanelId === 'dashboard') loadDashboard();
 
   // เปิด WebSocket สำหรับ realtime update
   _startWs();
@@ -2185,6 +2455,7 @@ function _startWs() {
           if (Array.isArray(raw)) {
             LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
             MOCK_ORDERS = LIVE_ORDERS;
+            if (activePanelId === 'dashboard') loadDashboard();
             if (activePanelId === 'topsellers' && tsLoaded) renderTopSellers();
             if (activePanelId === 'history' && histLoaded) {
               histFiltered = [...LIVE_ORDERS];
@@ -2272,6 +2543,237 @@ function rebuildProductTypeSelect(currentVal) {
   ).join('');
   if (currentVal) sel.value = currentVal;
 }
+
+// ============================================================
+//  PANEL: DASHBOARD
+// ============================================================
+let dashAutoRefresh = null;
+
+function todayTH() {
+  return new Date().toLocaleDateString('th-TH', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+}
+
+function getOrdersToday() {
+  const today = todayStr();
+  return LIVE_ORDERS.filter(o => {
+    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
+    return d === today;
+  });
+}
+
+function getOrdersYesterday() {
+  const yest = daysAgo(1);
+  return LIVE_ORDERS.filter(o => {
+    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
+    return d === yest;
+  });
+}
+
+function renderDashKPIs(todayOrders) {
+  const paid    = todayOrders.filter(o => o.status === 'paid');
+  const revenue = paid.reduce((s, o) => s + o.total, 0);
+  const pending = todayOrders.filter(o => o.status === 'pending' || o.status === 'cooking');
+  const activeTbls = new Set(todayOrders.filter(o => o.status !== 'cancelled').map(o => o.table));
+
+  // yesterday comparison
+  const yestPaid    = getOrdersYesterday().filter(o => o.status === 'paid');
+  const yestRevenue = yestPaid.reduce((s, o) => s + o.total, 0);
+  let trendHtml = '<span class="dash-kpi-trend trend-flat">— เท่ากัน</span>';
+  if (yestRevenue > 0) {
+    const diff = revenue - yestRevenue;
+    const pct  = Math.abs(Math.round((diff / yestRevenue) * 100));
+    if (diff > 0)       trendHtml = `<span class="dash-kpi-trend trend-up">▲ ${pct}%</span>`;
+    else if (diff < 0)  trendHtml = `<span class="dash-kpi-trend trend-down">▼ ${pct}%</span>`;
+  } else if (revenue > 0) {
+    trendHtml = '<span class="dash-kpi-trend trend-up">▲ ใหม่วันนี้</span>';
+  }
+
+  document.getElementById('dashRevenue').textContent       = fmt(revenue);
+  document.getElementById('dashPaidCount').textContent     = fmtN(paid.length);
+  document.getElementById('dashAvgOrder').textContent      = paid.length ? fmt(revenue / paid.length) : '฿0';
+  document.getElementById('dashPendingCount').textContent  = fmtN(pending.length);
+  document.getElementById('dashActiveTables').textContent  = activeTbls.size;
+  document.getElementById('dashRevenueTrend').outerHTML    = trendHtml;
+
+  // total tables from localStorage
+  const totalTbl = parseInt(localStorage.getItem('ks90-table-count') || '9');
+  document.getElementById('dashTotalTables').textContent = totalTbl;
+}
+
+function renderDashHourly(todayOrders) {
+  const map = {};
+  for (let h = 0; h < 24; h++) map[h] = 0;
+  todayOrders.forEach(o => {
+    if (o.status !== 'paid') return;
+    const h = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).getHours();
+    map[h] += o.total;
+  });
+
+  // แสดงเฉพาะช่วงเวลาที่มีข้อมูล + 1 ชม.ก่อน-หลัง (ไม่แสดงทั้ง 24)
+  const allKeys = Object.entries(map).filter(([,v]) => v > 0).map(([h]) => parseInt(h));
+  const nowH    = new Date().getHours();
+  const minH    = allKeys.length ? Math.max(0, Math.min(...allKeys) - 1) : Math.max(0, nowH - 3);
+  const maxH    = Math.min(23, Math.max(nowH, allKeys.length ? Math.max(...allKeys) : nowH));
+
+  const visKeys = [];
+  for (let h = minH; h <= maxH; h++) visKeys.push(h);
+  if (!visKeys.length) for (let h = 8; h <= nowH; h++) visKeys.push(h);
+
+  const vals   = visKeys.map(h => map[h] || 0);
+  const maxVal = Math.max(...vals, 1);
+  const peakH  = visKeys[vals.indexOf(Math.max(...vals))];
+
+  const chart = document.getElementById('dashHourlyChart');
+  chart.innerHTML = visKeys.map((h, i) => {
+    const px   = Math.max(3, Math.round((vals[i] / maxVal) * 72));
+    const isNow = h === nowH;
+    const label = h + ':00';
+    return `<div class="dash-hour-col" title="${label}: ${fmt(vals[i])}">
+      <div class="dash-hour-bar${isNow ? ' is-now' : ''}" style="height:${px}px"></div>
+      <span class="dash-hour-label">${h}น.</span>
+    </div>`;
+  }).join('');
+
+  if (vals.some(v => v > 0)) {
+    document.getElementById('dashPeakHour').textContent = `🔥 ชั่วโมงขายดีสุด: ${peakH}:00 น.`;
+  } else {
+    document.getElementById('dashPeakHour').textContent = '';
+  }
+}
+
+function renderDashTables(todayOrders) {
+  const totalTbl   = parseInt(localStorage.getItem('ks90-table-count') || '9');
+  const tableState = {}; // table -> worst status
+  const statusRank = { cooking: 3, pending: 2, served: 1 };
+
+  todayOrders.filter(o => o.status !== 'paid' && o.status !== 'cancelled').forEach(o => {
+    const cur = tableState[o.table];
+    if (!cur || (statusRank[o.status] || 0) > (statusRank[cur] || 0)) {
+      tableState[o.table] = o.status;
+    }
+  });
+
+  const grid = document.getElementById('dashTablesGrid');
+  if (totalTbl === 0) { grid.innerHTML = '<div class="dash-empty">ยังไม่มีข้อมูลโต๊ะ</div>'; return; }
+
+  let html = '';
+  for (let t = 1; t <= totalTbl; t++) {
+    const st = tableState[String(t)] || tableState[t];
+    const cls = st === 'cooking' ? 't-cooking' : st === 'pending' ? 't-active' : st === 'served' ? 't-served' : 't-empty';
+    const icon = st === 'cooking' ? '🍳' : st === 'pending' ? '⏳' : st === 'served' ? '🍽' : '';
+    html += `<div class="dash-table-pill ${cls}">${icon} โต๊ะ ${t}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function renderDashActiveOrders(todayOrders) {
+  const active = todayOrders
+    .filter(o => o.status === 'pending' || o.status === 'cooking' || o.status === 'served')
+    .sort((a, b) => (a.createdAt - b.createdAt));
+
+  const el = document.getElementById('dashActiveOrders');
+  const ct = document.getElementById('dashActiveOrderCount');
+  ct.textContent = active.length ? `${active.length} รายการ` : '';
+
+  if (!active.length) {
+    el.innerHTML = '<div class="dash-empty">✅ ไม่มีออเดอร์ค้างอยู่</div>';
+    return;
+  }
+
+  const STATUS_ICON = { pending: '⏳', cooking: '👨‍🍳', served: '🍽' };
+  const now = Date.now();
+
+  el.innerHTML = `<div class="dash-orders-grid">` + active.map(o => {
+    const ageMs  = now - (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).getTime();
+    const ageMn  = Math.floor(ageMs / 60000);
+    const ageStr = ageMn < 60 ? `${ageMn} นาที` : `${Math.floor(ageMn/60)}ชม. ${ageMn%60}น.`;
+    const isLate = ageMn > 15 && o.status !== 'served';
+    const itemsPreview = o.items.slice(0, 3).map(i => `${i.name}×${i.qty}`).join(', ')
+                        + (o.items.length > 3 ? ` +${o.items.length-3}` : '');
+    return `<div class="dash-order-card status-${o.status}">
+      <div class="dash-order-top">
+        <span class="dash-order-num">${STATUS_ICON[o.status]} #${o.orderNumber}</span>
+        <span class="dash-order-table">โต๊ะ ${o.table}</span>
+      </div>
+      <div class="dash-order-items">${escHtml(itemsPreview)}</div>
+      <div class="dash-order-foot">
+        <span class="dash-order-total">${fmt(o.total)}</span>
+        <span class="dash-order-age" style="${isLate ? 'color:var(--red);font-weight:700' : ''}">
+          ${isLate ? '⚠️ ' : ''}${ageStr}
+        </span>
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderDashTopMenus(todayOrders) {
+  const map = {};
+  todayOrders.filter(o => o.status === 'paid').forEach(o => {
+    o.items.forEach(it => {
+      if (!map[it.name]) map[it.name] = { qty: 0, revenue: 0 };
+      map[it.name].qty     += it.qty;
+      map[it.name].revenue += it.price * it.qty;
+    });
+  });
+  const list   = Object.entries(map).sort((a,b) => b[1].qty - a[1].qty).slice(0, 5);
+  const maxQty = list[0]?.[1].qty || 1;
+  const el     = document.getElementById('dashTopMenus');
+
+  if (!list.length) { el.innerHTML = '<div class="dash-empty">ยังไม่มีข้อมูลวันนี้</div>'; return; }
+
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:.5rem">` +
+    list.map(([name, d], i) => {
+      const pct = Math.round((d.qty / maxQty) * 100);
+      return `<div style="display:flex;align-items:center;gap:.6rem">
+        <span style="font-size:1.1rem;flex-shrink:0">${MEDALS[i]}</span>
+        <span style="flex:1;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(name)}</span>
+        <span style="font-size:.82rem;color:var(--brown-light);min-width:28px;text-align:right">${fmtN(d.qty)} ชิ้น</span>
+        <div style="width:70px;height:7px;background:var(--cream-dark);border-radius:999px;flex-shrink:0;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:999px"></div>
+        </div>
+        <span style="font-size:.82rem;font-weight:700;color:var(--accent);min-width:56px;text-align:right">${fmt(d.revenue)}</span>
+      </div>`;
+    }).join('') + `</div>`;
+}
+
+function loadDashboard() {
+  // date label
+  document.getElementById('dashDateLabel').textContent = todayTH();
+
+  const todayOrders = getOrdersToday();
+  renderDashKPIs(todayOrders);
+  renderDashHourly(todayOrders);
+  renderDashTables(todayOrders);
+  renderDashActiveOrders(todayOrders);
+  renderDashTopMenus(todayOrders);
+
+  // last refresh time
+  const now = new Date();
+  document.getElementById('dashLastRefresh').textContent =
+    'อัปเดต ' + now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  // auto-refresh ทุก 30 วินาที
+  clearInterval(dashAutoRefresh);
+  dashAutoRefresh = setInterval(() => {
+    if (activePanelId === 'dashboard') loadDashboard();
+  }, 30_000);
+}
+
+document.getElementById('dashRefreshBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('dashRefreshBtn');
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  try {
+    const raw = await api.getOrders();
+    if (Array.isArray(raw)) {
+      LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
+    }
+  } catch(e) { console.warn(e); }
+  loadDashboard();
+  btn.textContent = '🔄 รีเฟรช';
+  btn.disabled = false;
+});
 
 // ============================================================
 //  PANEL: EXPORT
@@ -3589,6 +4091,9 @@ document.getElementById('menuImgUrl').addEventListener('input', function() {
 // ============================================================
 document.getElementById('exportDateFrom').value = daysAgo(7);
 document.getElementById('exportDateTo').value   = todayStr();
+
+// set initial topbar title
+document.getElementById('topbarTitle').textContent = PANEL_TITLES['dashboard'];
 
 // เริ่มโหลดข้อมูล
 initData();
