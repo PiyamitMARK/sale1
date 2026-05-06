@@ -1380,6 +1380,152 @@ tr.drag-over td { background: var(--cream-dark) !important; }
     page-break-inside: avoid;
   }
 }
+/* ============================================================
+   KITCHEN DISPLAY PANEL
+   ============================================================ */
+.kitchen-live-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+  display: inline-block;
+  animation: kpulse 1.6s ease-in-out infinite;
+}
+@keyframes kpulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.45; transform:scale(.7); }
+}
+
+.kitchen-summary-bar {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+.kitchen-sum-chip {
+  flex: 1; min-width: 110px;
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: .75rem 1rem;
+}
+.kitchen-sum-chip.kitchen-sum-alert {
+  border-color: #f5a623;
+  background: #fffaf0;
+}
+[data-theme="dark"] .kitchen-sum-chip.kitchen-sum-alert { background: #2a2010; border-color: #a06020; }
+.kitchen-sum-icon { font-size: 1.5rem; flex-shrink: 0; }
+.kitchen-sum-label { font-size: .72rem; color: var(--brown-light); }
+.kitchen-sum-val   { font-family: 'Mitr', sans-serif; font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+
+.kitchen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.kitchen-card {
+  background: var(--white);
+  border: 2px solid var(--cream-dark);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color .2s;
+}
+.kitchen-card.status-pending { border-color: #d4a017; }
+.kitchen-card.status-cooking  { border-color: #1a7a4a; }
+.kitchen-card.status-alert    { border-color: var(--red); animation: kalert .8s ease-in-out infinite alternate; }
+@keyframes kalert {
+  from { border-color: var(--red); box-shadow: 0 0 0 0 rgba(192,57,43,0); }
+  to   { border-color: #e74c3c;    box-shadow: 0 0 0 4px rgba(192,57,43,.15); }
+}
+
+.kitchen-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .65rem 1rem;
+  border-bottom: 1.5px solid var(--cream-dark);
+}
+.kitchen-card.status-pending .kitchen-card-header { background: #fffbee; }
+.kitchen-card.status-cooking  .kitchen-card-header { background: #eaf7f0; }
+.kitchen-card.status-alert    .kitchen-card-header { background: #fdf0f0; }
+[data-theme="dark"] .kitchen-card.status-pending .kitchen-card-header { background: #2a2010; }
+[data-theme="dark"] .kitchen-card.status-cooking  .kitchen-card-header { background: #0d2a1a; }
+[data-theme="dark"] .kitchen-card.status-alert    .kitchen-card-header { background: #2a0d0d; }
+
+.kitchen-card-order {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.kitchen-card-table {
+  font-size: .78rem;
+  color: var(--brown-light);
+}
+.kitchen-card-timer {
+  font-family: 'Mitr', sans-serif;
+  font-size: .88rem;
+  font-weight: 700;
+  padding: .22rem .65rem;
+  border-radius: var(--pill);
+  background: var(--cream-mid);
+  color: var(--brown-mid);
+  white-space: nowrap;
+}
+.kitchen-card.status-alert .kitchen-card-timer {
+  background: var(--red); color: #fff;
+}
+
+.kitchen-card-items {
+  flex: 1;
+  padding: .6rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+.kitchen-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  font-size: .88rem;
+  line-height: 1.35;
+}
+.kitchen-item-qty {
+  font-family: 'Mitr', sans-serif;
+  font-weight: 700;
+  min-width: 22px;
+  color: var(--accent);
+}
+.kitchen-item-name { flex: 1; color: var(--brown); }
+.kitchen-item-opts { font-size: .75rem; color: var(--brown-light); margin-left: 22px; }
+
+.kitchen-card-footer {
+  display: flex;
+  gap: .5rem;
+  padding: .65rem 1rem;
+  border-top: 1.5px solid var(--cream-dark);
+  background: var(--cream-mid);
+}
+.kitchen-card-footer .btn { flex: 1; font-size: .82rem; padding: .4rem .6rem; }
+
+.kitchen-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: .18rem .55rem;
+  border-radius: var(--pill);
+}
+.kbadge-pending { background: #fff3cd; color: #856404; }
+.kbadge-cooking  { background: #d1f7e5; color: #1a7a4a; }
+[data-theme="dark"] .kbadge-pending { background: #3a2a00; color: #ffd570; }
+[data-theme="dark"] .kbadge-cooking  { background: #0a2a18; color: #5fe0a0; }
+
   </style>
 </head>
 <body>
@@ -1421,6 +1567,9 @@ tr.drag-over td { background: var(--cream-dark) !important; }
     <nav class="bo-nav">
       <button class="bo-nav-item active" data-panel="dashboard">
         <span class="bo-nav-icon">📊</span>Dashboard
+      </button>
+      <button class="bo-nav-item" data-panel="kitchen">
+        <span class="bo-nav-icon">👨‍🍳</span>Kitchen Display
       </button>
       <button class="bo-nav-item" data-panel="topsellers">
         <span class="bo-nav-icon">🏆</span>เมนูขายดี
@@ -1907,6 +2056,61 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </div>
 
       <!-- =========================================================
+           PANEL: KITCHEN DISPLAY
+           ========================================================= -->
+      <div class="bo-panel" id="panelKitchen">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">👨‍🍳 Kitchen Display</div>
+            <div class="bo-panel-sub">ออเดอร์ที่รอทำและกำลังทำอยู่ — อัปเดต real-time</div>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <span class="kitchen-live-dot" id="kitchenLiveDot"></span>
+            <span style="font-size:.8rem;color:var(--brown-light)" id="kitchenLastUpdate">—</span>
+            <button class="btn btn-ghost btn-sm" id="kitchenRefreshBtn">🔄 รีเฟรช</button>
+          </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+          <button class="topseller-filter-btn active" data-kfilter="all"   id="kFilterAll">ทั้งหมด</button>
+          <button class="topseller-filter-btn"        data-kfilter="pending">⏳ รอรับ</button>
+          <button class="topseller-filter-btn"        data-kfilter="cooking">🍳 กำลังทำ</button>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:.4rem">
+            <span style="font-size:.8rem;color:var(--brown-light)">⚠️ alert เกิน</span>
+            <input type="number" id="kitchenAlertMin" value="15" min="1" max="60" style="width:52px;padding:.3rem .45rem;border:1.5px solid var(--cream-dark);border-radius:6px;font-size:.85rem;text-align:center;background:var(--cream);color:var(--brown)">
+            <span style="font-size:.8rem;color:var(--brown-light)">นาที</span>
+          </div>
+        </div>
+
+        <!-- Summary bar -->
+        <div class="kitchen-summary-bar" id="kitchenSummaryBar">
+          <div class="kitchen-sum-chip">
+            <span class="kitchen-sum-icon">⏳</span>
+            <div><div class="kitchen-sum-label">รอรับ</div><div class="kitchen-sum-val" id="kSumPending">0</div></div>
+          </div>
+          <div class="kitchen-sum-chip">
+            <span class="kitchen-sum-icon">🍳</span>
+            <div><div class="kitchen-sum-label">กำลังทำ</div><div class="kitchen-sum-val" id="kSumCooking">0</div></div>
+          </div>
+          <div class="kitchen-sum-chip kitchen-sum-alert" id="kSumAlertChip" style="display:none">
+            <span class="kitchen-sum-icon">🚨</span>
+            <div><div class="kitchen-sum-label">เกินเวลา</div><div class="kitchen-sum-val" id="kSumAlert">0</div></div>
+          </div>
+        </div>
+
+        <!-- Cards grid -->
+        <div class="kitchen-grid" id="kitchenGrid">
+          <div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div>
+        </div>
+
+        <div class="empty-state hidden" id="kitchenEmpty">
+          <p style="font-size:2.5rem;margin-bottom:.5rem">✅</p>
+          <p style="color:var(--brown-light)">ไม่มีออเดอร์ค้างอยู่</p>
+        </div>
+      </div>
+
+      <!-- =========================================================
            PANEL: QR โต๊ะ
            ========================================================= -->
       <div class="bo-panel" id="panelQr">
@@ -2095,6 +2299,7 @@ overlay.addEventListener('click', () => {
 // ---- panel nav ----
 const PANEL_TITLES = {
   dashboard: 'Dashboard วันนี้',
+  kitchen: 'Kitchen Display',
   export: 'Export Sheet',
   topsellers: 'เมนูขายดี',
   history: 'ย้อนหลัง 1 เดือน',
@@ -2117,6 +2322,7 @@ function switchPanel(id) {
   sidebar.classList.remove('open');
   overlay.classList.remove('open');
   if (id === 'dashboard') loadDashboard();
+  if (id === 'kitchen')   initKitchenDisplay();
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
@@ -3899,6 +4105,170 @@ document.getElementById('clearDataConfirm').addEventListener('click', async () =
     errEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
   }
 });
+
+// ============================================================
+//  KITCHEN DISPLAY
+// ============================================================
+let _kitchenWs       = null;
+let _kitchenOrders   = [];
+let _kitchenFilter   = 'all';
+let _kitchenTimerInt = null;
+let _kitchenInited   = false;
+
+function initKitchenDisplay() {
+  if (!_kitchenInited) {
+    _kitchenInited = true;
+
+    // filter buttons
+    document.querySelectorAll('[data-kfilter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-kfilter]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _kitchenFilter = btn.dataset.kfilter;
+        renderKitchenCards();
+      });
+    });
+
+    // refresh button
+    document.getElementById('kitchenRefreshBtn').addEventListener('click', loadKitchenOrders);
+
+    // live timer tick every second
+    _kitchenTimerInt = setInterval(renderKitchenCards, 1000);
+
+    // WebSocket realtime
+    _kitchenWs = ws.connect('admin', (msg) => {
+      if (['order_created','order_updated','order_deleted'].includes(msg.type)) {
+        loadKitchenOrders();
+      }
+    }, loadKitchenOrders);
+  }
+
+  loadKitchenOrders();
+}
+
+async function loadKitchenOrders() {
+  try {
+    const orders = await api.getOrders({ today: true });
+    _kitchenOrders = (orders || []).filter(o => o.status === 'pending' || o.status === 'cooking');
+    renderKitchenCards();
+    document.getElementById('kitchenLastUpdate').textContent =
+      'อัปเดต ' + new Date().toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  } catch(e) {
+    document.getElementById('kitchenGrid').innerHTML =
+      `<div style="color:var(--red);font-size:.88rem;padding:1rem">❌ โหลดไม่ได้: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function kitchenElapsed(createdAt) {
+  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+}
+
+function kitchenFmt(min) {
+  if (min < 60) return min + ' นาที';
+  return Math.floor(min/60) + 'ชม.' + (min%60 ? (min%60)+'น.' : '');
+}
+
+function renderKitchenCards() {
+  const alertMin = parseInt(document.getElementById('kitchenAlertMin').value) || 15;
+  const filtered = _kitchenFilter === 'all'
+    ? _kitchenOrders
+    : _kitchenOrders.filter(o => o.status === _kitchenFilter);
+
+  const pending = _kitchenOrders.filter(o => o.status === 'pending').length;
+  const cooking  = _kitchenOrders.filter(o => o.status === 'cooking').length;
+  const alerts   = _kitchenOrders.filter(o => kitchenElapsed(o.created_at) >= alertMin).length;
+
+  document.getElementById('kSumPending').textContent = pending;
+  document.getElementById('kSumCooking').textContent = cooking;
+  document.getElementById('kSumAlert').textContent   = alerts;
+  const alertChip = document.getElementById('kSumAlertChip');
+  alertChip.style.display = alerts > 0 ? '' : 'none';
+
+  const grid  = document.getElementById('kitchenGrid');
+  const empty = document.getElementById('kitchenEmpty');
+
+  if (!filtered.length) {
+    grid.innerHTML = '';
+    grid.classList.add('hidden');
+    empty.classList.remove('hidden');
+    return;
+  }
+  grid.classList.remove('hidden');
+  empty.classList.add('hidden');
+
+  // sort: alert first → pending → cooking, then by oldest
+  const sorted = [...filtered].sort((a,b) => {
+    const aAlert = kitchenElapsed(a.created_at) >= alertMin ? 0 : 1;
+    const bAlert = kitchenElapsed(b.created_at) >= alertMin ? 0 : 1;
+    if (aAlert !== bAlert) return aAlert - bAlert;
+    const aSt = a.status === 'pending' ? 0 : 1;
+    const bSt = b.status === 'pending' ? 0 : 1;
+    if (aSt !== bSt) return aSt - bSt;
+    return new Date(a.created_at) - new Date(b.created_at);
+  });
+
+  grid.innerHTML = sorted.map(o => {
+    const elapsed = kitchenElapsed(o.created_at);
+    const isAlert = elapsed >= alertMin;
+    const statusCls = isAlert ? 'status-alert' : ('status-' + o.status);
+    const badge = o.status === 'pending'
+      ? `<span class="kitchen-status-badge kbadge-pending">⏳ รอรับ</span>`
+      : `<span class="kitchen-status-badge kbadge-cooking">🍳 กำลังทำ</span>`;
+
+    // flatten all batch items
+    let batches = [];
+    try { batches = JSON.parse(o.batches || '[]'); } catch(_) {}
+    const allItems = batches.flatMap(b => Array.isArray(b) ? b : (b.items || []));
+
+    const itemsHtml = allItems.map(item => {
+      const opts = item.selectedOptions
+        ? Object.values(item.selectedOptions).flat().filter(Boolean).join(', ')
+        : '';
+      return `<div class="kitchen-item-row">
+        <span class="kitchen-item-qty">×${item.qty || 1}</span>
+        <span class="kitchen-item-name">${escHtml(item.name || '—')}</span>
+      </div>${opts ? `<div class="kitchen-item-opts">${escHtml(opts)}</div>` : ''}`;
+    }).join('');
+
+    return `<div class="kitchen-card ${statusCls}" data-oid="${escHtml(o.id)}">
+      <div class="kitchen-card-header">
+        <div>
+          <div class="kitchen-card-order">#${o.order_num}${o.is_takeaway ? ' 📦' : ''}</div>
+          <div class="kitchen-card-table">${o.is_takeaway ? 'กลับบ้าน' : 'โต๊ะ ' + escHtml(String(o.table_num))}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.3rem">
+          ${badge}
+          <span class="kitchen-card-timer">${isAlert ? '🚨 ' : ''}${kitchenFmt(elapsed)}</span>
+        </div>
+      </div>
+      <div class="kitchen-card-items">${itemsHtml || '<span style="color:var(--brown-light);font-size:.85rem">ไม่มีรายการ</span>'}</div>
+      <div class="kitchen-card-footer">
+        ${o.status === 'pending'
+          ? `<button class="btn btn-outline btn-sm" onclick="kitchenSetStatus('${o.id}','cooking')">🍳 เริ่มทำ</button>`
+          : `<button class="btn btn-outline btn-sm" onclick="kitchenSetStatus('${o.id}','pending')">↩ ย้อนกลับ</button>`
+        }
+        <button class="btn btn-primary btn-sm" onclick="kitchenSetStatus('${o.id}','served')">✅ เสิร์ฟแล้ว</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function kitchenSetStatus(orderId, newStatus) {
+  try {
+    await api.updateOrder(orderId, { status: newStatus });
+    _kitchenOrders = _kitchenOrders.filter(o => !(o.id === orderId && newStatus === 'served'))
+      .map(o => o.id === orderId ? { ...o, status: newStatus } : o);
+    if (newStatus === 'served') {
+      _kitchenOrders = _kitchenOrders.filter(o => o.id !== orderId);
+    }
+    renderKitchenCards();
+  } catch(e) {
+    alert('อัปเดตสถานะไม่ได้: ' + e.message);
+  }
+}
+
+// expose to onclick
+window.kitchenSetStatus = kitchenSetStatus;
 
 // ============================================================
 //  PANEL: QR โต๊ะ
