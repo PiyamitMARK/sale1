@@ -178,6 +178,12 @@ export default {
         return handleExportProxy(request);
       }
 
+      // ── Claude AI Proxy → Anthropic API (ป้องกัน CORS + ซ่อน API key) ──
+      if (path === '/api/claude-proxy' && method === 'POST') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleClaudeProxy(request, env);
+      }
+
       return err('Not found', 404);
     } catch (e) {
       console.error(e);
@@ -691,6 +697,52 @@ async function handleExportProxy(request) {
     });
   } catch (fetchErr) {
     return err('Upstream fetch failed: ' + fetchErr.message, 502);
+  }
+}
+
+// ── Claude AI Proxy ──────────────────────────────────────────
+// รับ request จาก backoffice → ต่อ Anthropic API โดยใช้ secret key
+// ต้อง set: wrangler secret put ANTHROPIC_API_KEY
+async function handleClaudeProxy(request, env) {
+  if (!env.ANTHROPIC_API_KEY) {
+    return err('ANTHROPIC_API_KEY not configured — run: wrangler secret put ANTHROPIC_API_KEY', 500);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return err('Invalid JSON body');
+  }
+
+  // whitelist model ที่อนุญาต (ป้องกัน abuse)
+  const ALLOWED_MODELS = [
+    'claude-sonnet-4-20250514',
+    'claude-haiku-4-5-20251001',
+    'claude-opus-4-6',
+  ];
+  if (!ALLOWED_MODELS.includes(body.model)) {
+    return err('Model not allowed: ' + body.model, 400);
+  }
+
+  try {
+    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'x-api-key':         env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const json = await upstream.json();
+    return new Response(JSON.stringify(json), {
+      status:  upstream.status,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  } catch (fetchErr) {
+    return err('Anthropic fetch failed: ' + fetchErr.message, 502);
   }
 }
 
