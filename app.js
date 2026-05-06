@@ -654,7 +654,7 @@ async function saveOrder(isRetry = false) {
     orderNumber             = newOrder.order_num;
     orderNumberEl.textContent = orderNumber;
 
-    return { allBatches: [batchItems], grandTotal: total };
+    return { allBatches: [batchItems], grandTotal: total, orderNum: newOrder.order_num };
 
   } else {
     // เพิ่ม batch เข้า order เดิม
@@ -677,13 +677,13 @@ async function saveOrder(isRetry = false) {
       from_customer: true,
     });
 
-    return { allBatches: batches, grandTotal: newTotal };
+    return { allBatches: batches, grandTotal: newTotal, orderNum: currentTableOrderNumber };
   }
 }
 
 // ==================== Receipt ====================
-function showReceipt({ allBatches, grandTotal }) {
-  receiptOrderNum.textContent = currentTableOrderNumber || orderNumber;
+function showReceipt({ allBatches, grandTotal, orderNum }) {
+  receiptOrderNum.textContent = orderNum ?? currentTableOrderNumber ?? orderNumber;
   receiptTableEl.textContent  = `โต๊ะ ${selectedTable}`;
   receiptDate.textContent     = new Date().toLocaleString('th-TH');
 
@@ -792,8 +792,13 @@ clearCartBtn.addEventListener('click', clearCart);
 
 completeOrderBtn.addEventListener('click', () => {
   if (cart.length === 0) return;
-  closeCartOnMobile();
-  openConfirmOrderModal();
+  if (isMobile()) {
+    closeCart();
+    // รอ animation cart ปิด (320ms) ก่อนเปิด modal เพื่อป้องกัน cart ทับบน iOS
+    setTimeout(openConfirmOrderModal, 340);
+  } else {
+    openConfirmOrderModal();
+  }
 });
 
 printReceiptBtn.addEventListener('click', () => window.print());

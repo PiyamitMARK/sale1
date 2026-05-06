@@ -192,6 +192,7 @@ export async function adminLogin(username, password) {
   if (res.ok) {
     localStorage.setItem('ks90-admin-key', hash);
     localStorage.setItem('kaosoi-auth', 'true');
+    sessionStorage.setItem('kaosoi-auth', 'true');  // index.html ตรวจทั้ง localStorage และ sessionStorage
     return true;
   }
   return false;
@@ -200,6 +201,7 @@ export async function adminLogin(username, password) {
 export function adminLogout() {
   localStorage.removeItem('ks90-admin-key');
   localStorage.removeItem('kaosoi-auth');
+  sessionStorage.removeItem('kaosoi-auth');
 }
 
 export function isLoggedIn() {

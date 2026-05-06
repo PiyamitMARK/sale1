@@ -58,8 +58,10 @@ async function sha256(str) {
 async function isAdmin(request, env) {
   const key = request.headers.get('X-Admin-Key') || '';
   if (!key) return false;
-  const hash = await sha256(key);
-  return hash === (env.ADMIN_KEY_HASH || '');
+  // client ส่งมาเป็น sha256(username:password) อยู่แล้ว (ดู api-client.js::adminLogin)
+  // เทียบตรงๆ กับ ADMIN_KEY_HASH ที่ตั้งไว้ใน wrangler secret
+  // ADMIN_KEY_HASH = sha256("username:password")  ← ต้อง set ให้ตรง
+  return key === (env.ADMIN_KEY_HASH || '');
 }
 
 // ==================== Helpers ====================
@@ -105,11 +107,31 @@ export default {
       if (path === '/api/orders' && method === 'GET') return handleGetOrders(request, env);
       if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'GET')  return handleGetOrder(path, env);
       if (path === '/api/orders' && method === 'POST')                return handleCreateOrder(request, env, ctx);
-      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'PATCH') return handleUpdateOrder(request, path, env, ctx);
-      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'DELETE') return handleDeleteOrder(path, env, ctx);
+      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'PATCH') {
+        // ลูกค้าสั่งเพิ่ม (from_customer: true) → อนุญาตเฉพาะ batches field เท่านั้น
+        // admin → อนุญาตทุก field
+        const cloned = request.clone();
+        const body   = await cloned.json().catch(() => ({}));
+        const adminOk = await isAdmin(request, env);
+        if (!adminOk) {
+          // ลูกค้าต้องส่ง from_customer: true และห้ามแก้ status / payment / note
+          if (!body.from_customer)                  return err('Unauthorized', 401);
+          if (body.status !== undefined)            return err('Unauthorized', 401);
+          if (body.payment !== undefined)           return err('Unauthorized', 401);
+          if (body.note !== undefined)              return err('Unauthorized', 401);
+        }
+        return handleUpdateOrder(request, path, env, ctx, body);
+      }
+      if (path.match(/^\/api\/orders\/[^/]+$/) && method === 'DELETE') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleDeleteOrder(path, env, ctx);
+      }
 
       if (path.match(/^\/api\/table\/[^/]+$/) && method === 'GET')    return handleGetTable(path, env);
-      if (path.match(/^\/api\/table\/[^/]+$/) && method === 'DELETE') return handleClearTable(path, env);
+      if (path.match(/^\/api\/table\/[^/]+$/) && method === 'DELETE') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleClearTable(path, env);
+      }
 
       if (path === '/api/meta' && method === 'GET')   return handleGetMeta(env);
       if (path === '/api/meta' && method === 'PATCH') {
@@ -137,9 +159,18 @@ export default {
       }
 
       if (path === '/api/call-staff' && method === 'POST')   return handleCallStaff(request, env);
-      if (path === '/api/call-staff' && method === 'GET')    return handleGetCallLog(env);
-      if (path.match(/^\/api\/call-staff\/[^/]+$/) && method === 'PATCH') return handleDoneCall(path, env);
-      if (path === '/api/call-staff' && method === 'DELETE') return handleClearCallLog(env);
+      if (path === '/api/call-staff' && method === 'GET') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleGetCallLog(env);
+      }
+      if (path.match(/^\/api\/call-staff\/[^/]+$/) && method === 'PATCH') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleDoneCall(path, env);
+      }
+      if (path === '/api/call-staff' && method === 'DELETE') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleClearCallLog(env);
+      }
 
       return err('Not found', 404);
     } catch (e) {
@@ -191,21 +222,27 @@ async function handleCreateOrder(request, env, ctx) {
 
   if (!table_num) return err('table_num required');
 
-  // Auto-increment order number (atomic)
-  const meta    = await env.DB.prepare("SELECT value FROM meta WHERE key = 'orderNumber'").first();
+  // Auto-increment order number — atomic ด้วย UPDATE...RETURNING
+  // ป้องกัน race condition กรณี 2 requests มาพร้อมกัน
+  const today    = todayStr();
   const lastDate = await env.DB.prepare("SELECT value FROM meta WHERE key = 'lastOrderDate'").first();
-  const today   = todayStr();
 
-  let orderNum = parseInt(meta?.value || '1001');
   if (lastDate?.value !== today) {
-    // วันใหม่ → reset เป็น 1001
-    orderNum = 1001;
-    await env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'lastOrderDate'").bind(today).run();
-    await env.DB.prepare("UPDATE meta SET value = '1001' WHERE key = 'orderNumber'").run();
+    // วันใหม่ → reset เป็น 1001 แบบ atomic ใน batch เดียว
+    await env.DB.batch([
+      env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'lastOrderDate'").bind(today),
+      env.DB.prepare("UPDATE meta SET value = '1001' WHERE key = 'orderNumber'"),
+    ]);
   }
 
-  const nextNum = orderNum + 1;
-  await env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'orderNumber'").bind(String(nextNum)).run();
+  // UPDATE + RETURNING ใน statement เดียว — D1 ทำ atomic ให้เลย
+  // อ่านค่าปัจจุบัน แล้ว increment พร้อมกัน ไม่มีช่องให้ request อื่นแทรก
+  const numRow = await env.DB
+    .prepare("UPDATE meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'orderNumber' RETURNING CAST(value AS INTEGER) - 1 AS cur")
+    .first();
+
+  // cur = ค่า *ก่อน* +1 (หมายเลขออเดอร์ที่ได้)
+  const orderNum = numRow?.cur ?? 1001;
 
   const id       = nanoid();
   const now      = nowISO();
@@ -230,9 +267,9 @@ async function handleCreateOrder(request, env, ctx) {
   return json(order, 201);
 }
 
-async function handleUpdateOrder(request, path, env, ctx) {
+async function handleUpdateOrder(request, path, env, ctx, body = null) {
   const id   = path.split('/')[3];
-  const body = await request.json();
+  body = body ?? await request.json();
 
   const row = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
   if (!row) return err('Order not found', 404);
@@ -505,13 +542,22 @@ async function handleMenuSort(request, env, ctx) {
   const orders = body?.orders; // [{ id, sortOrder }]
   if (!Array.isArray(orders) || orders.length === 0) return err('orders array required');
 
-  // batch update sortOrder ทีละ 50
+  // ดึงทุก id ในครั้งเดียว แทน N queries แยก
+  const ids      = orders.map(o => o.id).filter(Boolean);
+  const placeholders = ids.map(() => '?').join(', ');
+  const { results: rows } = await env.DB
+    .prepare(`SELECT id, data FROM menu_items WHERE id IN (${placeholders})`)
+    .bind(...ids)
+    .all();
+
+  // map id → row เพื่อ lookup O(1)
+  const rowMap = Object.fromEntries(rows.map(r => [r.id, r]));
+
+  // สร้าง batch UPDATE จาก rows ที่มีอยู่จริง
   const stmts = [];
   for (const { id, sortOrder } of orders) {
-    if (!id) continue;
-    const existing = await env.DB.prepare('SELECT data FROM menu_items WHERE id = ?').bind(id).first();
-    if (!existing) continue;
-    const item = JSON.parse(existing.data);
+    if (!id || !rowMap[id]) continue;
+    const item = JSON.parse(rowMap[id].data);
     item.sortOrder = sortOrder;
     stmts.push(
       env.DB.prepare('INSERT OR REPLACE INTO menu_items (id, data) VALUES (?, ?)')
@@ -538,6 +584,13 @@ async function handleCallStaff(request, env) {
   const body = await request.json();
   const { table_num, message } = body;
   if (!table_num) return err('table_num required');
+
+  // Rate limit: 1 ครั้ง / โต๊ะ / 60 วินาที — ป้องกัน spam
+  const recent = await env.DB
+    .prepare("SELECT id FROM call_staff WHERE table_num = ? AND created_at > datetime('now', '-60 seconds') LIMIT 1")
+    .bind(table_num)
+    .first();
+  if (recent) return err('กรุณารอสักครู่ก่อนเรียกพนักงานอีกครั้ง', 429);
 
   const id  = nanoid(12);
   const now = nowISO();

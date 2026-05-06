@@ -554,6 +554,14 @@ document.getElementById('callStaffBtn').addEventListener('click', async () => {
     toast.classList.remove('hidden');
     setTimeout(() => toast.classList.add('hidden'), 3000);
   } catch (err) {
+    // server ตอบ 429 (rate limited) หรือ error อื่น → แสดง toast แจ้งลูกค้า
+    const toast = document.getElementById('callToast');
+    const origText = toast.textContent;
+    toast.textContent = err.message?.includes('429') || err.message?.includes('กรุณารอ')
+      ? '⏳ กรุณารอสักครู่ก่อนเรียกพนักงานอีกครั้ง'
+      : '❌ เกิดข้อผิดพลาด กรุณาลองใหม่';
+    toast.classList.remove('hidden');
+    setTimeout(() => { toast.classList.add('hidden'); toast.textContent = origText; }, 3000);
     console.error('callStaff error:', err);
   }
 
@@ -1013,8 +1021,11 @@ function renderCartModal() {
 }
 
 // ==================== Send Order ====================
+let isSubmitting = false; // guard ป้องกันกด 2 ครั้งก่อน disabled ทัน
 document.getElementById('sendOrderBtn').addEventListener('click', async () => {
   if (cart.length === 0) return;
+  if (isSubmitting) return;        // ← กันกด spam
+  isSubmitting = true;
   const btn = document.getElementById('sendOrderBtn');
   btn.disabled = true;
   btn.textContent = 'กำลังส่ง...';
@@ -1094,6 +1105,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
     alert('เกิดข้อผิดพลาด กรุณาลองอีกครั้ง\n' + err.message);
     console.error(err);
   } finally {
+    isSubmitting = false;
     btn.disabled = false;
     btn.textContent = activeOrderKey
       ? `✓ เพิ่มในออเดอร์ #${activeOrderNumber}`
