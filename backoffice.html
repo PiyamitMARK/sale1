@@ -2348,40 +2348,43 @@ document.getElementById('exportSendBtn').addEventListener('click', async () => {
   log.className = 'export-log';
   fill.style.width = '10%'; pct.textContent = '10%';
 
-  const rows = [];
-  orders.forEach(o => {
-    o.items.forEach(item => {
-      const dt = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt);
-      rows.push({
-        orderNumber: o.orderNumber,
-        date: dt.toLocaleDateString('th-TH'),
-        time: dt.toLocaleTimeString('th-TH'),
-        table: o.table,
-        itemName: item.name,
-        qty: item.qty,
-        price: item.price,
-        lineTotal: item.price * item.qty,
-        orderTotal: o.total,
-        payment: o.paymentMethod,
-      });
-    });
+  // แปลง orders → format ที่ Apps Script คาดหวัง
+  const payload = orders.map(o => {
+    const dt = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt);
+    return {
+      orderNumber: o.orderNumber,
+      date:        dt.toISOString(),
+      table:       o.table,
+      status:      o.status,
+      payment:     o.paymentMethod || '',
+      total:       o.total,
+      items:       (o.items || []).map(i => ({ name: i.name, qty: i.qty, price: i.price || 0 })),
+    };
   });
 
   fill.style.width = '40%'; pct.textContent = '40%';
-  log.textContent = `📡 กำลังส่งข้อมูล ${rows.length} แถว → Google Sheet…`;
+  log.textContent = `📡 กำลังส่งข้อมูล ${payload.length} ออเดอร์ → Google Sheet…`;
 
   try {
-    const res = await fetch(url, {
+    // ส่งผ่าน /api/export-proxy เพื่อเลี่ยง CORS ที่ Google Apps Script ไม่รองรับ
+    const res = await fetch('/api/export-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Key': localStorage.getItem('ks90-admin-key') || '',
+      },
+      body: JSON.stringify({ webhookUrl: url, orders: payload }),
     });
     fill.style.width = '100%'; pct.textContent = '100%';
     if (res.ok) {
-      log.textContent = `✅ ส่งข้อมูลสำเร็จ! ${rows.length} แถว → Google Sheet`;
+      const result = await res.json().catch(() => ({}));
+      const ins = result.inserted ?? payload.length;
+      const sk  = result.skipped  ?? 0;
+      log.textContent = `✅ ส่งข้อมูลสำเร็จ! ${ins} ออเดอร์ → Google Sheet${sk ? ` (ข้ามซ้ำ ${sk} รายการ)` : ''}`;
       log.className = 'export-log ok';
     } else {
-      throw new Error('HTTP ' + res.status);
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'HTTP ' + res.status);
     }
   } catch (err) {
     fill.style.width = '100%';

@@ -172,6 +172,12 @@ export default {
         return handleClearCallLog(env);
       }
 
+      // ── Export Proxy → Google Apps Script (ป้องกัน CORS ฝั่ง browser) ──
+      if (path === '/api/export-proxy' && method === 'POST') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleExportProxy(request);
+      }
+
       return err('Not found', 404);
     } catch (e) {
       console.error(e);
@@ -652,6 +658,42 @@ async function broadcastToRoom(env, roomName, msg) {
 
 // ==================== Durable Object: TableRoom ====================
 // ใช้ WebSocket Hibernation API — DO จะ hibernate แล้ว sessions ไม่หาย
+// ==================== Export Proxy ====================
+// ส่งข้อมูลไป Google Apps Script แทน browser เพื่อเลี่ยง CORS
+// (Google Apps Script ไม่รองรับ CORS preflight จาก origin อื่น)
+async function handleExportProxy(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (_) {
+    return err('Invalid JSON body');
+  }
+
+  const { webhookUrl, orders } = body;
+  if (!webhookUrl || typeof webhookUrl !== 'string') return err('Missing webhookUrl');
+  if (!Array.isArray(orders))                        return err('Missing orders array');
+
+  // ตรวจ URL ว่าเป็น Google Apps Script เท่านั้น (ป้องกัน SSRF)
+  let parsed;
+  try { parsed = new URL(webhookUrl); } catch (_) { return err('Invalid webhookUrl'); }
+  if (parsed.hostname !== 'script.google.com') return err('webhookUrl must be script.google.com');
+
+  try {
+    const upstream = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ orders }),
+    });
+    const text = await upstream.text();
+    return new Response(text, {
+      status:  upstream.ok ? 200 : 502,
+      headers: { 'Content-Type': 'application/json', ...CORS },
+    });
+  } catch (fetchErr) {
+    return err('Upstream fetch failed: ' + fetchErr.message, 502);
+  }
+}
+
 export class TableRoom {
   constructor(state) {
     this.state = state;
