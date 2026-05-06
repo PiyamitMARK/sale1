@@ -234,21 +234,28 @@ async function handleCreateOrder(request, env, ctx) {
 
   if (!table_num) return err('table_num required');
 
-  // Auto-increment order number — atomic ด้วย UPDATE...RETURNING
-  // ป้องกัน race condition กรณี 2 requests มาพร้อมกัน
-  const today    = todayStr();
-  const lastDate = await env.DB.prepare("SELECT value FROM meta WHERE key = 'lastOrderDate'").first();
+  // Auto-increment order number — แก้ race condition ตอนเที่ยงคืน
+  //
+  // ปัญหาเดิม: SELECT lastOrderDate แล้วค่อย reset แยก → 2 requests พร้อมกัน
+  // อาจ reset ซ้อนกัน ทำให้เลขออเดอร์แรกของวันไม่ใช่ 1001
+  //
+  // วิธีแก้: reset เป็น 1000 ด้วย conditional UPDATE (WHERE lastOrderDate != today)
+  // D1 รับประกันว่า WHERE ทำให้ statement นี้ no-op ถ้าใครทำไปก่อนแล้ว
+  // จากนั้น increment +1 แบบ atomic ด้วย UPDATE...RETURNING ในคำสั่งเดียว
+  const today = todayStr();
 
-  if (lastDate?.value !== today) {
-    // วันใหม่ → reset เป็น 1001 แบบ atomic ใน batch เดียว
-    await env.DB.batch([
-      env.DB.prepare("UPDATE meta SET value = ? WHERE key = 'lastOrderDate'").bind(today),
-      env.DB.prepare("UPDATE meta SET value = '1001' WHERE key = 'orderNumber'"),
-    ]);
-  }
+  // Reset เฉพาะถ้าวันยังไม่ตรง — first-writer wins, คนที่สองได้ no-op
+  // ตั้งเป็น 1000 เพราะ increment ด้านล่างจะ +1 ให้ได้ 1001 เป็นเลขแรก
+  await env.DB.prepare(
+    "UPDATE meta SET value = '1000' WHERE key = 'orderNumber' AND (SELECT value FROM meta WHERE key = 'lastOrderDate') != ?"
+  ).bind(today).run();
 
-  // UPDATE + RETURNING ใน statement เดียว — D1 ทำ atomic ให้เลย
-  // อ่านค่าปัจจุบัน แล้ว increment พร้อมกัน ไม่มีช่องให้ request อื่นแทรก
+  // อัปเดตวันที่ (idempotent — เขียนซ้ำได้ไม่เสียหาย)
+  await env.DB.prepare(
+    "UPDATE meta SET value = ? WHERE key = 'lastOrderDate'"
+  ).bind(today).run();
+
+  // INCREMENT แบบ atomic: อ่าน + บวก 1 + คืนค่าก่อนบวก ในคำสั่งเดียว
   const numRow = await env.DB
     .prepare("UPDATE meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'orderNumber' RETURNING CAST(value AS INTEGER) - 1 AS cur")
     .first();
@@ -700,9 +707,9 @@ async function handleExportProxy(request) {
   }
 }
 
-// ── Claude AI Proxy ──────────────────────────────────────────
-// รับ request จาก backoffice → ต่อ Anthropic API โดยใช้ secret key
-// ต้อง set: wrangler secret put ANTHROPIC_API_KEY
+// ── Claude AI Proxy (ใช้ Groq เป็น backend) ─────────────────
+// รับ request จาก backoffice → ต่อ Groq API โดยใช้ secret key
+// ต้อง set: wrangler secret put GROQ_API_KEY
 async function handleClaudeProxy(request, env) {
   if (!env.GROQ_API_KEY) {
     return err('GROQ_API_KEY not configured — run: wrangler secret put GROQ_API_KEY', 500);
