@@ -704,8 +704,8 @@ async function handleExportProxy(request) {
 // รับ request จาก backoffice → ต่อ Anthropic API โดยใช้ secret key
 // ต้อง set: wrangler secret put ANTHROPIC_API_KEY
 async function handleClaudeProxy(request, env) {
-  if (!env.GEMINI_API_KEY) {
-    return err('GEMINI_API_KEY not configured — run: wrangler secret put GEMINI_API_KEY', 500);
+  if (!env.GROQ_API_KEY) {
+    return err('GROQ_API_KEY not configured — run: wrangler secret put GROQ_API_KEY', 500);
   }
 
   let body;
@@ -715,31 +715,30 @@ async function handleClaudeProxy(request, env) {
     return err('Invalid JSON body');
   }
 
-  // แปลง Anthropic format → Gemini format
-  const systemText = body.system || '';
-  const geminiContents = body.messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: typeof m.content === 'string' ? m.content : m.content.map(c => c.text || '').join('') }],
-  }));
-
-  const geminiBody = {
-    system_instruction: systemText ? { parts: [{ text: systemText }] } : undefined,
-    contents: geminiContents,
-    generationConfig: {
-      maxOutputTokens: body.max_tokens || 1000,
-      temperature: 0.7,
-    },
-  };
+  // แปลง format → Groq (OpenAI-compatible)
+  const messages = [];
+  if (body.system) messages.push({ role: 'system', content: body.system });
+  for (const m of body.messages) {
+    messages.push({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.map(c => c.text || '').join(''),
+    });
+  }
 
   try {
-    const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiBody),
-      }
-    );
+    const upstream = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages,
+        max_tokens: body.max_tokens || 1000,
+        temperature: 0.7,
+      }),
+    });
 
     const data = await upstream.json();
 
@@ -750,18 +749,14 @@ async function handleClaudeProxy(request, env) {
       });
     }
 
-    // แปลง Gemini response → Anthropic format (เพื่อให้ backoffice.js ใช้ได้เหมือนเดิม)
-    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-    const anthropicLike = {
-      content: [{ type: 'text', text }],
-    };
-
-    return new Response(JSON.stringify(anthropicLike), {
+    // แปลง OpenAI response → Anthropic-like format
+    const text = data.choices?.[0]?.message?.content || '';
+    return new Response(JSON.stringify({ content: [{ type: 'text', text }] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...CORS },
     });
   } catch (fetchErr) {
-    return err('Gemini fetch failed: ' + fetchErr.message, 502);
+    return err('Groq fetch failed: ' + fetchErr.message, 502);
   }
 }
 
