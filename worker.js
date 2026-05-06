@@ -704,8 +704,8 @@ async function handleExportProxy(request) {
 // รับ request จาก backoffice → ต่อ Anthropic API โดยใช้ secret key
 // ต้อง set: wrangler secret put ANTHROPIC_API_KEY
 async function handleClaudeProxy(request, env) {
-  if (!env.ANTHROPIC_API_KEY) {
-    return err('ANTHROPIC_API_KEY not configured — run: wrangler secret put ANTHROPIC_API_KEY', 500);
+  if (!env.GEMINI_API_KEY) {
+    return err('GEMINI_API_KEY not configured — run: wrangler secret put GEMINI_API_KEY', 500);
   }
 
   let body;
@@ -715,34 +715,53 @@ async function handleClaudeProxy(request, env) {
     return err('Invalid JSON body');
   }
 
-  // whitelist model ที่อนุญาต (ป้องกัน abuse)
-  const ALLOWED_MODELS = [
-    'claude-sonnet-4-20250514',
-    'claude-haiku-4-5-20251001',
-    'claude-opus-4-6',
-  ];
-  if (!ALLOWED_MODELS.includes(body.model)) {
-    return err('Model not allowed: ' + body.model, 400);
-  }
+  // แปลง Anthropic format → Gemini format
+  const systemText = body.system || '';
+  const geminiContents = body.messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : m.content.map(c => c.text || '').join('') }],
+  }));
+
+  const geminiBody = {
+    system_instruction: systemText ? { parts: [{ text: systemText }] } : undefined,
+    contents: geminiContents,
+    generationConfig: {
+      maxOutputTokens: body.max_tokens || 1000,
+      temperature: 0.7,
+    },
+  };
 
   try {
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-    });
+    const upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiBody),
+      }
+    );
 
-    const json = await upstream.json();
-    return new Response(JSON.stringify(json), {
-      status:  upstream.status,
+    const data = await upstream.json();
+
+    if (!upstream.ok) {
+      return new Response(JSON.stringify({ error: data.error?.message || JSON.stringify(data) }), {
+        status: upstream.status,
+        headers: { 'Content-Type': 'application/json', ...CORS },
+      });
+    }
+
+    // แปลง Gemini response → Anthropic format (เพื่อให้ backoffice.js ใช้ได้เหมือนเดิม)
+    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+    const anthropicLike = {
+      content: [{ type: 'text', text }],
+    };
+
+    return new Response(JSON.stringify(anthropicLike), {
+      status: 200,
       headers: { 'Content-Type': 'application/json', ...CORS },
     });
   } catch (fetchErr) {
-    return err('Anthropic fetch failed: ' + fetchErr.message, 502);
+    return err('Gemini fetch failed: ' + fetchErr.message, 502);
   }
 }
 
