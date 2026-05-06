@@ -1431,9 +1431,9 @@ canvas.ai-chart { width: 100% !important; }
 /* Heatmap */
 .ai-heatmap-grid {
   display: grid;
-  grid-template-columns: 36px repeat(7, 1fr);
-  gap: 3px;
-  font-size: .7rem;
+  grid-template-columns: 28px repeat(7, 1fr);
+  gap: 2px;
+  font-size: .62rem;
 }
 .ai-hm-label {
   display: flex;
@@ -1441,13 +1441,13 @@ canvas.ai-chart { width: 100% !important; }
   justify-content: flex-end;
   padding-right: 5px;
   color: var(--brown-light);
-  font-size: .68rem;
+  font-size: .6rem;
 }
 .ai-hm-day-label {
   text-align: center;
   color: var(--brown-light);
-  font-size: .68rem;
-  padding-bottom: 3px;
+  font-size: .6rem;
+  padding-bottom: 2px;
   font-weight: 600;
 }
 .ai-hm-cell {
@@ -1686,19 +1686,19 @@ canvas.ai-chart { width: 100% !important; }
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem 1.2rem;
+  padding: .65rem 1rem;
   background: linear-gradient(135deg, rgba(200,133,58,.07) 0%, rgba(232,168,90,.04) 100%);
   border-bottom: 1px solid rgba(200,133,58,.2);
 }
 .ai-forecast-header-left { display: flex; align-items: center; gap: .8rem; }
-.ai-forecast-icon { font-size: 2rem; line-height: 1; }
+.ai-forecast-icon { font-size: 1.4rem; line-height: 1; }
 .ai-forecast-title {
   font-family: 'Mitr', sans-serif;
-  font-size: 1rem;
+  font-size: .88rem;
   color: var(--brown);
   font-weight: 600;
 }
-.ai-forecast-sub { font-size: .75rem; color: var(--brown-light); margin-top: .15rem; }
+.ai-forecast-sub { font-size: .68rem; color: var(--brown-light); margin-top: .15rem; }
 
 .ai-forecast-loading { padding: .5rem 1rem 1rem; }
 .ai-forecast-empty {
@@ -1712,27 +1712,27 @@ canvas.ai-chart { width: 100% !important; }
   text-align: center;
 }
 
-.ai-forecast-result { padding: 1rem 1.2rem 1.2rem; }
+.ai-forecast-result { padding: .7rem 1rem 1rem; }
 .ai-forecast-kpi-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: .7rem;
-  margin-bottom: 1rem;
+  gap: .5rem;
+  margin-bottom: .7rem;
 }
 @media (max-width: 520px) { .ai-forecast-kpi-row { grid-template-columns: 1fr 1fr; } }
 
 .ai-fcast-kpi {
   background: var(--cream-mid);
   border-radius: var(--radius-sm);
-  padding: .7rem .9rem;
+  padding: .5rem .7rem;
   display: flex;
   flex-direction: column;
-  gap: .2rem;
+  gap: .15rem;
 }
 .ai-fcast-kpi-label { font-size: .72rem; color: var(--brown-light); text-transform: uppercase; letter-spacing: .03em; }
 .ai-fcast-kpi-value {
   font-family: 'Mitr', sans-serif;
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--accent);
 }
@@ -1741,8 +1741,8 @@ canvas.ai-chart { width: 100% !important; }
 .ai-forecast-body {
   background: var(--cream-mid);
   border-radius: var(--radius-sm);
-  padding: .9rem 1rem;
-  font-size: .85rem;
+  padding: .65rem .8rem;
+  font-size: .78rem;
   line-height: 1.75;
   color: var(--brown);
   white-space: pre-wrap;
@@ -1757,8 +1757,8 @@ canvas.ai-chart { width: 100% !important; }
 .ai-forecast-body .fcast-section:last-child { border-bottom: none; }
 .ai-forecast-body .fcast-section-icon { font-size: 1.1rem; flex-shrink: 0; }
 .ai-forecast-body .fcast-section-content { flex: 1; }
-.ai-forecast-body .fcast-section-title { font-weight: 700; color: var(--brown); font-size: .82rem; margin-bottom: .15rem; }
-.ai-forecast-body .fcast-section-text { color: var(--brown-mid); font-size: .82rem; }
+.ai-forecast-body .fcast-section-title { font-weight: 700; color: var(--brown); font-size: .75rem; margin-bottom: .15rem; }
+.ai-forecast-body .fcast-section-text { color: var(--brown-mid); font-size: .75rem; }
 
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
@@ -2513,7 +2513,7 @@ canvas.ai-chart { width: 100% !important; }
         <div class="bo-panel-heading">
           <div>
             <div class="bo-panel-title">🤖 AI Business Analyst</div>
-            <div class="bo-panel-sub">วิเคราะห์ยอดขาย เมนูดัง แนวโน้ม — ขับเคลื่อนด้วย Claude AI</div>
+            <div class="bo-panel-sub">วิเคราะห์ยอดขาย เมนูดัง แนวโน้ม — ขับเคลื่อนด้วย AI</div>
           </div>
           <button class="btn btn-primary btn-sm" id="aiRefreshBtn">🔄 โหลดข้อมูล</button>
         </div>
@@ -2553,8 +2553,8 @@ canvas.ai-chart { width: 100% !important; }
           <div class="ai-chat-section">
             <div class="ai-chat-header">
               <div class="ai-chat-header-icon">🤖</div>
-              <div class="ai-chat-header-title">ถาม Claude AI เกี่ยวกับธุรกิจของคุณ</div>
-              <div class="ai-chat-header-badge">Powered by Claude</div>
+              <div class="ai-chat-header-title">ถาม AI เกี่ยวกับธุรกิจของคุณ</div>
+              <div class="ai-chat-header-badge">Powered by AI</div>
             </div>
             <div class="ai-quick-prompts">
               <button class="ai-quick-btn" data-prompt="วิเคราะห์ยอดขายวันนี้และให้คำแนะนำ">📊 วิเคราะห์วันนี้</button>
@@ -2584,7 +2584,7 @@ canvas.ai-chart { width: 100% !important; }
                 <div class="ai-forecast-icon">🔮</div>
                 <div>
                   <div class="ai-forecast-title">AI Forecast — ทำนายพรุ่งนี้</div>
-                  <div class="ai-forecast-sub">Claude วิเคราะห์ pattern 7 วัน → คาดการณ์ยอดขาย ชั่วโมงพีค และเมนูแนะนำ</div>
+                  <div class="ai-forecast-sub">AI วิเคราะห์ pattern 7 วัน → คาดการณ์ยอดขาย ชั่วโมงพีค และเมนูแนะนำ</div>
                 </div>
               </div>
               <button class="btn btn-primary btn-sm" id="aiForecastBtn">✨ ทำนาย</button>
@@ -2597,7 +2597,7 @@ canvas.ai-chart { width: 100% !important; }
               <div class="ai-typing" style="justify-content:center;padding:1.5rem 0">
                 <div class="ai-typing-dot"></div><div class="ai-typing-dot"></div><div class="ai-typing-dot"></div>
               </div>
-              <div style="text-align:center;font-size:.82rem;color:var(--brown-light)">Claude กำลังวิเคราะห์...</div>
+              <div style="text-align:center;font-size:.82rem;color:var(--brown-light)">AI กำลังวิเคราะห์...</div>
             </div>
             <div id="aiForecastEmpty" class="ai-forecast-empty">
               <span style="font-size:2rem">🔮</span>
@@ -5274,7 +5274,7 @@ async function _aiSendMessage(userMsg) {
   const snap    = _buildAiSnapshot();
   const context = _buildAiContext(snap);
 
-  const systemPrompt = `คุณคือ AI Business Analyst ผู้เชี่ยวชาญด้านร้านอาหารไทย ชื่อ "Claude" ทำงานให้ร้าน "ข้าวซอย 90"
+  const systemPrompt = `คุณคือ AI Business Analyst ผู้เชี่ยวชาญด้านร้านอาหารไทย ทำงานให้ร้าน "ข้าวซอย 90"
 
 ${context}
 
