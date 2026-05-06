@@ -4756,16 +4756,6 @@ function renderKitchenCards() {
     }).join('');
 
     return `<div class="kitchen-card ${statusCls}" data-oid="${escHtml(o.id)}">
-      <div class="kitchen-card-header">
-        <div>
-          <div class="kitchen-card-order">#${o.order_num}${o.is_takeaway ? ' 📦' : ''}</div>
-          <div class="kitchen-card-table">${o.is_takeaway ? 'กลับบ้าน' : 'โต๊ะ ' + escHtml(String(o.table_num))}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.3rem">
-          ${badge}
-          <span class="kitchen-card-timer">${isAlert ? '🚨 ' : ''}${kitchenFmt(elapsed)}</span>
-        </div>
-      </div>
       <div class="kitchen-card-items">${itemsHtml || '<span style="color:var(--brown-light);font-size:.85rem">ไม่มีรายการ</span>'}</div>
       <div class="kitchen-card-footer">
         ${o.status === 'pending'
