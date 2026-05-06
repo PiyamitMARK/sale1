@@ -473,6 +473,25 @@ async function checkActiveOrder() {
         clearSavedCart();
       }
     } else {
+      // table_orders mapping ว่าง — แต่ยังอาจมี key ใน LS (เช่น admin clear table mapping
+      // หรือ race condition: รีหน้าเร็วก่อน worker เขียน mapping เสร็จ)
+      // → fallback: ตรวจ activeOrderKey จาก LS โดยตรงก่อนยอมล้าง
+      const lsKey = localStorage.getItem(_lsOrderKey());
+      if (lsKey) {
+        const order = await api.getOrder(lsKey).catch(() => null);
+        if (order && order.status !== 'paid' && order.status !== 'canceled') {
+          // order ยังค้างอยู่จริง → คืนค่า + เขียน mapping กลับ (background)
+          activeOrderKey    = lsKey;
+          activeOrderNumber = order.order_num;
+          _saveActiveOrder();
+          showOrderBanner();
+          // เขียน table_orders mapping กลับ (กรณี mapping หายไปแล้ว)
+          // worker ไม่มี remap endpoint → ส่ง status=pending (no-change แต่ worker ไม่ restore mapping)
+          // การ remap จะเกิดขึ้นเองตอนลูกค้าสั่งเพิ่ม (sendOrder จะเพิ่ม batch ต่อท้าย order เดิม)
+          // ไม่ต้องทำอะไรเพิ่ม — activeOrderKey ถูก set ถูกต้องแล้ว
+          return;
+        }
+      }
       // ไม่มี order active จริงๆ → ล้าง
       activeOrderKey    = null;
       activeOrderNumber = null;

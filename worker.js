@@ -334,6 +334,14 @@ async function handleUpdateOrder(request, path, env, ctx, body = null) {
   // ป้องกันเสียงดังผิดที่เมื่อ admin แก้ไขออเดอร์
   if (body.batches !== undefined && body.from_customer === true) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'new_batch', order: updated }));
+    // Restore table_orders mapping ในกรณีที่ admin เคย clear table แต่ order ยังไม่จ่าย
+    // (ลูกค้ารีหน้า → checkActiveOrder fallback ไปเจอ order จาก LS → สั่งเพิ่ม → mapping กลับมา)
+    ctx.waitUntil(
+      env.DB.prepare(`INSERT OR REPLACE INTO table_orders (table_num, order_id, created_at) VALUES (?, ?, ?)`)
+        .bind(updated.table_num, updated.id, nowISO())
+        .run()
+        .catch(() => {})
+    );
   }
 
   // ถ้ามี status → แจ้งห้องโต๊ะด้วย
