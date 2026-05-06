@@ -2475,14 +2475,8 @@ canvas.ai-chart { width: 100% !important; }
 
         <!-- Filter bar -->
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-          <button class="topseller-filter-btn active" data-kfilter="all"   id="kFilterAll">ทั้งหมด</button>
-          <button class="topseller-filter-btn"        data-kfilter="pending">⏳ รอรับ</button>
-          <button class="topseller-filter-btn"        data-kfilter="cooking">🍳 กำลังทำ</button>
-          <div style="margin-left:auto;display:flex;align-items:center;gap:.4rem">
-            <span style="font-size:.8rem;color:var(--brown-light)">⚠️ alert เกิน</span>
-            <input type="number" id="kitchenAlertMin" value="15" min="1" max="60" style="width:52px;padding:.3rem .45rem;border:1.5px solid var(--cream-dark);border-radius:6px;font-size:.85rem;text-align:center;background:var(--cream);color:var(--brown)">
-            <span style="font-size:.8rem;color:var(--brown-light)">นาที</span>
-          </div>
+          <input type="hidden" id="kFilterAll" data-kfilter="all">
+          <input type="number" id="kitchenAlertMin" value="15" min="1" max="60" style="display:none">
         </div>
 
         <!-- Summary bar -->
