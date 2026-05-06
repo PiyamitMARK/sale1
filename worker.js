@@ -278,6 +278,8 @@ async function handleUpdateOrder(request, path, env, ctx, body = null) {
   const params  = [];
 
   if (body.status !== undefined) {
+    const VALID_STATUSES = ['pending', 'cooking', 'served', 'paid', 'cancelled'];
+    if (!VALID_STATUSES.includes(body.status)) return err('Invalid status value', 400);
     updates.push('status = ?');
     params.push(body.status);
   }

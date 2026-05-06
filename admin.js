@@ -331,8 +331,12 @@ async function _loadOrders(opts = {}) {
   const silent = opts.silent === true;
   try {
     const orders = await api.getOrders({ limit: 500 });
-    const newOrders = (orders || []).map(o => ({      ...o,
-      firebaseKey: o.id,
+    const newOrders = (orders || []).map(o => ({
+      ...o,
+      // firebaseKey: compat alias (ใช้ o.id โดยตรง เพื่อไม่สร้าง object เพิ่ม)
+      date:        o.date        || o.created_at,
+      table:       o.table       || o.table_num,
+      orderNumber: o.orderNumber || o.order_num,
     }));
     newOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -351,8 +355,6 @@ async function _loadOrders(opts = {}) {
     knownOrderIds = new Set(newOrders.map(o => o.id));
     isFirstLoad   = false;
     allOrders     = newOrders;
-
-    allOrders = allOrders.map(o => ({ ...o, date: o.date || o.created_at, table: o.table || o.table_num, orderNumber: o.orderNumber || o.order_num }));
 
     updatePopularItems(allOrders);
     renderDailySummary();
@@ -514,7 +516,7 @@ async function startMenuListener() {
 
 // ==================== API: Actions ====================
 async function markOrderAsPaid(orderId, paymentMethod) {
-  const order = allOrders.find(o => o.id === orderId || o.firebaseKey === orderId);
+  const order = allOrders.find(o => o.id === orderId);
   const updateData = { status: 'paid' };
   if (paymentMethod) updateData.payment = paymentMethod;
   await api.updateOrder(orderId, updateData);
@@ -538,7 +540,7 @@ async function markOrderAsServed(orderId) {
 
 async function deleteOrder(orderId, orderNumber) {
   if (!confirm(`ลบออเดอร์ #${orderNumber} ?`)) return;
-  const order = allOrders.find(o => o.id === orderId || o.firebaseKey === orderId);
+  const order = allOrders.find(o => o.id === orderId);
   await api.deleteOrder(orderId);
   const tableNum = order?.table_num || order?.table;
   if (tableNum) {
@@ -871,7 +873,7 @@ function renderOrders() {
     const tableNum = order.table_num || order.table;
     const orderNum = order.order_num || order.orderNumber;
     const dateStr  = order.created_at || order.date;
-    const orderId  = order.id || order.firebaseKey;
+    const orderId  = order.id;
 
     let actionBtns = '';
     if (s === 'pending') {
@@ -946,13 +948,13 @@ function renderOrders() {
   });
   ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
+      const order = allOrders.find(o => (o.id) === btn.dataset.key);
       if (order) openEditOrderModal(btn.dataset.key, order);
     });
   });
   ordersList.querySelectorAll('.btn-print-receipt').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
+      const order = allOrders.find(o => (o.id) === btn.dataset.key);
       if (order) printOrderReceipt(order);
     });
   });
@@ -1009,8 +1011,11 @@ let qrInstances = {};
 function renderTakeawayQrPanel() {
   const container = document.getElementById('takeawayQrSlots');
   if (!container) return;
-  if (container.dataset.rendered === '1') return;
-  container.dataset.rendered = '1';
+
+  // ไม่ cache ด้วย dataset.rendered — ให้ re-render ทุกครั้งที่กลับมาแท็บ Takeaway
+  // เพื่อให้ QR สะท้อน URL ปัจจุบันเสมอ
+  Object.values(qrInstances).forEach(qr => { try { qr.clear?.(); } catch (_) {} });
+  qrInstances = {};
 
   const savedBase = localStorage.getItem(TA_STORAGE_KEY) || (location.origin + '/');
 
@@ -1228,7 +1233,7 @@ function renderTakeawayOrders() {
     const tableNum = order.table_num || order.table;
     const orderNum = order.order_num || order.orderNumber;
     const dateStr  = order.created_at || order.date;
-    const orderId  = order.id || order.firebaseKey;
+    const orderId  = order.id;
 
     let actionBtns = '';
     if (s === 'pending') {
@@ -1302,12 +1307,12 @@ function renderTakeawayOrders() {
   });
   taList.querySelectorAll('.btn-print-receipt').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
+      const order = allOrders.find(o => (o.id) === btn.dataset.key);
       if (order) printOrderReceipt(order);
     });
   });
   taList.querySelectorAll('.btn-edit-order').forEach((btn) => {
-    const order = allOrders.find(o => (o.id || o.firebaseKey) === btn.dataset.key);
+    const order = allOrders.find(o => (o.id) === btn.dataset.key);
     btn.addEventListener('click', () => { if (order) openEditOrderModal(btn.dataset.key, order); });
   });
   taList.querySelectorAll('.btn-delete').forEach((btn) => {
