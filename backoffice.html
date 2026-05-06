@@ -3057,21 +3057,34 @@ function _guessCategory(itemName) {
 // ============================================================
 //  NORMALISE ORDER — convert API response → flat order obj
 // ============================================================
-function normaliseOrder(o, key) {
-  const items = [];
-  if (Array.isArray(o.batches)) {
-    o.batches.forEach(b => {
-      if (Array.isArray(b)) b.forEach(it => items.push(it));
-      else if (b && Array.isArray(b.items)) b.items.forEach(it => items.push(it));
-    });
-  } else if (o.batches && typeof o.batches === 'object') {
-    Object.values(o.batches).forEach(b => {
-      if (Array.isArray(b)) b.forEach(it => items.push(it));
-      else if (b && Array.isArray(b.items)) b.items.forEach(it => items.push(it));
-    });
-  } else if (Array.isArray(o.items)) {
-    items.push(...o.items);
+function _parseBatches(raw) {
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try { parsed = JSON.parse(raw); } catch(_) { return []; }
   }
+  const items = [];
+  const push = it => { if (it && (it.name || it.productName)) items.push(it); };
+  if (Array.isArray(parsed)) {
+    parsed.forEach(b => {
+      if (!b) return;
+      if (Array.isArray(b)) b.forEach(push);
+      else if (Array.isArray(b.items)) b.items.forEach(push);
+      else if (b.name || b.productName) push(b);
+    });
+  } else if (parsed && typeof parsed === 'object') {
+    Object.values(parsed).forEach(b => {
+      if (Array.isArray(b)) b.forEach(push);
+      else if (b && Array.isArray(b.items)) b.items.forEach(push);
+      else if (b && (b.name || b.productName)) push(b);
+    });
+  }
+  return items;
+}
+
+function normaliseOrder(o, key) {
+  const items = _parseBatches(o.batches).length
+    ? _parseBatches(o.batches)
+    : (Array.isArray(o.items) ? o.items : []);
   return {
     id:            key || o.id,
     orderNumber:   o.orderNumber || o.id || key,
@@ -4730,9 +4743,7 @@ function renderKitchenCards() {
       : `<span class="kitchen-status-badge kbadge-cooking">🍳 กำลังทำ</span>`;
 
     // flatten all batch items
-    let batches = [];
-    try { batches = JSON.parse(o.batches || '[]'); } catch(_) {}
-    const allItems = batches.flatMap(b => Array.isArray(b) ? b : (b.items || []));
+    const allItems = _parseBatches(o.batches);
 
     const itemsHtml = allItems.map(item => {
       const opts = item.selectedOptions
@@ -4740,7 +4751,7 @@ function renderKitchenCards() {
         : '';
       return `<div class="kitchen-item-row">
         <span class="kitchen-item-qty">×${item.qty || 1}</span>
-        <span class="kitchen-item-name">${escHtml(item.name || '—')}</span>
+        <span class="kitchen-item-name">${escHtml(item.name || item.productName || '—')}</span>
       </div>${opts ? `<div class="kitchen-item-opts">${escHtml(opts)}</div>` : ''}`;
     }).join('');
 
