@@ -1930,21 +1930,21 @@ canvas.ai-chart { width: 100% !important; }
 
 <!-- =============== AUTH GUARD =============== -->
 <script>
-(function() {
-  if (localStorage.getItem('kaosoi-auth') !== 'true' && sessionStorage.getItem('kaosoi-auth') !== 'true') {
-    document.body.innerHTML = [
-      '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;',
-      'justify-content:center;font-family:Sarabun,sans-serif;background:#faf6f0;',
-      'color:#3d2b1f;text-align:center;padding:2rem">',
-      '<div style="font-size:3.5rem;margin-bottom:1rem">🔒</div>',
-      '<h2 style="font-family:Mitr,sans-serif;font-size:1.5rem;margin-bottom:0.5rem">',
-      'ไม่มีสิทธิ์เข้าใช้งาน</h2>',
-      '<p style="color:#8b6655;margin-bottom:1.5rem">',
-      'กรุณาล็อกอินผ่านหน้าแอดมินก่อน</p>',
-      '<a href="admin.html" style="background:#c8853a;color:#fff;text-decoration:none;',
-      'padding:0.65rem 1.75rem;border-radius:999px;font-family:Mitr,sans-serif;',
-      'font-size:0.95rem;font-weight:600">ไปหน้าล็อกอิน →</a></div>'
-    ].join('');
+(function () {
+  var key = localStorage.getItem('ks90-admin-key');
+  if (!key) { location.replace('admin.html?next=backoffice.html'); return; }
+  var hasFlag = localStorage.getItem('kaosoi-auth') === 'true'
+             || sessionStorage.getItem('kaosoi-auth') === 'true';
+  if (!hasFlag) {
+    fetch('/api/meta', { headers: { 'X-Admin-Key': key } }).then(function (r) {
+      if (r.ok) {
+        localStorage.setItem('kaosoi-auth', 'true');
+        sessionStorage.setItem('kaosoi-auth', 'true');
+      } else {
+        localStorage.removeItem('ks90-admin-key');
+        location.replace('admin.html?next=backoffice.html');
+      }
+    }).catch(function () { /* network err — ให้ผ่านก่อน */ });
   }
 })();
 </script>

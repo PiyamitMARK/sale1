@@ -1428,6 +1428,16 @@ function renderTakeawayOrders() {
 }
 
 // ==================== Auth Events ====================
+function getNextUrl() {
+  return new URLSearchParams(location.search).get('next') || '';
+}
+
+function redirectAfterLogin() {
+  const next = getNextUrl();
+  if (next) { location.href = next; return true; }
+  return false;
+}
+
 async function checkAuth() {
   // ถ้าไม่มี admin key เลย → ไปหน้า login ทันที
   if (!localStorage.getItem('ks90-admin-key')) {
@@ -1439,6 +1449,7 @@ async function checkAuth() {
   const ok = await verifyAdminKey();
   if (ok) {
     sessionStorage.setItem(AUTH_KEY, 'true');
+    if (redirectAfterLogin()) return;
     showScreen(dashboardScreen);
     startRealtimeListener();
     startCallStaffListener();
@@ -1476,6 +1487,7 @@ loginBtn.addEventListener('click', async () => {
       resetAttempts();
       setLoggedIn(true);
       unlockAudio(); // เรียกจาก click gesture → browser อนุญาต AudioContext + speechSynthesis
+      if (redirectAfterLogin()) return;
       showScreen(dashboardScreen);
       startRealtimeListener();
       startCallStaffListener();
