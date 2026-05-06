@@ -129,7 +129,7 @@ function getAllItems(order) {
 }
 
 // ==================== Sound Alert ====================
-let soundEnabled = true;
+let soundEnabled = localStorage.getItem('soundEnabled') !== 'false'; // persist ข้ามรีเฟรช
 let knownOrderIds = new Set();
 let isFirstLoad = true;
 
@@ -267,10 +267,16 @@ function speak(text, opts = {}) {
 
     _startTTSWatchdog(utter);
 
-    // delay เล็กน้อยให้ cancel() ด้านบนมีผลก่อน speak ใหม่
-    setTimeout(() => {
+    // iOS Safari: setTimeout ทำให้หลุดจาก gesture context → speak ไม่ออก
+    // แก้: ถ้าอยู่ใน gesture context (speechSynthesis ไม่ได้ speaking) → speak ทันที
+    // ถ้า speaking อยู่ (queue) → delay เล็กน้อยให้ cancel() มีผลก่อน
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      setTimeout(() => {
+        try { window.speechSynthesis.speak(utter); } catch(e) { console.warn('TTS speak error:', e); }
+      }, 80);
+    } else {
       try { window.speechSynthesis.speak(utter); } catch(e) { console.warn('TTS speak error:', e); }
-    }, 80);
+    }
   } catch (e) { console.warn('TTS error:', e); }
 }
 
@@ -1616,6 +1622,7 @@ if (soundToggleBtn) {
     if (!wasShortClick) return;
     unlockAudio();
     soundEnabled = !soundEnabled;
+    localStorage.setItem('soundEnabled', soundEnabled ? 'true' : 'false');
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
     updateSoundBtnLabel();
     if (soundEnabled) {
@@ -1637,19 +1644,40 @@ if (soundToggleBtn) {
     }, LONG_PRESS_MS);
   }, { passive: true });
 
-  soundToggleBtn.addEventListener('touchend', () => {
+  soundToggleBtn.addEventListener('touchend', (e) => {
+    // prevent ไม่ให้ browser fire click ซ้อน touchend → toggle 2 ครั้ง (Bug 3)
+    e.preventDefault();
     const wasShortTap = !!_longPressTimer;
     clearTimeout(_longPressTimer);
     _longPressTimer = null;
     if (_didOpenDropdown) return;
     if (!wasShortTap) return;
+    // unlock ก่อน — iOS ต้องการ gesture context
     unlockAudio();
     soundEnabled = !soundEnabled;
+    localStorage.setItem('soundEnabled', soundEnabled ? 'true' : 'false');
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
     updateSoundBtnLabel();
     if (soundEnabled) {
-      if (soundMode === 'beep') playBeep([880, 1047], 0.18);
-      else speak('เสียงเปิดแล้วจ้า');
+      // iOS Safari: speak() ใน setTimeout > ~100ms ถือว่าหลุดจาก gesture → ไม่ออกเสียง
+      // ต้อง speak() ทันทีใน synchronous context ของ touchend (ก่อน setTimeout ใน speak())
+      // แก้: เรียก speechSynthesis.speak() โดยตรงแทนผ่าน speak() ที่มี setTimeout
+      if (soundMode === 'beep') {
+        playBeep([880, 1047], 0.18);
+      } else {
+        if (window.speechSynthesis) {
+          try {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance('เสียงเปิดแล้วจ้า');
+            utter.lang  = 'th-TH';
+            utter.rate  = 0.85;
+            utter.pitch = 1.1;
+            const thVoice = _pickThaiVoice();
+            if (thVoice) utter.voice = thVoice;
+            window.speechSynthesis.speak(utter);
+          } catch(err) { console.warn('TTS touchend error:', err); }
+        }
+      }
     }
   });
 
