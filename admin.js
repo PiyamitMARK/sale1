@@ -169,26 +169,70 @@ function playBeep(freqs = [880], dur = 0.18) {
   });
 }
 
-let iosUnlocked = false;
-function unlockIOSSpeech() {
+// ── Voice cache ────────────────────────────────────────────────────────────────
+// getVoices() คืน [] ถ้าเรียกก่อน voiceschanged → cache ไว้ให้พร้อมใช้เสมอ
+let _cachedVoices = [];
+let _audioUnlocked = false;
+
+function _cacheVoices() {
+  const v = window.speechSynthesis?.getVoices() || [];
+  if (v.length) _cachedVoices = v;
+}
+
+if (window.speechSynthesis) {
+  _cacheVoices();
+  window.speechSynthesis.addEventListener('voiceschanged', _cacheVoices);
+}
+
+function _pickThaiVoice() {
+  // อัปเดต cache ก่อนเผื่อ voices โหลดเพิ่มระหว่างทาง
+  _cacheVoices();
+  return (
+    // ลำดับความสำคัญ: th-TH ชัดเจน → th ทั่วไป → ไม่ระบุ (browser default)
+    _cachedVoices.find(v => v.lang === 'th-TH') ||
+    _cachedVoices.find(v => v.lang.startsWith('th')) ||
+    null
+  );
+}
+
+// ── Audio + Speech unlock (ต้องเรียกจาก user gesture จริงๆ เท่านั้น) ──────────
+// iOS และ Android บล็อก AudioContext / speechSynthesis ถ้าไม่มี gesture
+function unlockAudio() {
+  if (_audioUnlocked) return;
+
+  // Unlock AudioContext
   const ctx = getAudioCtx();
   if (ctx) {
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    ctx.resume().catch(() => {});
     try {
-      const buf    = ctx.createBuffer(1, 1, 22050);
-      const source = ctx.createBufferSource();
-      source.buffer = buf;
-      source.connect(ctx.destination);
-      source.start(0);
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(0);
     } catch(e) {}
   }
-  if (iosUnlocked || !window.speechSynthesis) return;
+
+  // Unlock speechSynthesis (iOS/Android ต้องการ speak() จาก gesture ก่อน)
+  if (window.speechSynthesis) {
+    try {
+      const utter  = new SpeechSynthesisUtterance('​'); // zero-width space — ไม่มีเสียง
+      utter.volume = 0;
+      utter.rate   = 2;
+      window.speechSynthesis.speak(utter);
+    } catch(e) {}
+  }
+
+  _audioUnlocked = true;
+}
+
+// ── Android Chrome bug: speechSynthesis หยุดทำงานหลัง app ถูก background ──────
+// แก้โดย cancel() + resume() ทุกครั้งก่อน speak
+function _resetSpeechSynthesis() {
+  if (!window.speechSynthesis) return;
   try {
-    const utter  = new SpeechSynthesisUtterance('\u200B');
-    utter.volume = 0.01;
-    utter.rate   = 2;
-    window.speechSynthesis.speak(utter);
-    iosUnlocked  = true;
+    window.speechSynthesis.cancel();
+    // รอ event loop 1 รอบให้ cancel มีผล
   } catch(e) {}
 }
 
@@ -197,8 +241,10 @@ function _startTTSWatchdog(utter) {
   clearInterval(_ttsWatchdog);
   _ttsWatchdog = setInterval(() => {
     if (!window.speechSynthesis) { clearInterval(_ttsWatchdog); return; }
-    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-  }, 5000);
+    // Android bug: synthesis stuck → resume แก้ได้บางครั้ง
+    if (window.speechSynthesis.paused)   window.speechSynthesis.resume();
+    if (!window.speechSynthesis.speaking) clearInterval(_ttsWatchdog);
+  }, 2000);
   utter.onend = utter.onerror = () => clearInterval(_ttsWatchdog);
 }
 
@@ -206,28 +252,27 @@ function speak(text, opts = {}) {
   if (!soundEnabled) return;
   if (opts.beep !== false) playBeep(opts.beep || [880, 1100], 0.15);
   if (!window.speechSynthesis) return;
-  try {
-    window.speechSynthesis.cancel();
-    const utter    = new SpeechSynthesisUtterance(text);
-    utter.lang     = 'th-TH';
-    utter.rate     = opts.rate   ?? 0.85;
-    utter.pitch    = opts.pitch  ?? 1.1;
-    utter.volume   = opts.volume ?? 1.0;
-    const voices  = window.speechSynthesis.getVoices();
-    const thVoice = voices.find(v => v.lang === 'th-TH' || v.lang.startsWith('th'));
-    if (thVoice) utter.voice = thVoice;
-    _startTTSWatchdog(utter);
-    setTimeout(() => {
-      try { window.speechSynthesis.speak(utter); } catch(e) {}
-    }, 120);
-  } catch (e) { console.warn('TTS error:', e); }
-}
 
-if (window.speechSynthesis) {
-  window.speechSynthesis.getVoices();
-  window.speechSynthesis.addEventListener('voiceschanged', () => {
-    window.speechSynthesis.getVoices();
-  });
+  // reset state เก่าก่อน (แก้ Android bg bug)
+  _resetSpeechSynthesis();
+
+  try {
+    const utter   = new SpeechSynthesisUtterance(text);
+    utter.lang    = 'th-TH';
+    utter.rate    = opts.rate   ?? 0.85;
+    utter.pitch   = opts.pitch  ?? 1.1;
+    utter.volume  = opts.volume ?? 1.0;
+
+    const thVoice = _pickThaiVoice();
+    if (thVoice) utter.voice = thVoice;
+
+    _startTTSWatchdog(utter);
+
+    // delay เล็กน้อยให้ cancel() ด้านบนมีผลก่อน speak ใหม่
+    setTimeout(() => {
+      try { window.speechSynthesis.speak(utter); } catch(e) { console.warn('TTS speak error:', e); }
+    }, 80);
+  } catch (e) { console.warn('TTS error:', e); }
 }
 
 let soundMode = localStorage.getItem('soundMode') || 'tts';
@@ -1387,9 +1432,8 @@ function checkAuth() {
   if (apiIsLoggedIn()) {
     sessionStorage.setItem(AUTH_KEY, 'true');
     showScreen(dashboardScreen);
-    // unlock audio ทันทีที่ dashboard โหลด (user เคย interact ไปแล้วตอน login ก่อนหน้า)
-    // ต้องใช้ setTimeout เล็กน้อยให้ DOM พร้อมก่อน
-    setTimeout(() => unlockIOSSpeech(), 100);
+    // ไม่ unlock audio ที่นี่ — ต้องการ user gesture จริงๆ เท่านั้น
+    // unlockAudio() จะถูกเรียกจาก loginBtn click หรือ soundToggleBtn click
     startRealtimeListener();
     startCallStaffListener();
     startMenuListener();
@@ -1425,7 +1469,7 @@ loginBtn.addEventListener('click', async () => {
     if (ok) {
       resetAttempts();
       setLoggedIn(true);
-      unlockIOSSpeech();
+      unlockAudio(); // เรียกจาก click gesture → browser อนุญาต AudioContext + speechSynthesis
       showScreen(dashboardScreen);
       startRealtimeListener();
       startCallStaffListener();
@@ -1509,7 +1553,7 @@ const LONG_PRESS_MS = 400;
 
 function openSoundDropdown(e) {
   if (e?.stopPropagation) e.stopPropagation();
-  unlockIOSSpeech();
+  unlockAudio();
   _didOpenDropdown = true;
   soundControl?.classList.add('open');
 
@@ -1553,7 +1597,7 @@ if (soundToggleBtn) {
     _longPressTimer = null;
     if (_didOpenDropdown) return;
     if (!wasShortClick) return;
-    unlockIOSSpeech();
+    unlockAudio();
     soundEnabled = !soundEnabled;
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
     updateSoundBtnLabel();
@@ -1582,7 +1626,7 @@ if (soundToggleBtn) {
     _longPressTimer = null;
     if (_didOpenDropdown) return;
     if (!wasShortTap) return;
-    unlockIOSSpeech();
+    unlockAudio();
     soundEnabled = !soundEnabled;
     if (!soundEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
     updateSoundBtnLabel();
@@ -1601,7 +1645,7 @@ if (soundToggleBtn) {
 document.querySelectorAll('.sound-dropdown-item').forEach(item => {
   item.addEventListener('click', (e) => {
     e.stopPropagation();
-    unlockIOSSpeech();
+    unlockAudio();
     const mode = item.dataset.mode;
     if (!soundEnabled) { soundEnabled = true; }
     applySoundMode(mode);
