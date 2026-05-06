@@ -4999,33 +4999,42 @@ function _buildAiSnapshot() {
     return d.toISOString().slice(0, 10);
   });
 
+  // ใช้ createdAt (normalised camelCase) — หลัง _aiLoadAndRender normalise แล้ว
+  function _getDateStr(o) {
+    const d = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt || o.created_at || Date.now());
+    return d.toISOString().slice(0, 10);
+  }
+  function _getDate(o) {
+    return o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt || o.created_at || Date.now());
+  }
+  function _isTakeaway(o) {
+    return !!(o.is_takeaway || o.isTakeaway);
+  }
+
   const paidOrders = LIVE_ORDERS.filter(o => o.status === 'paid' || o.status === 'served');
 
   // per-day revenue
   const revenueByDay = {};
   days7.forEach(d => { revenueByDay[d] = 0; });
   paidOrders.forEach(o => {
-    const d = (o.created_at || '').slice(0, 10);
+    const d = _getDateStr(o);
     if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(o.total || 0);
   });
 
   // today
-  const todayOrders  = paidOrders.filter(o => (o.created_at || '').slice(0, 10) === todayStr);
+  const todayOrders  = paidOrders.filter(o => _getDateStr(o) === todayStr);
   const todayRev     = todayOrders.reduce((s, o) => s + Number(o.total || 0), 0);
   const avgBill      = todayOrders.length ? todayRev / todayOrders.length : 0;
-  const takeawayToday = todayOrders.filter(o => o.is_takeaway).length;
+  const takeawayToday = todayOrders.filter(o => _isTakeaway(o)).length;
 
-  // top menus (7 วัน)
+  // top menus (7 วัน) — ใช้ o.items จาก normaliseOrder (flatten batches แล้ว)
   const menuCount = {};
-  const orders7   = paidOrders.filter(o => days7.includes((o.created_at || '').slice(0, 10)));
+  const orders7   = paidOrders.filter(o => days7.includes(_getDateStr(o)));
   orders7.forEach(o => {
-    const batches = Array.isArray(o.batches) ? o.batches : JSON.parse(o.batches || '[]');
-    batches.forEach(b => {
-      const items = Array.isArray(b) ? b : (b.items || []);
-      items.forEach(it => {
-        const name = it.name || it.productName || 'ไม่ทราบ';
-        menuCount[name] = (menuCount[name] || 0) + (it.qty || 1);
-      });
+    const items = Array.isArray(o.items) ? o.items : [];
+    items.forEach(it => {
+      const name = it.name || it.productName || 'ไม่ทราบ';
+      menuCount[name] = (menuCount[name] || 0) + (it.qty || 1);
     });
   });
   const topMenus = Object.entries(menuCount)
@@ -5036,8 +5045,7 @@ function _buildAiSnapshot() {
   // heatmap: [hour][dayOfWeek] สำหรับ 7 วัน
   const heatmap = Array.from({ length: 16 }, () => Array(7).fill(0)); // 07:00–22:00 × 7 วัน
   orders7.forEach(o => {
-    if (!o.created_at) return;
-    const dt  = new Date(o.created_at);
+    const dt  = _getDate(o);
     const h   = dt.getHours();
     const dow = dt.getDay(); // 0=อาทิตย์
     const hIdx = h - 7;
@@ -5045,7 +5053,7 @@ function _buildAiSnapshot() {
   });
 
   // takeaway 7 วัน
-  const takeaway7  = orders7.filter(o => o.is_takeaway).length;
+  const takeaway7  = orders7.filter(o => _isTakeaway(o)).length;
   const dineIn7    = orders7.length - takeaway7;
   const rev7Total  = Object.values(revenueByDay).reduce((s, v) => s + v, 0);
 
@@ -5482,13 +5490,15 @@ async function initAiPanel() {
 }
 
 async function _aiLoadAndRender() {
-  // ดึง orders 30 วัน ถ้ายังไม่มี
-  if (!LIVE_ORDERS.length) {
-    try {
-      const orders = await api.getOrders({ today: false, limit: 500 });
-      if (Array.isArray(orders)) LIVE_ORDERS = orders;
-    } catch (_) {}
-  }
+  // ดึง orders 30 วัน เสมอ (ไม่ reuse cache เพราะ AI panel ต้องการข้อมูลครบ)
+  try {
+    const orders = await api.getOrders({ today: false, limit: 500 });
+    if (Array.isArray(orders)) {
+      // normalise ให้ตรงกับ panels อื่น (camelCase createdAt, status, total ฯลฯ)
+      LIVE_ORDERS = orders.map(o => normaliseOrder(o, o.id))
+        .sort((a, b) => b.createdAt - a.createdAt);
+    }
+  } catch (_) {}
 
   const snap = _buildAiSnapshot();
   _renderAiKpi(snap);
