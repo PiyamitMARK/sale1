@@ -1673,6 +1673,93 @@ canvas.ai-chart { width: 100% !important; }
 .ai-chat-send:hover { background: var(--accent-light); transform: scale(1.08); }
 .ai-chat-send:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
+/* ---- AI Forecast ---- */
+.ai-forecast-section {
+  background: var(--white);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 20px rgba(200,133,58,.12);
+  overflow: hidden;
+}
+.ai-forecast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  background: linear-gradient(135deg, rgba(200,133,58,.07) 0%, rgba(232,168,90,.04) 100%);
+  border-bottom: 1px solid rgba(200,133,58,.2);
+}
+.ai-forecast-header-left { display: flex; align-items: center; gap: .8rem; }
+.ai-forecast-icon { font-size: 2rem; line-height: 1; }
+.ai-forecast-title {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1rem;
+  color: var(--brown);
+  font-weight: 600;
+}
+.ai-forecast-sub { font-size: .75rem; color: var(--brown-light); margin-top: .15rem; }
+
+.ai-forecast-loading { padding: .5rem 1rem 1rem; }
+.ai-forecast-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5rem;
+  padding: 2rem;
+  color: var(--brown-light);
+  font-size: .85rem;
+  text-align: center;
+}
+
+.ai-forecast-result { padding: 1rem 1.2rem 1.2rem; }
+.ai-forecast-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .7rem;
+  margin-bottom: 1rem;
+}
+@media (max-width: 520px) { .ai-forecast-kpi-row { grid-template-columns: 1fr 1fr; } }
+
+.ai-fcast-kpi {
+  background: var(--cream-mid);
+  border-radius: var(--radius-sm);
+  padding: .7rem .9rem;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+.ai-fcast-kpi-label { font-size: .72rem; color: var(--brown-light); text-transform: uppercase; letter-spacing: .03em; }
+.ai-fcast-kpi-value {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.ai-fcast-kpi-note { font-size: .7rem; color: var(--brown-light); }
+
+.ai-forecast-body {
+  background: var(--cream-mid);
+  border-radius: var(--radius-sm);
+  padding: .9rem 1rem;
+  font-size: .85rem;
+  line-height: 1.75;
+  color: var(--brown);
+  white-space: pre-wrap;
+}
+.ai-forecast-body strong { color: var(--accent); font-weight: 700; }
+.ai-forecast-body .fcast-section {
+  display: flex;
+  gap: .5rem;
+  padding: .4rem 0;
+  border-bottom: 1px solid var(--cream-dark);
+}
+.ai-forecast-body .fcast-section:last-child { border-bottom: none; }
+.ai-forecast-body .fcast-section-icon { font-size: 1.1rem; flex-shrink: 0; }
+.ai-forecast-body .fcast-section-content { flex: 1; }
+.ai-forecast-body .fcast-section-title { font-weight: 700; color: var(--brown); font-size: .82rem; margin-bottom: .15rem; }
+.ai-forecast-body .fcast-section-text { color: var(--brown-mid); font-size: .82rem; }
+
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
   .bo-sidebar, .bo-topbar, .bo-panel-heading,
@@ -2468,15 +2555,7 @@ canvas.ai-chart { width: 100% !important; }
 
           </div>
 
-          <!-- Heatmap ชั่วโมงขายดี -->
-          <div class="ai-chart-card">
-            <div class="ai-chart-title">🕐 Heatmap ชั่วโมงขายดี (7 วัน) <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span></div>
-            <div style="overflow-x:auto">
-              <div class="ai-heatmap-grid" id="aiHeatmap" style="min-width:340px"></div>
-            </div>
-          </div>
-
-          <!-- AI Chat -->
+          <!-- AI Chat (ย้ายขึ้นมาก่อน Heatmap) -->
           <div class="ai-chat-section">
             <div class="ai-chat-header">
               <div class="ai-chat-header-icon">🤖</div>
@@ -2501,6 +2580,42 @@ canvas.ai-chart { width: 100% !important; }
             <div class="ai-chat-input-row">
               <input class="ai-chat-input" id="aiChatInput" placeholder="ถามเกี่ยวกับธุรกิจ เช่น ควรลดเมนูไหน?" />
               <button class="ai-chat-send" id="aiChatSend" title="ส่ง">➤</button>
+            </div>
+          </div>
+
+          <!-- AI Forecast -->
+          <div class="ai-forecast-section">
+            <div class="ai-forecast-header">
+              <div class="ai-forecast-header-left">
+                <div class="ai-forecast-icon">🔮</div>
+                <div>
+                  <div class="ai-forecast-title">AI Forecast — ทำนายพรุ่งนี้</div>
+                  <div class="ai-forecast-sub">Claude วิเคราะห์ pattern 7 วัน → คาดการณ์ยอดขาย ชั่วโมงพีค และเมนูแนะนำ</div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-sm" id="aiForecastBtn">✨ ทำนาย</button>
+            </div>
+            <div id="aiForecastResult" class="ai-forecast-result hidden">
+              <div class="ai-forecast-kpi-row" id="aiForecastKpis"></div>
+              <div class="ai-forecast-body" id="aiForecastBody"></div>
+            </div>
+            <div id="aiForecastLoading" class="ai-forecast-loading hidden">
+              <div class="ai-typing" style="justify-content:center;padding:1.5rem 0">
+                <div class="ai-typing-dot"></div><div class="ai-typing-dot"></div><div class="ai-typing-dot"></div>
+              </div>
+              <div style="text-align:center;font-size:.82rem;color:var(--brown-light)">Claude กำลังวิเคราะห์...</div>
+            </div>
+            <div id="aiForecastEmpty" class="ai-forecast-empty">
+              <span style="font-size:2rem">🔮</span>
+              <span>กด <strong>ทำนาย</strong> เพื่อดูการคาดการณ์พรุ่งนี้</span>
+            </div>
+          </div>
+
+          <!-- Heatmap ชั่วโมงขายดี (ย้ายลงมาท้าย) -->
+          <div class="ai-chart-card">
+            <div class="ai-chart-title">🕐 Heatmap ชั่วโมงขายดี (7 วัน) <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span></div>
+            <div style="overflow-x:auto">
+              <div class="ai-heatmap-grid" id="aiHeatmap" style="min-width:340px"></div>
             </div>
           </div>
 
@@ -5197,6 +5312,131 @@ ${context}
   sendBtn.disabled = false;
 }
 
+// ── AI Forecast ──
+async function _runAiForecast() {
+  const snap = _buildAiSnapshot();
+  const context = _buildAiContext(snap);
+
+  // คำนวณวันพรุ่งนี้
+  const tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+  const tmrName = tmr.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' });
+  const tmrDow  = tmr.getDay(); // 0=อาทิตย์
+
+  // ค่าเฉลี่ยรายได้ต่อวัน (7 วัน ยกเว้นวันนี้)
+  const revArr = snap.days7.slice(0, 6).map(d => snap.revenueByDay[d] || 0);
+  const avgRev = revArr.reduce((s, v) => s + v, 0) / (revArr.filter(v => v > 0).length || 1);
+
+  // หา peak hour สำหรับ dow พรุ่งนี้
+  let peakHourForTmr = 12;
+  let peakHourVal = 0;
+  snap.heatmap.forEach((row, hi) => {
+    if (row[tmrDow] > peakHourVal) { peakHourVal = row[tmrDow]; peakHourForTmr = hi + 7; }
+  });
+
+  document.getElementById('aiForecastEmpty').classList.add('hidden');
+  document.getElementById('aiForecastResult').classList.add('hidden');
+  document.getElementById('aiForecastLoading').classList.remove('hidden');
+
+  const systemPrompt = `คุณคือ AI Forecast Engine สำหรับร้าน "ข้าวซอย 90"
+
+${context}
+
+## งานของคุณ
+วิเคราะห์ข้อมูลและทำนายพรุ่งนี้ (${tmrName}) ให้ตอบกลับเป็น JSON เท่านั้น ไม่มีข้อความอื่น รูปแบบ:
+{
+  "forecastRev": <ตัวเลขรายได้ที่คาดไว้ ไม่มี ฿>,
+  "forecastOrders": <จำนวนออเดอร์ที่คาดไว้>,
+  "confidence": <"สูง" | "ปานกลาง" | "ต่ำ">,
+  "peakHour": <"HH:00–HH:00">,
+  "hotMenu": <ชื่อเมนูที่น่าจะขายดีสุดพรุ่งนี้>,
+  "prepTip": <คำแนะนำเตรียมของ 1 ประโยค>,
+  "riskNote": <ความเสี่ยงหรือข้อควรระวัง 1 ประโยค>,
+  "opportunity": <โอกาสหรือข้อแนะนำเพิ่มรายได้ 1 ประโยค>
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: `ทำนายพรุ่งนี้ (${tmrName}) จากข้อมูลที่ให้มา` }],
+        system: systemPrompt,
+      }),
+    });
+    const data = await res.json();
+    const raw  = data.content?.map(c => c.text || '').join('') || '{}';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const fc   = JSON.parse(clean);
+
+    document.getElementById('aiForecastLoading').classList.add('hidden');
+    document.getElementById('aiForecastResult').classList.remove('hidden');
+
+    // KPI cards
+    const confColor = { 'สูง': '#1a7a4a', 'ปานกลาง': 'var(--accent)', 'ต่ำ': 'var(--red)' };
+    document.getElementById('aiForecastKpis').innerHTML = `
+      <div class="ai-fcast-kpi">
+        <div class="ai-fcast-kpi-label">💰 รายได้คาดการณ์</div>
+        <div class="ai-fcast-kpi-value">฿${Number(fc.forecastRev || 0).toLocaleString('th-TH', { minimumFractionDigits: 0 })}</div>
+        <div class="ai-fcast-kpi-note">${tmrName}</div>
+      </div>
+      <div class="ai-fcast-kpi">
+        <div class="ai-fcast-kpi-label">🧾 ออเดอร์คาดการณ์</div>
+        <div class="ai-fcast-kpi-value">${fc.forecastOrders || '—'} บิล</div>
+        <div class="ai-fcast-kpi-note">ค่าประมาณการ</div>
+      </div>
+      <div class="ai-fcast-kpi">
+        <div class="ai-fcast-kpi-label">📊 ความมั่นใจ</div>
+        <div class="ai-fcast-kpi-value" style="color:${confColor[fc.confidence] || 'var(--accent)'}">${fc.confidence || '—'}</div>
+        <div class="ai-fcast-kpi-note">จาก pattern 7 วัน</div>
+      </div>`;
+
+    // Body sections
+    document.getElementById('aiForecastBody').innerHTML = `
+      <div class="fcast-section">
+        <div class="fcast-section-icon">⏰</div>
+        <div class="fcast-section-content">
+          <div class="fcast-section-title">ชั่วโมงพีค</div>
+          <div class="fcast-section-text">${fc.peakHour || '—'} คาดว่าลูกค้าจะหนาแน่นสุด</div>
+        </div>
+      </div>
+      <div class="fcast-section">
+        <div class="fcast-section-icon">🍜</div>
+        <div class="fcast-section-content">
+          <div class="fcast-section-title">เมนูแนะนำเตรียมเพิ่ม</div>
+          <div class="fcast-section-text">${fc.hotMenu || '—'}</div>
+        </div>
+      </div>
+      <div class="fcast-section">
+        <div class="fcast-section-icon">📋</div>
+        <div class="fcast-section-content">
+          <div class="fcast-section-title">เตรียมตัวก่อนเปิดร้าน</div>
+          <div class="fcast-section-text">${fc.prepTip || '—'}</div>
+        </div>
+      </div>
+      <div class="fcast-section">
+        <div class="fcast-section-icon">💡</div>
+        <div class="fcast-section-content">
+          <div class="fcast-section-title">โอกาสเพิ่มรายได้</div>
+          <div class="fcast-section-text">${fc.opportunity || '—'}</div>
+        </div>
+      </div>
+      <div class="fcast-section">
+        <div class="fcast-section-icon">⚠️</div>
+        <div class="fcast-section-content">
+          <div class="fcast-section-title">ข้อควรระวัง</div>
+          <div class="fcast-section-text">${fc.riskNote || '—'}</div>
+        </div>
+      </div>`;
+
+  } catch (err) {
+    document.getElementById('aiForecastLoading').classList.add('hidden');
+    document.getElementById('aiForecastEmpty').classList.remove('hidden');
+    document.getElementById('aiForecastEmpty').innerHTML = `<span style="font-size:2rem">❌</span><span>เกิดข้อผิดพลาด: ${err.message}</span>`;
+  }
+}
+
 // ── init panel ──
 async function initAiPanel() {
   if (_aiDataLoaded) return;
@@ -5219,6 +5459,9 @@ async function initAiPanel() {
     _aiDataLoaded = false;
     await initAiPanel();
   });
+
+  // Forecast button
+  document.getElementById('aiForecastBtn').addEventListener('click', _runAiForecast);
 
   // Quick prompts
   document.querySelectorAll('.ai-quick-btn').forEach(btn => {
