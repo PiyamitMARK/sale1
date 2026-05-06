@@ -255,7 +255,3 @@ export function toggleTheme() {
 
 // apply ทันทีเพื่อ prevent flash
 applyTheme(getTheme());
-
-document.addEventListener('DOMContentLoaded', () => {
-  applyTheme(getTheme());
-});

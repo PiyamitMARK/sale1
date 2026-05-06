@@ -9,7 +9,7 @@
  */
 
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
-import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout, verifyAdminKey, applyTheme, toggleTheme, getTheme } from './api-client.js';
+import { api, ws, adminLogin, adminLogout, verifyAdminKey, applyTheme, toggleTheme, getTheme } from './api-client.js';
 
 // ==================== Config ====================
 const AUTH_KEY = 'kaosoi-auth'; // ต้องตรงกับ api-client.js (localStorage key)
@@ -78,7 +78,6 @@ function _debouncedLoadOrders(opts = {}) {
 let tableFilter = '';
 
 // ==================== Auth ====================
-// isLoggedIn() → ใช้ apiIsLoggedIn ที่ import มาจาก api-client.js แทน
 function setLoggedIn(val) {
   if (val) {
     localStorage.setItem(AUTH_KEY, 'true');
