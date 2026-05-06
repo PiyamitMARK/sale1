@@ -4756,14 +4756,14 @@ function renderKitchenCards() {
     }).join('');
 
     return `<div class="kitchen-card ${statusCls}" data-oid="${escHtml(o.id)}">
-      <div class="kitchen-card-items">${itemsHtml || '<span style="color:var(--brown-light);font-size:.85rem">ไม่มีรายการ</span>'}</div>
-      <div class="kitchen-card-footer">
-        ${o.status === 'pending'
-          ? `<button class="btn btn-outline btn-sm" onclick="kitchenSetStatus('${o.id}','cooking')">🍳 เริ่มทำ</button>`
-          : `<button class="btn btn-outline btn-sm" onclick="kitchenSetStatus('${o.id}','pending')">↩ ย้อนกลับ</button>`
-        }
-        <button class="btn btn-primary btn-sm" onclick="kitchenSetStatus('${o.id}','served')">✅ เสิร์ฟแล้ว</button>
+      <div class="kitchen-card-header">
+        <div>
+          <div class="kitchen-card-order">#${o.order_num}${o.is_takeaway ? ' 📦' : ''}</div>
+          <div class="kitchen-card-table">${o.is_takeaway ? 'กลับบ้าน' : 'โต๊ะ ' + escHtml(String(o.table_num))}</div>
+        </div>
+        <span class="kitchen-card-timer">${isAlert ? '🚨 ' : ''}${kitchenFmt(elapsed)}</span>
       </div>
+      <div class="kitchen-card-items">${itemsHtml || '<span style="color:var(--brown-light);font-size:.85rem">ไม่มีรายการ</span>'}</div>
     </div>`;
   }).join('');
 }
