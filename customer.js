@@ -297,7 +297,32 @@ let optionQty     = 1;
 // สถานะ order ปัจจุบันของโต๊ะ
 let activeOrderKey    = null; // Firebase key ของ order ที่ยังไม่ได้จ่าย
 let activeOrderNumber = null; // order number ที่ active
+let isCheckingOrder   = false; // กำลัง fetch checkActiveOrder อยู่
 let popularItems      = [];   // ── Feature #1: รายชื่อเมนูยอดนิยม ──
+
+// ── persist activeOrderKey ไว้ใน localStorage ──
+// ป้องกัน: รีเฟรชหน้า → activeOrderKey = null → สร้าง order ใหม่ทั้งที่อันเก่ายังไม่จ่าย
+function _lsOrderKey() { return `ks90-active-order-${tableNum}`; }
+function _lsOrderNum() { return `ks90-active-ordernum-${tableNum}`; }
+
+function _saveActiveOrder() {
+  if (activeOrderKey) {
+    localStorage.setItem(_lsOrderKey(), activeOrderKey);
+    localStorage.setItem(_lsOrderNum(), String(activeOrderNumber ?? ''));
+  } else {
+    localStorage.removeItem(_lsOrderKey());
+    localStorage.removeItem(_lsOrderNum());
+  }
+}
+
+function _loadActiveOrderFromLS() {
+  const key = localStorage.getItem(_lsOrderKey());
+  const num = localStorage.getItem(_lsOrderNum());
+  if (key) {
+    activeOrderKey    = key;
+    activeOrderNumber = num ? parseInt(num, 10) : null;
+  }
+}
 
 // ==================== Cart Persistence (sessionStorage) ====================
 // เก็บตะกร้าไว้ใน sessionStorage แยกตามโต๊ะ
@@ -400,7 +425,13 @@ async function init() {
   // subscribe Firebase menu realtime
   _startMenuSubscribe();
 
+  // โหลด activeOrderKey จาก localStorage ก่อน (ทันที ไม่รอ API)
+  // ป้องกัน: รีเฟรชหน้า → key หาย → กดส่งก่อน API ตอบ → order ใหม่ผิด
+  _loadActiveOrderFromLS();
+  updateCartBar(); // อัปเดตปุ่มให้แสดง "เพิ่มในออเดอร์ #X" ถ้ามี key จาก LS
+
   // ตรวจ order active ของโต๊ะ (background — ไม่บล็อก render)
+  // แต่ lock sendBtn ระหว่าง fetch เพื่อป้องกันกดก่อน API ตอบ
   checkActiveOrder().then(() => {
     if (activeOrderKey) startKitchenStatusWatcher(activeOrderKey);
   });
@@ -409,6 +440,11 @@ async function init() {
 }
 
 async function checkActiveOrder() {
+  isCheckingOrder = true;
+  // disable sendBtn ระหว่าง fetch ป้องกันกดก่อน API ตอบ → order ใหม่ผิด
+  const sendBtn = document.getElementById('sendOrderBtn');
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'กำลังตรวจสอบ...'; }
+
   try {
     const data = await api.getTableOrder(tableNum);
     if (data && data.order_id) {
@@ -420,29 +456,37 @@ async function checkActiveOrder() {
           await api.clearTable(tableNum).catch(() => {});
           activeOrderKey    = null;
           activeOrderNumber = null;
+          _saveActiveOrder();
           clearSavedCart();
           return;
         }
         activeOrderKey    = data.order_id;
         activeOrderNumber = order.order_num;
+        _saveActiveOrder();
         showOrderBanner();
       } else {
         // order ถูกลบ → ล้าง
         await api.clearTable(tableNum).catch(() => {});
         activeOrderKey    = null;
         activeOrderNumber = null;
+        _saveActiveOrder();
         clearSavedCart();
       }
     } else {
-      // ไม่มี order active จริงๆ → ล้าง cart
+      // ไม่มี order active จริงๆ → ล้าง
       activeOrderKey    = null;
       activeOrderNumber = null;
+      _saveActiveOrder();
       clearSavedCart();
     }
   } catch (err) {
-    // เน็ตหลุด → ไม่ล้าง cart เพราะยังไม่รู้สถานะจริง
+    // เน็ตหลุด → คง activeOrderKey จาก LS ไว้ก่อน (ไม่รู้สถานะจริง)
     console.error('checkActiveOrder error:', err);
-    activeOrderKey = null;
+  } finally {
+    isCheckingOrder = false;
+    // คืน sendBtn ให้ใช้งานได้ พร้อมอัปเดตข้อความให้ถูก
+    updateCartBar();
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
@@ -513,6 +557,7 @@ function updateKitchenBar(status) {
   if (status === 'paid' || status === 'canceled') {
     activeOrderKey    = null;
     activeOrderNumber = null;
+    _saveActiveOrder(); // ล้างออกจาก localStorage ด้วย ป้องกันรีเฟรชแล้วยังจำ key เก่าอยู่
     clearSavedCart();
     const banner = document.getElementById('activeBanner');
     if (banner) banner.remove();
@@ -1025,6 +1070,7 @@ let isSubmitting = false; // guard ป้องกันกด 2 ครั้ง
 document.getElementById('sendOrderBtn').addEventListener('click', async () => {
   if (cart.length === 0) return;
   if (isSubmitting) return;        // ← กันกด spam
+  if (isCheckingOrder) return;     // ← กำลัง verify order อยู่ ยังกดไม่ได้
   isSubmitting = true;
   const btn = document.getElementById('sendOrderBtn');
   btn.disabled = true;
@@ -1050,6 +1096,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
           await api.clearTable(tableNum).catch(() => {});
           activeOrderKey    = null;
           activeOrderNumber = null;
+          _saveActiveOrder();
           const banner = document.getElementById('activeBanner');
           if (banner) banner.remove();
         } else {
@@ -1071,6 +1118,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
         await api.clearTable(tableNum).catch(() => {});
         activeOrderKey    = null;
         activeOrderNumber = null;
+        _saveActiveOrder();
       }
     }
 
@@ -1086,6 +1134,7 @@ document.getElementById('sendOrderBtn').addEventListener('click', async () => {
       activeOrderKey    = result.id;
       activeOrderNumber = result.order_num;
       usedOrderNum      = result.order_num;
+      _saveActiveOrder();
     }
 
     // ─── success ───

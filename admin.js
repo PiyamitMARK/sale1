@@ -533,38 +533,82 @@ async function startMenuListener() {
 }
 
 // ==================== API: Actions ====================
+// ── Optimistic status update ──────────────────────────────────────────────────
+// อัปเดต allOrders ใน memory → re-render ทันที (ไม่รอ API)
+// จากนั้น fire API ไปเบื้องหลัง ถ้า error ค่อย rollback + reload จริง
+function _optimisticStatus(orderId, patch) {
+  const idx = allOrders.findIndex(o => o.id === orderId);
+  if (idx === -1) return null;
+  const prev = { ...allOrders[idx] };          // snapshot ก่อนแก้ (ใช้ rollback)
+  allOrders[idx] = { ...allOrders[idx], ...patch };
+  renderDailySummary();
+  renderOrders();
+  renderTakeawayOrders();
+  return prev;
+}
+
 async function markOrderAsPaid(orderId, paymentMethod) {
   const order = allOrders.find(o => o.id === orderId);
-  const updateData = { status: 'paid' };
-  if (paymentMethod) updateData.payment = paymentMethod;
-  await api.updateOrder(orderId, updateData);
-  // clear table เพื่อให้โต๊ะนั้นได้ order number ใหม่
-  const tableNum = order?.table_num || order?.table;
-  if (tableNum) {
-    try { await api.clearTable(String(tableNum)); } catch (_) {}
+  const patch = { status: 'paid', ...(paymentMethod ? { payment: paymentMethod } : {}) };
+
+  // อัปเดต UI ทันที ไม่รอ API
+  const prev = _optimisticStatus(orderId, patch);
+
+  try {
+    await api.updateOrder(orderId, patch);
+    // clear table mapping เพื่อให้โต๊ะได้ order number ใหม่
+    const tableNum = order?.table_num || order?.table;
+    if (tableNum) api.clearTable(String(tableNum)).catch(() => {});
+  } catch (err) {
+    console.error('markOrderAsPaid error:', err);
+    // rollback: คืนค่าเดิม แล้ว reload จริง
+    if (prev) { allOrders[allOrders.findIndex(o => o.id === orderId)] = prev; }
+    _loadOrders();
   }
-  _loadOrders();
 }
 
 async function markOrderAsCooking(orderId) {
-  await api.updateOrder(orderId, { status: 'cooking' });
-  _loadOrders();
+  const prev = _optimisticStatus(orderId, { status: 'cooking' });
+  try {
+    await api.updateOrder(orderId, { status: 'cooking' });
+  } catch (err) {
+    console.error('markOrderAsCooking error:', err);
+    if (prev) { allOrders[allOrders.findIndex(o => o.id === orderId)] = prev; }
+    _loadOrders();
+  }
 }
 
 async function markOrderAsServed(orderId) {
-  await api.updateOrder(orderId, { status: 'served' });
-  _loadOrders();
+  const prev = _optimisticStatus(orderId, { status: 'served' });
+  try {
+    await api.updateOrder(orderId, { status: 'served' });
+  } catch (err) {
+    console.error('markOrderAsServed error:', err);
+    if (prev) { allOrders[allOrders.findIndex(o => o.id === orderId)] = prev; }
+    _loadOrders();
+  }
 }
 
 async function deleteOrder(orderId, orderNumber) {
   if (!confirm(`ลบออเดอร์ #${orderNumber} ?`)) return;
   const order = allOrders.find(o => o.id === orderId);
-  await api.deleteOrder(orderId);
-  const tableNum = order?.table_num || order?.table;
-  if (tableNum) {
-    try { await api.clearTable(String(tableNum)); } catch (_) {}
+
+  // optimistic: ลบออกจาก memory ทันที
+  const prevOrders = [...allOrders];
+  allOrders = allOrders.filter(o => o.id !== orderId);
+  renderDailySummary();
+  renderOrders();
+  renderTakeawayOrders();
+
+  try {
+    await api.deleteOrder(orderId);
+    const tableNum = order?.table_num || order?.table;
+    if (tableNum) api.clearTable(String(tableNum)).catch(() => {});
+  } catch (err) {
+    console.error('deleteOrder error:', err);
+    allOrders = prevOrders; // rollback
+    _loadOrders();
   }
-  _loadOrders();
 }
 
 // ==================== Products (admin add-item) ====================
