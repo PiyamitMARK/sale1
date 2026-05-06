@@ -17,13 +17,13 @@ const IMG = (n) => 'images/img' + n + '.png';
 
 export const DEFAULT_MENU = {
   setkao: [
-    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:129, imageNum:10021, productType:'setkao' },
-    { id:'setkao1',  name:'ข้าวซอยน่องไก่ + โค๊ก',        price:85,  imageNum:10012, productType:'setkao' },
-    { id:'setkao2',  name:'ข้าวซอยน่องไก่ + ชาไทย',       price:110, imageNum:10013, productType:'setkao' },
-    { id:'setkao3',  name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น', price:115, imageNum:10014, productType:'setkao' },
-    { id:'setkao4',  name:'ข้าวซอยหมูทอด + โค๊ก',         price:85,  imageNum:10020, productType:'setkao' },
-    { id:'setkao5',  name:'ข้าวซอยหมูทอด + ชาไทย',        price:110, imageNum:10019, productType:'setkao' },
-    { id:'setkao6',  name:'ข้าวซอยหมูทอด + มะพร้าวปั่น',  price:115, imageNum:10018, productType:'setkao' },
+    { id:'setkao13', name:'เซ็ตอิ่มคุ้มคู่❗',            price:124, imageNum:10021, productType:'setkao' },
+    { id:'setkao1',  name:'ข้าวซอยน่องไก่ + โค๊ก',        price:80,  imageNum:10012, productType:'setkao' },
+    { id:'setkao2',  name:'ข้าวซอยน่องไก่ + ชาไทย',       price:105, imageNum:10013, productType:'setkao' },
+    { id:'setkao3',  name:'ข้าวซอยน่องไก่ + มะพร้าวปั่น', price:110, imageNum:10014, productType:'setkao' },
+    { id:'setkao4',  name:'ข้าวซอยหมูทอด + โค๊ก',         price:80,  imageNum:10020, productType:'setkao' },
+    { id:'setkao5',  name:'ข้าวซอยหมูทอด + ชาไทย',        price:105, imageNum:10019, productType:'setkao' },
+    { id:'setkao6',  name:'ข้าวซอยหมูทอด + มะพร้าวปั่น',  price:110, imageNum:10018, productType:'setkao' },
     { id:'setkao7',  name:'น้ำเงี้ยว + โค๊ก',             price:75,  imageNum:10015, productType:'setkao' },
     { id:'setkao8',  name:'น้ำเงี้ยว + ชาไทย',            price:100, imageNum:10016, productType:'setkao' },
     { id:'setkao9',  name:'น้ำเงี้ยว + มะพร้าวปั่น',      price:105, imageNum:10017, productType:'setkao' },
