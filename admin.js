@@ -57,6 +57,24 @@ const tabRecent        = document.getElementById('tabRecent');
 // ==================== State ====================
 let allOrders = [];
 let _wsConn   = null;
+let _loadOrdersTimer = null;  // debounce
+let _loadOrdersOpts  = {};    // รวม opts ที่ pending
+
+function _debouncedLoadOrders(opts = {}) {
+  // รวม opts: ถ้ามี silent: false ใน queue ให้เล่นเสียง
+  if (opts.silent === false || _loadOrdersOpts.silent === false) {
+    _loadOrdersOpts = { silent: false };
+  } else {
+    _loadOrdersOpts = { silent: true };
+  }
+  if (_loadOrdersTimer) return;  // มี timer รออยู่แล้ว
+  _loadOrdersTimer = setTimeout(() => {
+    _loadOrdersTimer = null;
+    const o = _loadOrdersOpts;
+    _loadOrdersOpts  = {};
+    _loadOrders(o);
+  }, 120);
+}
 let tableFilter = '';
 
 // ==================== Auth ====================
@@ -303,23 +321,23 @@ function startRealtimeListener() {
   // Subscribe realtime ผ่าน WebSocket
   _wsConn = ws.connect('admin', (msg) => {
     if (msg.type === 'new_order' || msg.type === 'order_created' || msg.type === 'order_deleted') {
-      _loadOrders();
+      _debouncedLoadOrders({ silent: false });
     }
     if (msg.type === 'order_updated') {
-      _loadOrders({ silent: true }); // admin แก้เอง ไม่เล่นเสียง
+      _debouncedLoadOrders({ silent: true });
     }
     if (msg.type === 'new_batch') {
       // ลูกค้าสั่งเพิ่ม → เล่นเสียงทันที + แสดง toast + reload โดยไม่เล่นเสียงซ้ำ
       playBatchAlert();
       if (msg.order) showBatchToast(msg.order, (msg.order.batches || []).length);
-      _loadOrders({ silent: true });
+      _debouncedLoadOrders({ silent: true });
     }
     if (msg.type === 'call_staff') {
       _handleCallStaffMsg(msg);
     }
   }, () => {
     // WS reconnect สำเร็จ → sync orders + call log ที่อาจหายไปตอนขาดการเชื่อมต่อ
-    _loadOrders({ silent: true });
+    _debouncedLoadOrders({ silent: true });
     _loadCallLog();
   });
 }
