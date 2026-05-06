@@ -192,7 +192,7 @@ export async function adminLogin(username, password) {
   if (res.ok) {
     localStorage.setItem('ks90-admin-key', hash);
     localStorage.setItem('kaosoi-auth', 'true');
-    sessionStorage.setItem('kaosoi-auth', 'true');  // index.html ตรวจทั้ง localStorage และ sessionStorage
+    sessionStorage.setItem('kaosoi-auth', 'true');
     return true;
   }
   return false;
@@ -206,6 +206,32 @@ export function adminLogout() {
 
 export function isLoggedIn() {
   return !!localStorage.getItem('kaosoi-auth');
+}
+
+/**
+ * verifyAdminKey — ตรวจสอบ key กับ server จริง
+ * ใช้ตอน page load เพื่อรองรับเครื่องที่ล็อกอินผ่านเครื่องอื่นแล้วใช้ key ร่วมกัน
+ * (เช่น copy key มาวางใน localStorage ด้วยมือ หรือ shared device)
+ * คืน true ถ้า key ยังใช้ได้, false ถ้า key หมดอายุ/ไม่ถูกต้อง
+ */
+export async function verifyAdminKey() {
+  const key = localStorage.getItem('ks90-admin-key');
+  if (!key) return false;
+  try {
+    const res = await fetch('/api/meta', { headers: { 'X-Admin-Key': key } });
+    if (res.ok) {
+      // key ยังใช้ได้ → refresh auth flag
+      localStorage.setItem('kaosoi-auth', 'true');
+      sessionStorage.setItem('kaosoi-auth', 'true');
+      return true;
+    }
+    // key ไม่ถูกต้อง → ล้างออก
+    adminLogout();
+    return false;
+  } catch (_) {
+    // network error → ถ้ามี flag เก่าอยู่ให้ผ่านก่อน (offline-friendly)
+    return !!localStorage.getItem('kaosoi-auth');
+  }
 }
 
 // ─── Dark Mode (shared) ───────────────────────────────────────────────────────

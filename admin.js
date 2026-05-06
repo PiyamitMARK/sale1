@@ -9,7 +9,7 @@
  */
 
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
-import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout, applyTheme, toggleTheme, getTheme } from './api-client.js';
+import { api, ws, isLoggedIn as apiIsLoggedIn, adminLogin, adminLogout, verifyAdminKey, applyTheme, toggleTheme, getTheme } from './api-client.js';
 
 // ==================== Config ====================
 const AUTH_KEY = 'kaosoi-auth'; // ต้องตรงกับ api-client.js (localStorage key)
@@ -1428,12 +1428,18 @@ function renderTakeawayOrders() {
 }
 
 // ==================== Auth Events ====================
-function checkAuth() {
-  if (apiIsLoggedIn()) {
+async function checkAuth() {
+  // ถ้าไม่มี admin key เลย → ไปหน้า login ทันที
+  if (!localStorage.getItem('ks90-admin-key')) {
+    showScreen(loginScreen);
+    return;
+  }
+
+  // ถ้ามี key → verify กับ server (รองรับเครื่องใหม่ที่มี key แต่ยังไม่มี flag)
+  const ok = await verifyAdminKey();
+  if (ok) {
     sessionStorage.setItem(AUTH_KEY, 'true');
     showScreen(dashboardScreen);
-    // ไม่ unlock audio ที่นี่ — ต้องการ user gesture จริงๆ เท่านั้น
-    // unlockAudio() จะถูกเรียกจาก loginBtn click หรือ soundToggleBtn click
     startRealtimeListener();
     startCallStaffListener();
     startMenuListener();

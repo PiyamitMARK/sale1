@@ -143,7 +143,8 @@
   <!-- Auth Guard: ป้องกันลูกค้าเข้า POS โดยตรง -->
   <script>
     (function() {
-      if (localStorage.getItem('kaosoi-auth') !== 'true' && sessionStorage.getItem('kaosoi-auth') !== 'true') {
+      // ─── แสดงหน้า Unauthorized ───
+      function showUnauth() {
         document.body.innerHTML = [
           '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;',
           'justify-content:center;font-family:Sarabun,sans-serif;background:#faf6f0;',
@@ -159,6 +160,37 @@
           'ไปหน้าล็อกอิน →</a></div>'
         ].join('');
       }
+
+      // ─── ตรวจ localStorage flag ก่อน (fast path) ───
+      var hasLocalFlag = localStorage.getItem('kaosoi-auth') === 'true'
+                      || sessionStorage.getItem('kaosoi-auth') === 'true';
+      var adminKey     = localStorage.getItem('ks90-admin-key');
+
+      if (!adminKey) {
+        // ไม่มี key เลย → block ทันที
+        showUnauth();
+        return;
+      }
+
+      if (!hasLocalFlag) {
+        // มี key แต่ไม่มี flag → verify กับ server (เครื่องใหม่ที่ copy key มา)
+        fetch('/api/meta', { headers: { 'X-Admin-Key': adminKey } })
+          .then(function(res) {
+            if (res.ok) {
+              localStorage.setItem('kaosoi-auth', 'true');
+              sessionStorage.setItem('kaosoi-auth', 'true');
+              // โหลด app.js ต่อ (page ยังไม่ถูก block)
+            } else {
+              localStorage.removeItem('ks90-admin-key');
+              showUnauth();
+            }
+          })
+          .catch(function() {
+            // network error → ถ้าใช้เครื่องเดิมอยู่ให้ผ่าน
+            // (ไม่มี key และไม่มี flag → block แล้วข้างบน)
+          });
+      }
+      // hasLocalFlag && adminKey → ผ่านทันที, app.js จะ verify อีกรอบตอน init
     })();
   </script>
   <script type="module" src="app.js"></script>
