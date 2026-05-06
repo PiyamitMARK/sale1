@@ -1362,6 +1362,317 @@ tr.drag-over td { background: var(--cream-dark) !important; }
   justify-content: center;
 }
 
+/* ============================================================
+   AI ANALYST PANEL
+   ============================================================ */
+.ai-panel-wrap { display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* KPI row */
+.ai-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: .85rem;
+}
+@media (min-width: 640px) { .ai-kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.ai-kpi-card {
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--ease);
+}
+.ai-kpi-card:hover { box-shadow: var(--shadow-md); }
+.ai-kpi-icon { font-size: 1.5rem; line-height: 1; }
+.ai-kpi-label { font-size: .75rem; color: var(--brown-light); font-weight: 500; letter-spacing: .03em; text-transform: uppercase; }
+.ai-kpi-value {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--brown);
+  line-height: 1.1;
+}
+.ai-kpi-value.accent { color: var(--accent); }
+.ai-kpi-delta { font-size: .78rem; color: var(--brown-light); }
+.ai-kpi-delta.up   { color: #1a7a4a; }
+.ai-kpi-delta.down { color: var(--red); }
+
+/* Charts row */
+.ai-charts-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .85rem;
+}
+@media (min-width: 720px) { .ai-charts-row { grid-template-columns: 1.6fr 1fr; } }
+
+.ai-chart-card {
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.ai-chart-title {
+  font-family: 'Mitr', sans-serif;
+  font-size: .9rem;
+  color: var(--brown);
+  margin-bottom: .85rem;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.ai-chart-wrap { position: relative; }
+canvas.ai-chart { width: 100% !important; }
+
+/* Heatmap */
+.ai-heatmap-grid {
+  display: grid;
+  grid-template-columns: 36px repeat(7, 1fr);
+  gap: 3px;
+  font-size: .7rem;
+}
+.ai-hm-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 5px;
+  color: var(--brown-light);
+  font-size: .68rem;
+}
+.ai-hm-day-label {
+  text-align: center;
+  color: var(--brown-light);
+  font-size: .68rem;
+  padding-bottom: 3px;
+  font-weight: 600;
+}
+.ai-hm-cell {
+  border-radius: 4px;
+  aspect-ratio: 1;
+  cursor: default;
+  transition: transform .15s;
+  position: relative;
+}
+.ai-hm-cell:hover { transform: scale(1.15); z-index: 2; }
+.ai-hm-cell[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  top: -2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--brown);
+  color: #fff;
+  padding: .2rem .5rem;
+  border-radius: 5px;
+  font-size: .65rem;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 99;
+}
+
+/* Top menu mini-bar */
+.ai-top-menu-list { display: flex; flex-direction: column; gap: .5rem; }
+.ai-top-menu-row { display: flex; align-items: center; gap: .6rem; font-size: .83rem; }
+.ai-top-menu-rank {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--cream-mid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--brown-mid);
+  flex-shrink: 0;
+}
+.ai-top-menu-rank.gold   { background: #fef3c7; color: #92400e; }
+.ai-top-menu-rank.silver { background: #f1f5f9; color: #475569; }
+.ai-top-menu-rank.bronze { background: #fef9f0; color: #c2410c; }
+.ai-top-menu-name { flex: 1; color: var(--brown); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-top-menu-bar-wrap { flex: 1.2; }
+.ai-top-menu-bar-bg { background: var(--cream-dark); border-radius: 99px; height: 6px; overflow: hidden; }
+.ai-top-menu-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.ai-top-menu-count { font-size: .75rem; color: var(--brown-light); width: 2.5rem; text-align: right; flex-shrink: 0; }
+
+/* AI Chat */
+.ai-chat-section {
+  background: var(--white);
+  border: 1px solid var(--cream-dark);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.ai-chat-header {
+  padding: .9rem 1.2rem .7rem;
+  border-bottom: 1px solid var(--cream-dark);
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.ai-chat-header-icon { font-size: 1.3rem; }
+.ai-chat-header-title {
+  font-family: 'Mitr', sans-serif;
+  font-size: .95rem;
+  color: var(--brown);
+  flex: 1;
+}
+.ai-chat-header-badge {
+  font-size: .7rem;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  padding: .15rem .55rem;
+  border-radius: 99px;
+  font-weight: 600;
+  letter-spacing: .03em;
+}
+.ai-quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  padding: .85rem 1.2rem .5rem;
+  border-bottom: 1px solid var(--cream-mid);
+}
+.ai-quick-btn {
+  background: var(--cream-mid);
+  border: 1px solid var(--cream-dark);
+  border-radius: 99px;
+  padding: .3rem .8rem;
+  font-size: .78rem;
+  color: var(--brown-mid);
+  cursor: pointer;
+  transition: all var(--ease);
+  font-family: 'Sarabun', sans-serif;
+}
+.ai-quick-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ai-messages {
+  height: 320px;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  scroll-behavior: smooth;
+}
+.ai-msg {
+  display: flex;
+  gap: .6rem;
+  animation: msgIn .2s ease forwards;
+}
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.ai-msg.user { flex-direction: row-reverse; }
+.ai-msg-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+  background: var(--cream-mid);
+}
+.ai-msg.user .ai-msg-avatar { background: var(--accent); }
+.ai-msg-bubble {
+  max-width: 78%;
+  background: var(--cream-mid);
+  border-radius: 14px 14px 14px 4px;
+  padding: .6rem .9rem;
+  font-size: .84rem;
+  line-height: 1.6;
+  color: var(--brown);
+  white-space: pre-wrap;
+}
+.ai-msg.user .ai-msg-bubble {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 14px 14px 4px 14px;
+}
+.ai-msg-bubble strong { font-weight: 700; }
+.ai-msg-bubble .ai-insight-tag {
+  display: inline-block;
+  background: rgba(200,133,58,.15);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0 .35rem;
+  font-size: .75rem;
+  font-weight: 600;
+}
+.ai-msg.user .ai-msg-bubble .ai-insight-tag { background: rgba(255,255,255,.25); color: #fff; }
+
+.ai-typing {
+  display: flex;
+  gap: .35rem;
+  align-items: center;
+  padding: .5rem .6rem;
+}
+.ai-typing-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: typingBounce .9s infinite ease-in-out;
+}
+.ai-typing-dot:nth-child(2) { animation-delay: .15s; }
+.ai-typing-dot:nth-child(3) { animation-delay: .3s; }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30%           { transform: translateY(-6px); }
+}
+
+.ai-chat-input-row {
+  display: flex;
+  gap: .5rem;
+  padding: .75rem 1rem .85rem;
+  border-top: 1px solid var(--cream-dark);
+  background: var(--cream);
+}
+.ai-chat-input {
+  flex: 1;
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: 99px;
+  padding: .5rem 1rem;
+  font-family: 'Sarabun', sans-serif;
+  font-size: .85rem;
+  color: var(--brown);
+  outline: none;
+  transition: border-color var(--ease);
+}
+.ai-chat-input:focus { border-color: var(--accent); }
+.ai-chat-send {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--ease), transform var(--ease);
+}
+.ai-chat-send:hover { background: var(--accent-light); transform: scale(1.08); }
+.ai-chat-send:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
   .bo-sidebar, .bo-topbar, .bo-panel-heading,
@@ -1579,6 +1890,10 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </button>
       <button class="bo-nav-item" data-panel="menu">
         <span class="bo-nav-icon">🍽</span>จัดการเมนู
+      </button>
+
+      <button class="bo-nav-item" data-panel="ai">
+        <span class="bo-nav-icon">🤖</span>AI Analyst
       </button>
 
       <hr class="bo-nav-divider">
@@ -2111,6 +2426,88 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       </div>
 
       <!-- =========================================================
+           PANEL: AI Analyst
+           ========================================================= -->
+      <div class="bo-panel" id="panelAi">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">🤖 AI Business Analyst</div>
+            <div class="bo-panel-sub">วิเคราะห์ยอดขาย เมนูดัง แนวโน้ม — ขับเคลื่อนด้วย Claude AI</div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="aiRefreshBtn">🔄 โหลดข้อมูล</button>
+        </div>
+
+        <div class="ai-panel-wrap">
+
+          <!-- KPI Big Numbers -->
+          <div class="ai-kpi-grid" id="aiKpiGrid">
+            <div class="ai-kpi-card"><div class="ai-kpi-icon">💰</div><div class="ai-kpi-label">รายได้วันนี้</div><div class="ai-kpi-value accent" id="aiKpiRevToday">—</div></div>
+            <div class="ai-kpi-card"><div class="ai-kpi-icon">🧾</div><div class="ai-kpi-label">ออเดอร์วันนี้</div><div class="ai-kpi-value" id="aiKpiOrdersToday">—</div></div>
+            <div class="ai-kpi-card"><div class="ai-kpi-icon">🍽</div><div class="ai-kpi-label">ค่าเฉลี่ย/บิล</div><div class="ai-kpi-value" id="aiKpiAvgBill">—</div></div>
+            <div class="ai-kpi-card"><div class="ai-kpi-icon">📦</div><div class="ai-kpi-label">กลับบ้าน</div><div class="ai-kpi-value" id="aiKpiTakeaway">—</div></div>
+          </div>
+
+          <!-- Charts row -->
+          <div class="ai-charts-row">
+
+            <!-- Revenue Bar Chart (7 วัน) -->
+            <div class="ai-chart-card">
+              <div class="ai-chart-title">📈 รายได้ 7 วันล่าสุด</div>
+              <div class="ai-chart-wrap" style="height:200px">
+                <canvas id="aiRevenueChart" class="ai-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Top 5 เมนู mini bar -->
+            <div class="ai-chart-card">
+              <div class="ai-chart-title">🏆 Top 5 เมนูขายดี (7 วัน)</div>
+              <div class="ai-top-menu-list" id="aiTopMenuList">
+                <div style="color:var(--brown-light);font-size:.82rem">กำลังโหลด...</div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Heatmap ชั่วโมงขายดี -->
+          <div class="ai-chart-card">
+            <div class="ai-chart-title">🕐 Heatmap ชั่วโมงขายดี (7 วัน) <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span></div>
+            <div style="overflow-x:auto">
+              <div class="ai-heatmap-grid" id="aiHeatmap" style="min-width:340px"></div>
+            </div>
+          </div>
+
+          <!-- AI Chat -->
+          <div class="ai-chat-section">
+            <div class="ai-chat-header">
+              <div class="ai-chat-header-icon">🤖</div>
+              <div class="ai-chat-header-title">ถาม Claude AI เกี่ยวกับธุรกิจของคุณ</div>
+              <div class="ai-chat-header-badge">Powered by Claude</div>
+            </div>
+            <div class="ai-quick-prompts">
+              <button class="ai-quick-btn" data-prompt="วิเคราะห์ยอดขายวันนี้และให้คำแนะนำ">📊 วิเคราะห์วันนี้</button>
+              <button class="ai-quick-btn" data-prompt="เมนูไหนขายดีที่สุด 7 วัน และทำไม">🏆 เมนูดัง</button>
+              <button class="ai-quick-btn" data-prompt="ช่วงเวลาไหนลูกค้าเยอะสุด และควรเตรียมตัวอย่างไร">⏰ ช่วงพีค</button>
+              <button class="ai-quick-btn" data-prompt="แนะนำโปรโมชั่นที่น่าจะเพิ่มยอดขายได้">💡 แนะนำโปรโมชั่น</button>
+              <button class="ai-quick-btn" data-prompt="เปรียบเทียบ takeaway vs dine-in และวิเคราะห์แนวโน้ม">📦 Takeaway vs Dine-in</button>
+            </div>
+            <div class="ai-messages" id="aiMessages">
+              <div class="ai-msg">
+                <div class="ai-msg-avatar">🤖</div>
+                <div class="ai-msg-bubble">สวัสดีครับ! ผมคือ AI Analyst ของร้านข้าวซอย 90 🍜
+
+กด <strong>"โหลดข้อมูล"</strong> ด้านบนก่อนนะครับ แล้วผมจะวิเคราะห์ยอดขาย เมนูดัง และแนวโน้มธุรกิจให้ได้เลย หรือถามตรงๆ ก็ได้ครับ 😊</div>
+              </div>
+            </div>
+            <div class="ai-chat-input-row">
+              <input class="ai-chat-input" id="aiChatInput" placeholder="ถามเกี่ยวกับธุรกิจ เช่น ควรลดเมนูไหน?" />
+              <button class="ai-chat-send" id="aiChatSend" title="ส่ง">➤</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- =========================================================
            PANEL: QR โต๊ะ
            ========================================================= -->
       <div class="bo-panel" id="panelQr">
@@ -2305,6 +2702,7 @@ const PANEL_TITLES = {
   history: 'ย้อนหลัง 1 เดือน',
   menu: 'จัดการเมนู',
   qr: 'QR Code โต๊ะ',
+  ai: 'AI Business Analyst',
 };
 
 let activePanelId = 'dashboard';
@@ -2327,6 +2725,7 @@ function switchPanel(id) {
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
   if (id === 'qr')    initQrPanel();
+  if (id === 'ai')    initAiPanel();
 }
 
 document.querySelectorAll('.bo-nav-item[data-panel]').forEach(btn => {
@@ -4461,6 +4860,399 @@ document.getElementById('menuImgUrl').addEventListener('input', function() {
     document.getElementById('imgUploadArea').classList.add('has-image');
   }
 });
+
+// ============================================================
+//  AI ANALYST PANEL
+// ============================================================
+let _aiDataLoaded   = false;
+let _aiChartInst    = null;
+let _aiChatHistory  = [];
+let _aiIsBusy       = false;
+
+// ── helpers ──
+function _fmtBaht(n) { return '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function _fmtNum(n)  { return Number(n || 0).toLocaleString('th-TH'); }
+
+// ── สร้าง data snapshot จาก LIVE_ORDERS ──
+function _buildAiSnapshot() {
+  const now      = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+
+  // 7 วันล่าสุด
+  const days7 = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now); d.setDate(d.getDate() - (6 - i));
+    return d.toISOString().slice(0, 10);
+  });
+
+  const paidOrders = LIVE_ORDERS.filter(o => o.status === 'paid' || o.status === 'served');
+
+  // per-day revenue
+  const revenueByDay = {};
+  days7.forEach(d => { revenueByDay[d] = 0; });
+  paidOrders.forEach(o => {
+    const d = (o.created_at || '').slice(0, 10);
+    if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(o.total || 0);
+  });
+
+  // today
+  const todayOrders  = paidOrders.filter(o => (o.created_at || '').slice(0, 10) === todayStr);
+  const todayRev     = todayOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const avgBill      = todayOrders.length ? todayRev / todayOrders.length : 0;
+  const takeawayToday = todayOrders.filter(o => o.is_takeaway).length;
+
+  // top menus (7 วัน)
+  const menuCount = {};
+  const orders7   = paidOrders.filter(o => days7.includes((o.created_at || '').slice(0, 10)));
+  orders7.forEach(o => {
+    const batches = Array.isArray(o.batches) ? o.batches : JSON.parse(o.batches || '[]');
+    batches.forEach(b => {
+      const items = Array.isArray(b) ? b : (b.items || []);
+      items.forEach(it => {
+        const name = it.name || it.productName || 'ไม่ทราบ';
+        menuCount[name] = (menuCount[name] || 0) + (it.qty || 1);
+      });
+    });
+  });
+  const topMenus = Object.entries(menuCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  // heatmap: [hour][dayOfWeek] สำหรับ 7 วัน
+  const heatmap = Array.from({ length: 16 }, () => Array(7).fill(0)); // 07:00–22:00 × 7 วัน
+  orders7.forEach(o => {
+    if (!o.created_at) return;
+    const dt  = new Date(o.created_at);
+    const h   = dt.getHours();
+    const dow = dt.getDay(); // 0=อาทิตย์
+    const hIdx = h - 7;
+    if (hIdx >= 0 && hIdx < 16) heatmap[hIdx][dow] += Number(o.total || 0);
+  });
+
+  // takeaway 7 วัน
+  const takeaway7  = orders7.filter(o => o.is_takeaway).length;
+  const dineIn7    = orders7.length - takeaway7;
+  const rev7Total  = Object.values(revenueByDay).reduce((s, v) => s + v, 0);
+
+  return {
+    todayStr,
+    days7,
+    revenueByDay,
+    todayOrders: todayOrders.length,
+    todayRev,
+    avgBill,
+    takeawayToday,
+    topMenus,
+    heatmap,
+    orders7Total: orders7.length,
+    rev7Total,
+    takeaway7,
+    dineIn7,
+  };
+}
+
+// ── Render KPI ──
+function _renderAiKpi(snap) {
+  document.getElementById('aiKpiRevToday').textContent    = _fmtBaht(snap.todayRev);
+  document.getElementById('aiKpiOrdersToday').textContent = _fmtNum(snap.todayOrders);
+  document.getElementById('aiKpiAvgBill').textContent     = _fmtBaht(snap.avgBill);
+  document.getElementById('aiKpiTakeaway').textContent    = _fmtNum(snap.takeawayToday);
+}
+
+// ── Render Revenue Bar Chart ──
+function _renderAiRevenueChart(snap) {
+  const ctx = document.getElementById('aiRevenueChart').getContext('2d');
+  if (_aiChartInst) { _aiChartInst.destroy(); _aiChartInst = null; }
+
+  const labels = snap.days7.map(d => {
+    const dt = new Date(d + 'T00:00:00');
+    return dt.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
+  });
+  const data = snap.days7.map(d => snap.revenueByDay[d] || 0);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c8853a';
+
+  _aiChartInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'รายได้ (฿)',
+        data,
+        backgroundColor: data.map((_, i) => i === 6 ? accent : accent + '99'),
+        borderRadius: 6,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ' ฿' + ctx.parsed.y.toLocaleString('th-TH', { minimumFractionDigits: 2 }),
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'Sarabun', size: 11 } } },
+        y: {
+          grid: { color: 'rgba(0,0,0,.06)' },
+          ticks: {
+            font: { family: 'Sarabun', size: 10 },
+            callback: v => '฿' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v),
+          },
+        },
+      },
+    },
+  });
+}
+
+// ── Render Top Menu mini bars ──
+function _renderAiTopMenu(snap) {
+  const el    = document.getElementById('aiTopMenuList');
+  const ranks = ['gold', 'silver', 'bronze'];
+  const max   = snap.topMenus[0]?.count || 1;
+  if (!snap.topMenus.length) {
+    el.innerHTML = '<div style="color:var(--brown-light);font-size:.82rem">ไม่มีข้อมูลออเดอร์</div>';
+    return;
+  }
+  el.innerHTML = snap.topMenus.map((m, i) => `
+    <div class="ai-top-menu-row">
+      <div class="ai-top-menu-rank ${ranks[i] || ''}">${i + 1}</div>
+      <div class="ai-top-menu-name" title="${m.name}">${m.name}</div>
+      <div class="ai-top-menu-bar-wrap">
+        <div class="ai-top-menu-bar-bg">
+          <div class="ai-top-menu-bar-fill" style="width:${Math.round(m.count / max * 100)}%"></div>
+        </div>
+      </div>
+      <div class="ai-top-menu-count">${m.count} จาน</div>
+    </div>`).join('');
+}
+
+// ── Render Heatmap ──
+function _renderAiHeatmap(snap) {
+  const el   = document.getElementById('aiHeatmap');
+  const days = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+
+  // หา max value
+  let maxV = 1;
+  snap.heatmap.forEach(row => row.forEach(v => { if (v > maxV) maxV = v; }));
+
+  const hexAlpha = (pct) => {
+    // cream → accent gradient
+    const r1 = 240, g1 = 233, b1 = 222;
+    const r2 = 200, g2 = 133, b2 = 58;
+    const r = Math.round(r1 + (r2 - r1) * pct);
+    const g = Math.round(g1 + (g2 - g1) * pct);
+    const b = Math.round(b1 + (b2 - b1) * pct);
+    return `rgb(${r},${g},${b})`;
+  };
+
+  let html = '';
+  // header row
+  html += '<div class="ai-hm-label"></div>';
+  days.forEach(d => { html += `<div class="ai-hm-day-label">${d}</div>`; });
+
+  for (let h = 0; h < 16; h++) {
+    const hour = h + 7;
+    html += `<div class="ai-hm-label">${hour}:00</div>`;
+    for (let d = 0; d < 7; d++) {
+      const v   = snap.heatmap[h][d];
+      const pct = maxV > 0 ? v / maxV : 0;
+      const col = hexAlpha(pct);
+      const tip = v > 0 ? `${days[d]} ${hour}:00 — ฿${v.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '';
+      html += `<div class="ai-hm-cell" style="background:${col}" ${tip ? `title="${tip}"` : ''}></div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+// ── Build context string ให้ Claude ──
+function _buildAiContext(snap) {
+  const dayNames = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  const rev7 = snap.days7.map(d => `${d}: ฿${(snap.revenueByDay[d] || 0).toFixed(2)}`).join('\n');
+  const topMenusStr = snap.topMenus.map((m, i) => `${i + 1}. ${m.name} (${m.count} จาน)`).join('\n');
+
+  // peak hour
+  let peakH = 7, peakV = 0;
+  snap.heatmap.forEach((row, hi) => {
+    const total = row.reduce((s, v) => s + v, 0);
+    if (total > peakV) { peakV = total; peakH = hi + 7; }
+  });
+  let peakDay = 0, peakDayV = 0;
+  for (let d = 0; d < 7; d++) {
+    const total = snap.heatmap.reduce((s, row) => s + row[d], 0);
+    if (total > peakDayV) { peakDayV = total; peakDay = d; }
+  }
+
+  return `## ข้อมูลร้านข้าวซอย 90 (อัปเดต: ${snap.todayStr})
+
+### วันนี้
+- ออเดอร์: ${snap.todayOrders} บิล
+- รายได้: ฿${snap.todayRev.toFixed(2)}
+- ค่าเฉลี่ย/บิล: ฿${snap.avgBill.toFixed(2)}
+- กลับบ้าน (takeaway): ${snap.takeawayToday} บิล
+
+### 7 วันล่าสุด
+${rev7}
+- รวม: ฿${snap.rev7Total.toFixed(2)}, ${snap.orders7Total} บิล
+- Takeaway: ${snap.takeaway7} บิล, Dine-in: ${snap.dineIn7} บิล
+
+### เมนูขายดี (7 วัน)
+${topMenusStr || 'ไม่มีข้อมูล'}
+
+### ชั่วโมงพีค
+- ชั่วโมงขายดีสุด: ${peakH}:00–${peakH + 1}:00
+- วันขายดีสุด: ${dayNames[peakDay]}`;
+}
+
+// ── append message ──
+function _aiAppendMsg(role, text) {
+  const el  = document.getElementById('aiMessages');
+  const div = document.createElement('div');
+  div.className = `ai-msg${role === 'user' ? ' user' : ''}`;
+  div.innerHTML = `
+    <div class="ai-msg-avatar">${role === 'user' ? '👤' : '🤖'}</div>
+    <div class="ai-msg-bubble">${text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  return div;
+}
+
+function _aiShowTyping() {
+  const el  = document.getElementById('aiMessages');
+  const div = document.createElement('div');
+  div.className = 'ai-msg';
+  div.id = 'aiTypingIndicator';
+  div.innerHTML = `<div class="ai-msg-avatar">🤖</div>
+    <div class="ai-msg-bubble"><div class="ai-typing">
+      <div class="ai-typing-dot"></div><div class="ai-typing-dot"></div><div class="ai-typing-dot"></div>
+    </div></div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function _aiHideTyping() {
+  document.getElementById('aiTypingIndicator')?.remove();
+}
+
+// ── ส่งข้อความไป Claude ──
+async function _aiSendMessage(userMsg) {
+  if (_aiIsBusy || !userMsg.trim()) return;
+  _aiIsBusy = true;
+  const sendBtn = document.getElementById('aiChatSend');
+  sendBtn.disabled = true;
+
+  _aiAppendMsg('user', userMsg);
+  document.getElementById('aiChatInput').value = '';
+
+  // เพิ่มใน history
+  _aiChatHistory.push({ role: 'user', content: userMsg });
+
+  _aiShowTyping();
+
+  // สร้าง system prompt พร้อม context
+  const snap    = _buildAiSnapshot();
+  const context = _buildAiContext(snap);
+
+  const systemPrompt = `คุณคือ AI Business Analyst ผู้เชี่ยวชาญด้านร้านอาหารไทย ชื่อ "Claude" ทำงานให้ร้าน "ข้าวซอย 90"
+
+${context}
+
+## คำแนะนำ
+- ตอบเป็นภาษาไทย กระชับ ตรงประเด็น
+- ใช้ตัวเลขจากข้อมูลจริงที่ให้มาเสมอ
+- ให้คำแนะนำเชิงปฏิบัติที่ทำได้จริง
+- ใช้ **bold** เพื่อ highlight จุดสำคัญ
+- ไม่เกิน 200 คำต่อการตอบ`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: _aiChatHistory,
+      }),
+    });
+    const data = await res.json();
+    const reply = data.content?.map(c => c.text || '').join('') || '❌ ไม่สามารถตอบได้';
+
+    _aiHideTyping();
+    _aiAppendMsg('assistant', reply);
+    _aiChatHistory.push({ role: 'assistant', content: reply });
+
+    // เก็บ history ไม่เกิน 10 คู่
+    if (_aiChatHistory.length > 20) _aiChatHistory = _aiChatHistory.slice(-20);
+
+  } catch (err) {
+    _aiHideTyping();
+    _aiAppendMsg('assistant', `❌ เกิดข้อผิดพลาด: ${err.message}`);
+  }
+
+  _aiIsBusy = false;
+  sendBtn.disabled = false;
+}
+
+// ── init panel ──
+async function initAiPanel() {
+  if (_aiDataLoaded) return;
+  _aiDataLoaded = true;
+
+  // Load Chart.js ถ้ายังไม่มี
+  if (!window.Chart) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  await _aiLoadAndRender();
+
+  // Refresh button
+  document.getElementById('aiRefreshBtn').addEventListener('click', async () => {
+    _aiDataLoaded = false;
+    await initAiPanel();
+  });
+
+  // Quick prompts
+  document.querySelectorAll('.ai-quick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prompt = btn.dataset.prompt;
+      document.getElementById('aiChatInput').value = prompt;
+      _aiSendMessage(prompt);
+    });
+  });
+
+  // Send button
+  document.getElementById('aiChatSend').addEventListener('click', () => {
+    _aiSendMessage(document.getElementById('aiChatInput').value);
+  });
+  document.getElementById('aiChatInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _aiSendMessage(e.target.value); }
+  });
+}
+
+async function _aiLoadAndRender() {
+  // ดึง orders 30 วัน ถ้ายังไม่มี
+  if (!LIVE_ORDERS.length) {
+    try {
+      const orders = await api.getOrders({ today: false, limit: 500 });
+      if (Array.isArray(orders)) LIVE_ORDERS = orders;
+    } catch (_) {}
+  }
+
+  const snap = _buildAiSnapshot();
+  _renderAiKpi(snap);
+  _renderAiRevenueChart(snap);
+  _renderAiTopMenu(snap);
+  _renderAiHeatmap(snap);
+}
 
 // ============================================================
 //  INIT defaults
