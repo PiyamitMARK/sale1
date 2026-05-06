@@ -1580,7 +1580,7 @@ tr.drag-over td { background: var(--cream-dark) !important; }
       <!-- =========================================================
            PANEL: EXPORT SHEET
            ========================================================= -->
-      <div class="bo-panel active" id="panelExport">
+      <div class="bo-panel" id="panelExport">
         <div class="bo-panel-heading">
           <div>
             <div class="bo-panel-title">📤 Export ไปยัง Google Sheet</div>
@@ -2595,8 +2595,12 @@ function renderDashKPIs(todayOrders) {
   document.getElementById('dashActiveTables').textContent  = activeTbls.size;
   document.getElementById('dashRevenueTrend').outerHTML    = trendHtml;
 
-  // total tables from localStorage
-  const totalTbl = parseInt(localStorage.getItem('ks90-table-count') || '9');
+  // total tables — ใช้ max(LS, โต๊ะสูงสุดจาก orders จริง)
+  const lsCount = parseInt(localStorage.getItem('ks90-table-count') || '0');
+  const maxFromOrders = LIVE_ORDERS.reduce((m, o) => {
+    const n = parseInt(o.table); return (!isNaN(n) && n > m) ? n : m;
+  }, 0);
+  const totalTbl = Math.max(lsCount, maxFromOrders, 1);
   document.getElementById('dashTotalTables').textContent = totalTbl;
 }
 
@@ -2642,7 +2646,9 @@ function renderDashHourly(todayOrders) {
 }
 
 function renderDashTables(todayOrders) {
-  const totalTbl   = parseInt(localStorage.getItem('ks90-table-count') || '9');
+  const lsCount2 = parseInt(localStorage.getItem('ks90-table-count') || '0');
+  const maxFromOrders2 = LIVE_ORDERS.reduce((m, o) => { const n = parseInt(o.table); return (!isNaN(n) && n > m) ? n : m; }, 0);
+  const totalTbl = Math.max(lsCount2, maxFromOrders2, 1);
   const tableState = {}; // table -> worst status
   const statusRank = { cooking: 3, pending: 2, served: 1 };
 
