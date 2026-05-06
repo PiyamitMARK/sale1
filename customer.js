@@ -448,8 +448,24 @@ async function checkActiveOrder() {
   try {
     const data = await api.getTableOrder(tableNum);
     if (data && data.order_id) {
-      // ตรวจสอบสถานะ order จริง
-      const order = await api.getOrder(data.order_id);
+      // ตรวจสอบสถานะ order จริง — แยก network error ออกจาก "order ไม่มีจริง"
+      // Samsung/Android บางเครื่องเน็ตช้า → getOrder timeout → คืน null/throw
+      // ต้องไม่ล้าง activeOrderKey ในกรณี network error
+      let order = null;
+      let orderFetchFailed = false;
+      try {
+        order = await api.getOrder(data.order_id);
+      } catch (fetchErr) {
+        // network error หรือ parse error → ไม่รู้สถานะจริง → คง key ไว้ก่อน
+        console.warn('[checkActiveOrder] getOrder failed (network?), keeping existing key:', fetchErr);
+        orderFetchFailed = true;
+      }
+
+      if (orderFetchFailed) {
+        // คง key จาก LS ที่โหลดไว้แล้ว ไม่แตะอะไร
+        return;
+      }
+
       if (order) {
         if (order.status === 'paid' || order.status === 'canceled') {
           // order ปิดแล้ว → ล้าง
@@ -465,7 +481,7 @@ async function checkActiveOrder() {
         _saveActiveOrder();
         showOrderBanner();
       } else {
-        // order ถูกลบ → ล้าง
+        // order คืน null จริงๆ (API ยืนยัน 200 แต่ไม่มี record) → clear ได้
         await api.clearTable(tableNum).catch(() => {});
         activeOrderKey    = null;
         activeOrderNumber = null;
@@ -480,7 +496,7 @@ async function checkActiveOrder() {
       clearSavedCart();
     }
   } catch (err) {
-    // เน็ตหลุด → คง activeOrderKey จาก LS ไว้ก่อน (ไม่รู้สถานะจริง)
+    // เน็ตหลุด (getTableOrder ล้มเหลว) → คง activeOrderKey จาก LS ไว้ก่อน (ไม่รู้สถานะจริง)
     console.error('checkActiveOrder error:', err);
   } finally {
     isCheckingOrder = false;

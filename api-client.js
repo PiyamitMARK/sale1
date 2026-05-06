@@ -181,7 +181,11 @@ export const ws = {
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 export async function adminLogin(username, password) {
-  const raw  = `${username}:${password}`;
+  // trim + lowercase username ก่อน hash
+  // ป้องกัน Samsung/Android autofill เติม space หรือ autocorrect capitalize ตัวแรก
+  // → hash ที่ได้จะตรงกับ ADMIN_KEY_HASH บน server เสมอ
+  const u    = username.trim().toLowerCase();
+  const raw  = `${u}:${password}`;
   const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
   const hash = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 
