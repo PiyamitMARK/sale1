@@ -171,62 +171,49 @@ function _openBillModal() {
   billModal.style.display = 'flex';
 }
 
-// ─── Merge orders เป็น record เดียวใน Firebase ──────────────────
-async function _mergeOrdersInFirebase(orders, paymentMethod) {
-  const { db, firebaseUtils } = _cfg;
-  if (!firebaseUtils) throw new Error('firebaseUtils ไม่ได้ถูก inject ใน initBillFeature');
-  const { push, set, remove, get, ref, update } = firebaseUtils;
+// ─── Merge orders เป็น record เดียวผ่าน REST API ─────────────────
+async function _mergeOrders(orders, paymentMethod) {
+  const { apiUtils } = _cfg;
+  if (!apiUtils?.api) throw new Error('apiUtils.api ไม่ได้ถูก inject ใน initBillFeature');
+  const { api } = apiUtils;
 
-  // 1. รวม batches จากทุก order เรียงตาม date
-  const sorted = [...orders].sort((a, b) => new Date(a.date) - new Date(b.date));
+  // 1. เรียงตาม created_at แล้วรวม batches
+  const sorted        = [...orders].sort((a, b) => new Date(a.created_at || a.date) - new Date(b.created_at || b.date));
   const mergedBatches = sorted.flatMap(o => o.batches || [o.items || []]);
-  const grandTotal    = sorted.reduce((s, o) => s + (o.total || 0), 0);
-  const orderNums     = sorted.map(o => o.orderNumber);
+  const orderNums     = sorted.map(o => o.order_num || o.orderNumber);
 
-  // ถ้า order ที่รวมล้วนเป็น takeaway ให้ใช้ slot แรก และตั้ง takeaway: true
-  const allTakeaway = sorted.every(o => o.takeaway || String(o.table).startsWith('takeaway'));
-  const tableLabel  = allTakeaway
-    ? sorted[0].table                                           // คง slot เดิมของ order แรก
-    : sorted.map(o => o.table || '-').join('+');               // รวมหมายเลขโต๊ะ
+  // 2. mark order แรกเป็น paid + รวม batches + note
+  const primary   = sorted[0];
+  const primaryId = primary.id || primary.firebaseKey;
+  await api.updateOrder(primaryId, {
+    status:  'paid',
+    payment: paymentMethod || 'cash',
+    batches: mergedBatches,
+    note:    `รวมบิลจาก #${orderNums.join(', #')}`,
+  });
 
-  // 2. สร้าง order ใหม่ (ใช้ orderNumber ของ order แรก เพื่อ continuity)
-  const mergedOrder = {
-    orderNumber:   sorted[0].orderNumber,
-    table:         tableLabel,
-    date:          sorted[0].date,
-    batches:       mergedBatches,
-    total:         grandTotal,
-    status:        'paid',
-    paymentMethod: paymentMethod || 'cash',
-    mergedFrom:    orderNums,   // เก็บหลักฐานว่ารวมมาจาก order ไหน
-    mergedAt:      new Date().toISOString(),
-    ...(allTakeaway ? { takeaway: true } : {}),
-  };
-
-  // 3. push order ใหม่เข้า Firebase
-  const newRef = await push(ref(db, 'orders'), mergedOrder);
-
-  // 4. ลบ order เก่าและ tableOrders ของแต่ละโต๊ะออก
-  for (const o of sorted) {
-    // ลบ tableOrders/{table} ถ้า key ตรงกัน
-    if (o.table) {
-      try {
-        const snap = await get(ref(db, `tableOrders/${o.table}`));
-        if (snap.exists() && snap.val().orderKey === o.firebaseKey) {
-          await remove(ref(db, `tableOrders/${o.table}`));
-        }
-      } catch (_) {}
-    }
-    // ลบ order เก่า
-    await remove(ref(db, `orders/${o.firebaseKey}`));
+  // clear table ของ primary
+  const primaryTable = primary.table_num || primary.table;
+  if (primaryTable) {
+    try { await api.clearTable(String(primaryTable)); } catch (_) {}
   }
 
-  return newRef.key;
+  // 3. ลบ order ที่เหลือ + clear table
+  for (const o of sorted.slice(1)) {
+    const oid  = o.id || o.firebaseKey;
+    const tnum = o.table_num || o.table;
+    try { await api.deleteOrder(oid); } catch (_) {}
+    if (tnum) {
+      try { await api.clearTable(String(tnum)); } catch (_) {}
+    }
+  }
+
+  return primaryId;
 }
 
 // ─── รวมบิล ──────────────────────────────────────────────────────
 function _openMergeModal() {
-  const orders = _cfg.getOrders().filter(o => mergeSelected.has(o.firebaseKey));
+  const orders = _cfg.getOrders().filter(o => mergeSelected.has(o.id || o.firebaseKey));
   if (orders.length < 2) return;
 
   billModalMode = 'merge';
@@ -249,8 +236,8 @@ function _renderMergeBody(orders) {
     return `
       <tr>
         <td>
-          <span class="merge-order-chip">#${escapeHtml(String(o.orderNumber))}</span>
-          โต๊ะ ${escapeHtml(String(o.table || '-'))}
+          <span class="merge-order-chip">#${escapeHtml(String(o.order_num || o.orderNumber))}</span>
+          โต๊ะ ${escapeHtml(String(o.table_num || o.table || '-'))}
         </td>
         <td style="color:var(--brown-light);font-size:0.82rem">${itemsText}</td>
         <td style="text-align:right;font-family:'Mitr',sans-serif;font-weight:700;color:var(--accent)">${formatMoney(o.total)}</td>
@@ -297,11 +284,11 @@ function _renderMergeBody(orders) {
     btn.disabled = true;
     btn.textContent = 'กำลังรวม...';
     try {
-      await _mergeOrdersInFirebase(orders, selectedPayment);
+      await _mergeOrders(orders, selectedPayment);
       // ปิด merge mode ก่อน close modal เพื่อให้ Firebase re-render ได้ state ที่ถูกต้องทันที
       _closeBillModal();
       _cancelMergeMode();
-      _showToast(`✅ รวมบิล ${orders.length} โต๊ะ (${orders.map(o=>'#'+o.orderNumber).join(', ')}) เป็น order เดียวแล้ว`);
+      _showToast(`✅ รวมบิล ${orders.length} โต๊ะ (${orders.map(o=>'#'+(o.order_num||o.orderNumber)).join(', ')}) เป็น order เดียวแล้ว`);
     } catch (err) {
       btn.disabled = false;
       btn.textContent = '✅ ยืนยันชำระรวม';
@@ -312,7 +299,7 @@ function _renderMergeBody(orders) {
 
 // ─── แยกบิล ──────────────────────────────────────────────────────
 function _openSplitModal(orderKey) {
-  const order = _cfg.getOrders().find(o => o.firebaseKey === orderKey);
+  const order = _cfg.getOrders().find(o => (o.id || o.firebaseKey) === orderKey);
   if (!order) return;
 
   splitOrderKey = orderKey;
@@ -323,7 +310,7 @@ function _openSplitModal(orderKey) {
     { id: 'p2', name: 'คนที่ 2', itemRefs: new Set() },
   ];
 
-  document.getElementById('billModalTitle').textContent = `✂ แยกบิล — ออเดอร์ #${order.orderNumber} โต๊ะ ${order.table || '-'}`;
+  document.getElementById('billModalTitle').textContent = `✂ แยกบิล — ออเดอร์ #${order.order_num || order.orderNumber} โต๊ะ ${order.table_num || order.table || '-'}`;
   const tabs = document.getElementById('billModalTabs');
   tabs.style.display = 'flex';
   tabs.querySelectorAll('.bill-modal-tab').forEach(t => t.classList.toggle('active', t.dataset.bmode === 'split-equal'));
@@ -338,7 +325,7 @@ function _renderSplitBody() {
 }
 
 function _renderSplitEqual() {
-  const order = _cfg.getOrders().find(o => o.firebaseKey === splitOrderKey);
+  const order = _cfg.getOrders().find(o => (o.id || o.firebaseKey) === splitOrderKey);
   if (!order) return;
   const { formatMoney } = _cfg;
   const total = order.total || 0;
@@ -396,7 +383,7 @@ function _renderSplitEqual() {
   `;
   document.getElementById('billCancelBtn2').addEventListener('click', _closeBillModal);
   document.getElementById('splitEqualPrint').addEventListener('click', () => {
-    const order = _cfg.getOrders().find(o => o.firebaseKey === splitOrderKey);
+    const order = _cfg.getOrders().find(o => (o.id || o.firebaseKey) === splitOrderKey);
     if (!order) return;
     const each = order.total / splitPeopleCount;
     for (let i = 0; i < splitPeopleCount; i++) {
@@ -406,7 +393,7 @@ function _renderSplitEqual() {
 }
 
 function _renderSplitCustom() {
-  const order = _cfg.getOrders().find(o => o.firebaseKey === splitOrderKey);
+  const order = _cfg.getOrders().find(o => (o.id || o.firebaseKey) === splitOrderKey);
   if (!order) return;
   const { formatMoney, escapeHtml } = _cfg;
 
@@ -528,22 +515,23 @@ function _renderSplitCustom() {
       render();
     });
 
-    // footer
-    document.getElementById('billModalFooter').innerHTML = `
-      <button type="button" class="btn btn-outline" id="billCancelBtn3">ปิด</button>
-      <button type="button" class="btn btn-outline" id="splitCustomPrint">🖨 พิมพ์แยกใบ</button>
-    `;
-    document.getElementById('billCancelBtn3').addEventListener('click', _closeBillModal);
-    document.getElementById('splitCustomPrint').addEventListener('click', () => {
-      const order = _cfg.getOrders().find(o => o.firebaseKey === splitOrderKey);
-      if (!order) return;
-      splitPeople.forEach(p => {
-        const myItems = allItems.filter(i => p.itemRefs.has(i.ref));
-        const total   = getPersonTotal(p);
-        _printSplitReceipt(order, p.name, myItems, total);
-      });
-    });
   };
+
+  // footer render แค่ครั้งเดียว — ป้องกัน listener ซ้อนจากการ re-render
+  document.getElementById('billModalFooter').innerHTML = `
+    <button type="button" class="btn btn-outline" id="billCancelBtn3">ปิด</button>
+    <button type="button" class="btn btn-outline" id="splitCustomPrint">🖨 พิมพ์แยกใบ</button>
+  `;
+  document.getElementById('billCancelBtn3').addEventListener('click', _closeBillModal);
+  document.getElementById('splitCustomPrint').addEventListener('click', () => {
+    const order = _cfg.getOrders().find(o => (o.id || o.firebaseKey) === splitOrderKey);
+    if (!order) return;
+    splitPeople.forEach(p => {
+      const myItems = allItems.filter(i => p.itemRefs.has(i.ref));
+      const total   = getPersonTotal(p);
+      _printSplitReceipt(order, p.name, myItems, total);
+    });
+  });
 
   render();
 }

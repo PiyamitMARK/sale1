@@ -28,6 +28,16 @@
 	],
 	"assets": {
 		"directory": "./",
-		"exclude": [".git", "node_modules", "*.pack", "*.log", "schema.sql"]
+		"exclude": [
+			".git",
+			"node_modules",
+			"*.pack",
+			"*.log",
+			"schema.sql",
+			"wrangler.jsonc",
+			"wrangler.toml",
+			"worker.js",
+			"*.assetsignore"
+		]
 	}
 }

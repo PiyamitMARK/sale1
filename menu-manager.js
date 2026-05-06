@@ -442,12 +442,18 @@ export function subscribeAllMenuAdmin(_db, callback) {
  */
 export async function saveMenuItem(_db, item) {
   // optimistic: อัปเดต cache ก่อน เพื่อให้ UI refresh ทันที
+  const prev = _menuCache ? { ..._menuCache } : null;
   const cached = _menuCache || {};
   cached[item.id] = item;
   _updateMenuCache(cached);
 
-  // ส่ง PATCH เฉพาะ item นี้
-  await api.patchMenuItem(item.id, item);
+  try {
+    await api.patchMenuItem(item.id, item);
+  } catch (e) {
+    // rollback cache ถ้า API fail
+    if (prev !== null) _updateMenuCache(prev);
+    throw e;
+  }
 }
 
 export async function toggleMenuItem(_db, id, enabled) {
@@ -460,11 +466,17 @@ export async function toggleMenuItem(_db, id, enabled) {
 
 export async function deleteMenuItem(_db, id) {
   // optimistic update
+  const prev = _menuCache ? { ..._menuCache } : null;
   const cached = _menuCache || {};
   delete cached[id];
   _updateMenuCache(cached);
 
-  await api.deleteMenuItem(id);
+  try {
+    await api.deleteMenuItem(id);
+  } catch (e) {
+    if (prev !== null) _updateMenuCache(prev);
+    throw e;
+  }
 }
 
 export async function updateMenuPrice(_db, id, price) {
