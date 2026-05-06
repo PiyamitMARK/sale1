@@ -5303,7 +5303,14 @@ ${context}
       }),
     });
     const data = await res.json();
-    const reply = data.content?.map(c => c.text || '').join('') || '❌ ไม่สามารถตอบได้';
+    console.log('[AI Proxy] status:', res.status, 'body:', JSON.stringify(data).slice(0, 300));
+
+    if (!res.ok) {
+      const errMsg = data.error?.message || data.error || JSON.stringify(data);
+      throw new Error(`API ${res.status}: ${errMsg}`);
+    }
+
+    const reply = data.content?.map(c => c.text || '').join('') || '❌ ไม่ได้รับข้อความจาก AI';
 
     _aiHideTyping();
     _aiAppendMsg('assistant', reply);
@@ -5314,7 +5321,8 @@ ${context}
 
   } catch (err) {
     _aiHideTyping();
-    _aiAppendMsg('assistant', `❌ เกิดข้อผิดพลาด: ${err.message}`);
+    console.error('[AI Proxy] error:', err);
+    _aiAppendMsg('assistant', `❌ ${err.message}`);
   }
 
   _aiIsBusy = false;
@@ -5375,6 +5383,11 @@ ${context}
       }),
     });
     const data = await res.json();
+    console.log('[AI Forecast] status:', res.status, 'body:', JSON.stringify(data).slice(0, 300));
+    if (!res.ok) {
+      const errMsg = data.error?.message || data.error || JSON.stringify(data);
+      throw new Error(`API ${res.status}: ${errMsg}`);
+    }
     const raw  = data.content?.map(c => c.text || '').join('') || '{}';
     const clean = raw.replace(/```json|```/g, '').trim();
     const fc   = JSON.parse(clean);
