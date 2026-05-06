@@ -618,9 +618,9 @@ async function markOrderAsPaid(orderId, paymentMethod) {
 }
 
 async function markOrderAsCooking(orderId) {
-  const prev = _optimisticStatus(orderId, { status: 'cooking' });
+  const prev = _optimisticStatus(orderId, { status: 'cooking', last_batch_at: null });
   try {
-    await api.updateOrder(orderId, { status: 'cooking' });
+    await api.updateOrder(orderId, { status: 'cooking', ack_batch: true });
   } catch (err) {
     console.error('markOrderAsCooking error:', err);
     if (prev) { allOrders[allOrders.findIndex(o => o.id === orderId)] = prev; }
@@ -988,7 +988,10 @@ function renderOrders() {
     const orderId  = order.id;
 
     let actionBtns = '';
-    if (s === 'pending') {
+    // hasNewBatch: ลูกค้าสั่งเพิ่มหลังจากที่ order ถูกรับแล้ว
+    // pending ปกติมี last_batch_at เสมอ → ต้องเช็ค status ≠ pending ด้วย
+    const hasNewBatch = !!order.last_batch_at && s !== 'pending' && s !== 'paid' && s !== 'cancelled';
+    if (s === 'pending' || hasNewBatch) {
       actionBtns = `<button type="button" class="btn-cooking" data-key="${orderId}">👨‍🍳 รับออเดอร์</button>`;
     } else if (s === 'cooking') {
       actionBtns = `<button type="button" class="btn-served" data-key="${orderId}">🍽 เสิร์ฟแล้ว</button>`;
@@ -1000,11 +1003,19 @@ function renderOrders() {
 
     const batches = order.batches || [order.items || []];
     const batchesHtml = batches.map((batchItems, bIdx) => {
+      const isLastBatch = bIdx === batches.length - 1;
+      // แสดง badge "ใหม่" บน batch สุดท้ายเมื่อมี new batch ค้างรับ
+      const showNewBadge = hasNewBatch && isLastBatch;
       const batchTotal = batchItems.reduce((s, i) => s + i.price * i.qty, 0);
       const batchLabel = batches.length > 1 ? `รอบที่ ${bIdx + 1}` : 'รายการ';
       return `
-        <div class="batch-group">
-          ${batches.length > 1 ? `<div class="batch-label">🍽 ${escapeHtml(batchLabel)}</div>` : ''}
+        <div class="batch-group${showNewBadge ? ' batch-group--new' : ''}">
+          ${batches.length > 1 ? `
+            <div class="batch-label">
+              🍽 ${escapeHtml(batchLabel)}
+              ${showNewBadge ? `<span class="batch-new-badge">ใหม่</span>` : ''}
+            </div>` : ''}
+          ${batches.length === 1 && showNewBadge ? `<div class="batch-label batch-label--new"><span class="batch-new-badge">ใหม่</span></div>` : ''}
           <ul class="order-items">
             ${batchItems.map((i) => `
               <li class="order-item">
@@ -1818,3 +1829,47 @@ function printOrderReceipt(order) {
 </body></html>`);
   win.document.close();
 }
+// ==================== New Batch Badge CSS ====================
+(function injectNewBatchStyles() {
+  const style = document.createElement('style');
+  style.textContent = `
+    /* ── batch-group--new: highlight กลุ่มรายการที่ลูกค้าสั่งเพิ่มใหม่ ── */
+    .batch-group--new {
+      border: 2px solid #e8590c;
+      border-radius: 8px;
+      padding: 6px 8px 4px;
+      margin-top: 6px;
+      background: rgba(232, 89, 12, 0.04);
+    }
+    [data-theme="dark"] .batch-group--new {
+      background: rgba(232, 89, 12, 0.10);
+      border-color: #f06a25;
+    }
+
+    /* badge "ใหม่" */
+    .batch-new-badge {
+      display: inline-block;
+      background: #e8590c;
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 700;
+      font-family: 'Mitr', sans-serif;
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+      margin-left: 6px;
+      vertical-align: middle;
+      letter-spacing: 0.03em;
+      animation: newBadgePulse 1.4s ease infinite;
+    }
+    @keyframes newBadgePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.75; transform: scale(0.95); }
+    }
+
+    /* batch-label--new: ใช้เมื่อมี 1 batch แต่ต้องแสดง badge ใหม่ */
+    .batch-label--new {
+      margin-bottom: 4px;
+    }
+  `;
+  document.head.appendChild(style);
+})();

@@ -308,6 +308,11 @@ async function handleUpdateOrder(request, path, env, ctx, body = null) {
     updates.push('batches = ?', 'total = ?', 'last_batch_at = ?');
     params.push(JSON.stringify(body.batches), total, nowISO());
   }
+  // ack_batch: true → admin รับออเดอร์ batch ใหม่แล้ว → clear last_batch_at
+  if (body.ack_batch === true) {
+    updates.push('last_batch_at = ?');
+    params.push(null);
+  }
   if (body.payment !== undefined) {
     updates.push('payment = ?');
     params.push(body.payment);
@@ -334,14 +339,6 @@ async function handleUpdateOrder(request, path, env, ctx, body = null) {
   // ป้องกันเสียงดังผิดที่เมื่อ admin แก้ไขออเดอร์
   if (body.batches !== undefined && body.from_customer === true) {
     ctx.waitUntil(broadcastToRoom(env, 'admin', { type: 'new_batch', order: updated }));
-    // Restore table_orders mapping ในกรณีที่ admin เคย clear table แต่ order ยังไม่จ่าย
-    // (ลูกค้ารีหน้า → checkActiveOrder fallback ไปเจอ order จาก LS → สั่งเพิ่ม → mapping กลับมา)
-    ctx.waitUntil(
-      env.DB.prepare(`INSERT OR REPLACE INTO table_orders (table_num, order_id, created_at) VALUES (?, ?, ?)`)
-        .bind(updated.table_num, updated.id, nowISO())
-        .run()
-        .catch(() => {})
-    );
   }
 
   // ถ้ามี status → แจ้งห้องโต๊ะด้วย
