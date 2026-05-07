@@ -83,9 +83,9 @@ export const DEFAULT_MENU = {
 export function parseMenuFromRaw(rawObj, imageField = 'image') {
   const result = {};
   Object.values(rawObj).forEach(item => {
-    if (item.enabled === false) return;
     const cat = item.category;
     if (!result[cat]) result[cat] = [];
+    const isEnabled = item.enabled !== false;
     const promoActive = item.promo?.enabled;
     const effectivePrice = (() => {
       if (!promoActive) return item.price;
@@ -103,7 +103,7 @@ export function parseMenuFromRaw(rawObj, imageField = 'image') {
       productType: item.productType || 'simple',
       options:     item.options || null,
       promoLabel:  promoActive ? (item.promo?.label || 'โปร') : null,
-      enabled:     true,
+      enabled:     isEnabled,
     };
     entry[imageField] = item.imageUrl || ('images/img' + item.imageNum + '.png');
     result[cat].push(entry);
