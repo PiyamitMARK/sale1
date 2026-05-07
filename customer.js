@@ -474,6 +474,8 @@ async function checkActiveOrder() {
           activeOrderNumber = null;
           _saveActiveOrder();
           clearSavedCart();
+          // ถ้าเพิ่ง paid → แสดงหน้า paid screen ทันที (ลูกค้า reload หลังจ่าย)
+          if (order.status === 'paid') showPaidScreen();
           return;
         }
         activeOrderKey    = data.order_id;
@@ -579,6 +581,9 @@ function updateKitchenBar(status) {
     if (banner) banner.remove();
     // ล้าง table mapping ผ่าน API (background)
     if (tableNum) api.clearTable(tableNum).catch(() => {});
+
+    // ─── แสดงหน้า "ชำระเงินแล้ว" ทับทันที — ต้องสแกน QR ใหม่ถึงสั่งได้ ───
+    if (status === 'paid') showPaidScreen();
   }
 
   // อัปเดต timeline steps
@@ -1376,6 +1381,48 @@ function closeModal(id) { document.getElementById(id).setAttribute('aria-hidden'
   });
 });
 
+// ==================== Paid Screen ====================
+/**
+ * showPaidScreen — แสดงหน้า "ชำระเงินแล้ว" ทับหน้าหลักทันที
+ * ลูกค้าต้องสแกน QR Code ใหม่ถึงจะสั่งอาหารได้อีกครั้ง
+ * (กด Back ใน browser ก็ไม่ได้ เพราะ replace state)
+ */
+function showPaidScreen() {
+  // ปิด modal ทั้งหมดที่เปิดอยู่ก่อน
+  ['optionModal','cartModal','successModal','historyModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute('aria-hidden','true');
+  });
+
+  // ซ่อน cart bar
+  const cartBar = document.getElementById('cartBar');
+  if (cartBar) cartBar.style.display = 'none';
+
+  // สร้าง overlay ทับทั้งหน้า
+  let overlay = document.getElementById('paidOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'paidOverlay';
+    document.getElementById('app').appendChild(overlay);
+  }
+
+  const tableLbl = tableLabel(tableNum);
+  overlay.innerHTML = `
+    <div class="paid-overlay-inner">
+      <div class="paid-overlay-icon">✅</div>
+      <h2 class="paid-overlay-title">ชำระเงินแล้ว!</h2>
+      <p class="paid-overlay-sub">${esc(tableLbl)}</p>
+      <p class="paid-overlay-msg">ขอบคุณที่ใช้บริการ 🙏</p>
+      <div class="paid-overlay-divider"></div>
+      <p class="paid-overlay-hint">หากต้องการสั่งอาหารใหม่<br>กรุณาสแกน QR Code ที่โต๊ะอีกครั้ง</p>
+      <div class="paid-overlay-qr-icon">📱</div>
+    </div>
+  `;
+
+  // ป้องกัน Back button โดย replace URL — ลูกค้ากด Back จะออกจาก browser แทน
+  history.replaceState(null, '', location.pathname + '?paid=1');
+}
+
 // ==================== Start ====================
 
 init();
@@ -1430,6 +1477,70 @@ init();
       z-index: 2; white-space: nowrap;
     }
     .cust-product-card { position: relative; }
+
+    /* ── Paid Overlay ── */
+    #paidOverlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: var(--cream, #faf6f0);
+      display: flex; align-items: center; justify-content: center;
+      animation: paidFadeIn 0.4s ease;
+    }
+    @keyframes paidFadeIn {
+      from { opacity: 0; transform: scale(0.97); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .paid-overlay-inner {
+      text-align: center; padding: 2.5rem 2rem;
+      max-width: 360px; width: 100%;
+    }
+    .paid-overlay-icon {
+      font-size: 5rem; line-height: 1;
+      margin-bottom: 1rem;
+      animation: paidIconPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
+    }
+    @keyframes paidIconPop {
+      from { transform: scale(0); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    .paid-overlay-title {
+      font-family: 'Mitr', sans-serif;
+      font-size: 2rem; font-weight: 700;
+      color: #2e7d52; margin: 0 0 0.25rem;
+    }
+    .paid-overlay-sub {
+      font-size: 1rem; color: #6b7280;
+      margin: 0 0 0.5rem;
+      font-family: 'Sarabun', sans-serif;
+    }
+    .paid-overlay-msg {
+      font-size: 1.2rem; color: #3d2b1f;
+      font-family: 'Sarabun', sans-serif;
+      margin: 0 0 1.5rem;
+    }
+    .paid-overlay-divider {
+      width: 48px; height: 3px; border-radius: 2px;
+      background: #c8853a; margin: 0 auto 1.5rem;
+    }
+    .paid-overlay-hint {
+      font-size: 0.95rem; color: #5c3d2e;
+      line-height: 1.7; margin: 0 0 1.25rem;
+      font-family: 'Sarabun', sans-serif;
+    }
+    .paid-overlay-qr-icon {
+      font-size: 2.5rem;
+      animation: paidQrPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes paidQrPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.12); opacity: 0.7; }
+    }
+    [data-theme="dark"] #paidOverlay {
+      background: #1a100a;
+    }
+    [data-theme="dark"] .paid-overlay-title { color: #4ade80; }
+    [data-theme="dark"] .paid-overlay-msg,
+    [data-theme="dark"] .paid-overlay-hint  { color: #e2d8cb; }
+    [data-theme="dark"] .paid-overlay-sub   { color: #9ca3af; }
 
     /* Disabled / sold-out menu item */
     .cust-product-card--disabled {
