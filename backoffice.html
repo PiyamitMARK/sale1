@@ -1813,6 +1813,211 @@ canvas.ai-chart { width: 100% !important; }
   }
 }
 /* ============================================================
+   FLOOR PLAN PANEL
+   ============================================================ */
+.fp-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius);
+  padding: .65rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.fp-legend-item {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .82rem;
+  color: var(--brown-mid);
+  font-weight: 500;
+}
+.fp-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid rgba(0,0,0,.1);
+}
+.fp-dot-empty   { background: var(--cream-dark); }
+.fp-dot-pending { background: #f5c842; }
+.fp-dot-cooking { background: #2ecc71; }
+.fp-dot-served  { background: #3b82f6; }
+.fp-dot-paid    { background: var(--brown-light); }
+
+.fp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .7rem 1rem;
+  background: var(--cream-mid);
+  border-bottom: 1.5px solid var(--cream-dark);
+  flex-wrap: wrap;
+}
+
+.fp-canvas-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 480px;
+  background: radial-gradient(circle, var(--cream-dark) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-color: var(--cream);
+  overflow: hidden;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+[data-theme="dark"] .fp-canvas-wrap {
+  background-color: #1a1a1d;
+  background-image: radial-gradient(circle, #3a3a40 1px, transparent 1px);
+}
+
+.fp-canvas {
+  position: relative;
+  width: 100%;
+  height: 480px;
+  user-select: none;
+}
+
+.fp-canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  color: var(--brown-light);
+  font-size: .95rem;
+  pointer-events: none;
+}
+
+.fp-table {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+  box-shadow: 0 2px 8px rgba(61,43,31,.12);
+  border: 2.5px solid transparent;
+  background: var(--white);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+.fp-table:hover { transform: scale(1.07); z-index: 10 !important; }
+
+.fp-table.fp-dragging {
+  cursor: grabbing;
+  transform: scale(1.1);
+  z-index: 999 !important;
+  box-shadow: 0 8px 24px rgba(61,43,31,.25);
+}
+.fp-table.fp-edit-mode { cursor: grab; }
+.fp-table.fp-edit-mode:active { cursor: grabbing; }
+
+.fp-table.st-empty   { background: var(--white); border-color: var(--cream-dark); }
+.fp-table.st-pending { background: #fffbee; border-color: #d4a017; }
+.fp-table.st-cooking {
+  background: #eaf7f0; border-color: #1a7a4a;
+  animation: fp-pulse-cooking 2s ease-in-out infinite;
+}
+@keyframes fp-pulse-cooking {
+  0%,100% { box-shadow: 0 2px 8px rgba(26,122,74,.15); }
+  50%      { box-shadow: 0 2px 18px rgba(26,122,74,.38); }
+}
+.fp-table.st-served  { background: #eff6ff; border-color: #3b82f6; }
+.fp-table.st-paid    { background: var(--cream-mid); border-color: var(--cream-dark); opacity: .7; }
+
+.fp-table-num {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--brown);
+  line-height: 1;
+}
+.fp-table-label {
+  font-size: .65rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--brown-light);
+  text-transform: uppercase;
+}
+.fp-table-status-icon { font-size: .9rem; line-height: 1; }
+
+.fp-table.st-pending .fp-table-label { color: #856404; }
+.fp-table.st-cooking .fp-table-label { color: #1a7a4a; }
+.fp-table.st-served  .fp-table-label { color: #1d4ed8; }
+
+.fp-table.st-cooking .fp-table-num::after {
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #1a7a4a;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: fpCookDot 1.2s ease-in-out infinite alternate;
+}
+@keyframes fpCookDot {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: .3; transform: scale(.6); }
+}
+
+.fp-popup {
+  position: fixed;
+  z-index: 9999;
+  background: var(--white);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: .9rem 1.1rem;
+  min-width: 180px;
+  max-width: 240px;
+  pointer-events: none;
+  animation: fpPopIn .15s ease;
+}
+@keyframes fpPopIn {
+  from { opacity: 0; transform: scale(.92) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.fp-popup.hidden { display: none !important; }
+.fp-popup-table {
+  font-family: 'Mitr', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--brown);
+  margin-bottom: .3rem;
+}
+.fp-popup-status {
+  font-size: .78rem;
+  font-weight: 700;
+  padding: .18rem .6rem;
+  border-radius: var(--pill);
+  display: inline-flex;
+  margin-bottom: .5rem;
+}
+.fp-popup-items {
+  font-size: .8rem;
+  color: var(--brown-mid);
+  line-height: 1.5;
+  max-height: 100px;
+  overflow-y: auto;
+}
+.fp-popup-total {
+  margin-top: .45rem;
+  font-family: 'Mitr', sans-serif;
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ============================================================
    KITCHEN DISPLAY PANEL
    ============================================================ */
 .kitchen-live-dot {
@@ -2002,6 +2207,9 @@ canvas.ai-chart { width: 100% !important; }
       </button>
       <button class="bo-nav-item" data-panel="kitchen">
         <span class="bo-nav-icon">👨‍🍳</span>Kitchen Display
+      </button>
+      <button class="bo-nav-item" data-panel="floorplan">
+        <span class="bo-nav-icon">🗺</span>แผนผังร้าน
       </button>
       <button class="bo-nav-item" data-panel="topsellers">
         <span class="bo-nav-icon">🏆</span>เมนูขายดี
@@ -2553,6 +2761,55 @@ canvas.ai-chart { width: 100% !important; }
       </div>
 
       <!-- =========================================================
+           PANEL: FLOOR PLAN
+           ========================================================= -->
+      <div class="bo-panel" id="panelFloorplan">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">🗺 แผนผังร้าน</div>
+            <div class="bo-panel-sub">วางตำแหน่งโต๊ะแบบ drag-and-drop — สีแสดงสถานะ real-time</div>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <span class="kitchen-live-dot" id="fpLiveDot"></span>
+            <span style="font-size:.8rem;color:var(--brown-light)" id="fpLastUpdate">—</span>
+            <button class="btn btn-ghost btn-sm" id="fpEditModeBtn">✏️ แก้ไขตำแหน่ง</button>
+            <button class="btn btn-primary btn-sm hidden" id="fpSaveBtn">💾 บันทึก</button>
+            <button class="btn btn-ghost btn-sm hidden" id="fpCancelBtn">✕ ยกเลิก</button>
+          </div>
+        </div>
+
+        <div class="fp-legend">
+          <div class="fp-legend-item"><span class="fp-dot fp-dot-empty"></span>ว่าง</div>
+          <div class="fp-legend-item"><span class="fp-dot fp-dot-pending"></span>รออาหาร</div>
+          <div class="fp-legend-item"><span class="fp-dot fp-dot-cooking"></span>กำลังทำ</div>
+          <div class="fp-legend-item"><span class="fp-dot fp-dot-served"></span>เสิร์ฟแล้ว</div>
+          <div class="fp-legend-item"><span class="fp-dot fp-dot-paid"></span>จ่ายแล้ว</div>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="fp-toolbar" id="fpToolbar" style="display:none">
+            <span style="font-size:.82rem;color:var(--brown-light)">🖱 ลากโต๊ะเพื่อวางตำแหน่ง</span>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <label style="font-size:.8rem;color:var(--brown-mid);font-weight:600">จำนวนโต๊ะ</label>
+              <input type="number" id="fpTableCount" min="1" max="30" value="9"
+                     style="width:60px;border:1.5px solid var(--cream-dark);border-radius:6px;padding:.3rem .5rem;font-size:.85rem;color:var(--brown);background:var(--cream)">
+              <button class="btn btn-ghost btn-sm" id="fpResetLayoutBtn">🔄 รีเซ็ต</button>
+            </div>
+          </div>
+          <div class="fp-canvas-wrap" id="fpCanvasWrap">
+            <div class="fp-canvas" id="fpCanvas"></div>
+          </div>
+        </div>
+
+        <div class="fp-popup hidden" id="fpPopup">
+          <div class="fp-popup-table" id="fpPopupTable">โต๊ะ —</div>
+          <div class="fp-popup-status" id="fpPopupStatus"></div>
+          <div class="fp-popup-items" id="fpPopupItems"></div>
+          <div class="fp-popup-total" id="fpPopupTotal"></div>
+        </div>
+      </div>
+
+      <!-- =========================================================
            PANEL: AI Analyst
            ========================================================= -->
       <div class="bo-panel" id="panelAi">
@@ -2863,6 +3120,7 @@ overlay.addEventListener('click', () => {
 const PANEL_TITLES = {
   dashboard: 'Dashboard วันนี้',
   kitchen: 'Kitchen Display',
+  floorplan: 'แผนผังร้าน (Live)',
   export: 'Export Sheet',
   topsellers: 'เมนูขายดี',
   history: 'ย้อนหลัง 1 เดือน',
@@ -2887,6 +3145,7 @@ function switchPanel(id) {
   overlay.classList.remove('open');
   if (id === 'dashboard') loadDashboard();
   if (id === 'kitchen')   initKitchenDisplay();
+  if (id === 'floorplan') initFloorPlan();
   if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
@@ -3251,6 +3510,7 @@ function _startWs() {
             if (activePanelId === 'history' && histLoaded) {
               fetchHistoryAndRender();
             }
+            if (activePanelId === 'floorplan' && _fpInited && !_fpEditMode) renderFloorPlan();
           }
         } catch(e) { console.warn('WS reload orders failed:', e); }
       }
@@ -5422,6 +5682,211 @@ function _aiShowTyping() {
 
 function _aiHideTyping() {
   document.getElementById('aiTypingIndicator')?.remove();
+}
+
+// ============================================================
+//  PANEL: FLOOR PLAN
+// ============================================================
+let _fpInited      = false;
+let _fpEditMode    = false;
+let _fpLayout      = {};
+let _fpTableCount  = 9;
+let _fpAutoRefresh = null;
+
+const FP_LAYOUT_KEY = 'ks90-floorplan-layout';
+const FP_SNAP       = 20;
+const FP_TABLE_W    = 72;
+const FP_TABLE_H    = 72;
+
+function _fpLoadLayout() {
+  try { const r = localStorage.getItem(FP_LAYOUT_KEY); if (r) return JSON.parse(r); } catch(_) {}
+  return {};
+}
+function _fpSaveLayout() {
+  try { localStorage.setItem(FP_LAYOUT_KEY, JSON.stringify(_fpLayout)); } catch(_) {}
+}
+function _fpDefaultPosition(t, total) {
+  const cols = Math.ceil(Math.sqrt(total));
+  const col  = (t - 1) % cols;
+  const row  = Math.floor((t - 1) / cols);
+  return { x: 24 + col * 100, y: 24 + row * 100 };
+}
+function _fpGetTableState(tableNum) {
+  const active = LIVE_ORDERS.filter(o =>
+    String(o.table) === String(tableNum) && o.status !== 'cancelled'
+  );
+  if (!active.length) return { status: 'empty', order: null, all: [] };
+  const rank = { cooking: 4, pending: 3, served: 2, paid: 1 };
+  active.sort((a, b) => (rank[b.status] || 0) - (rank[a.status] || 0));
+  return { status: active[0].status, order: active[0], all: active };
+}
+function _fpStatusLabel(s) {
+  return { empty: 'ว่าง', pending: 'รออาหาร', cooking: 'กำลังทำ', served: 'เสิร์ฟแล้ว', paid: 'จ่ายแล้ว' }[s] || s;
+}
+function _fpStatusIcon(s) {
+  return { empty: '', pending: '⏳', cooking: '👨‍🍳', served: '🍽', paid: '✅' }[s] || '';
+}
+function _fpStatusChipClass(s) {
+  return { empty: 'status-chip', pending: 'status-chip status-pending', cooking: 'status-chip status-cooking', served: 'status-chip status-served', paid: 'status-chip status-paid' }[s] || 'status-chip';
+}
+function _fpSnap(v) { return Math.round(v / FP_SNAP) * FP_SNAP; }
+function _fpClampPos(x, y, cW, cH) {
+  return { x: Math.max(0, Math.min(x, cW - FP_TABLE_W)), y: Math.max(0, Math.min(y, cH - FP_TABLE_H)) };
+}
+
+function renderFloorPlan() {
+  const canvas     = document.getElementById('fpCanvas');
+  if (!canvas) return;
+  const wrapRect   = document.getElementById('fpCanvasWrap').getBoundingClientRect();
+  const canvasW    = wrapRect.width  || 800;
+  const canvasH    = wrapRect.height || 480;
+  const lsCount    = parseInt(localStorage.getItem('ks90-table-count') || String(_fpTableCount), 10);
+  _fpTableCount    = lsCount || _fpTableCount;
+  const countInput = document.getElementById('fpTableCount');
+  if (countInput) countInput.value = _fpTableCount;
+
+  canvas.innerHTML = '';
+  for (let t = 1; t <= _fpTableCount; t++) {
+    const pos = _fpLayout[t] || _fpDefaultPosition(t, _fpTableCount);
+    const { x, y } = _fpClampPos(pos.x, pos.y, canvasW, canvasH);
+    _fpLayout[t] = { x, y };
+    const { status } = _fpGetTableState(t);
+    const el = document.createElement('div');
+    el.className = 'fp-table st-' + status + (_fpEditMode ? ' fp-edit-mode' : '');
+    el.dataset.table = t;
+    el.style.cssText = 'left:' + x + 'px;top:' + y + 'px;z-index:' + t + ';';
+    el.innerHTML = '<span class="fp-table-status-icon">' + _fpStatusIcon(status) + '</span>'
+      + '<span class="fp-table-num">' + t + '</span>'
+      + '<span class="fp-table-label">' + _fpStatusLabel(status) + '</span>';
+    if (_fpEditMode) { _fpBindDrag(el, t, canvas); }
+    else { el.addEventListener('click', (e) => _fpShowPopup(e, t)); }
+    canvas.appendChild(el);
+  }
+  const upd = document.getElementById('fpLastUpdate');
+  if (upd) upd.textContent = 'อัปเดต ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function _fpBindDrag(el, tableNum, canvas) {
+  let startX, startY, origX, origY, isDragging = false;
+  function onStart(e) {
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    startX = pt.clientX; startY = pt.clientY;
+    origX  = _fpLayout[tableNum]?.x || 0;
+    origY  = _fpLayout[tableNum]?.y || 0;
+    isDragging = false;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchend', onEnd);
+  }
+  function onMove(e) {
+    const pt = e.touches ? e.touches[0] : e;
+    const dx = pt.clientX - startX;
+    const dy = pt.clientY - startY;
+    if (!isDragging && Math.hypot(dx, dy) > 4) { isDragging = true; el.classList.add('fp-dragging'); }
+    if (!isDragging) return;
+    e.preventDefault();
+    const cr = canvas.getBoundingClientRect();
+    const { x, y } = _fpClampPos(_fpSnap(origX + dx), _fpSnap(origY + dy), cr.width, cr.height);
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    _fpLayout[tableNum] = { x, y };
+  }
+  function onEnd() {
+    el.classList.remove('fp-dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('mouseup', onEnd);
+    document.removeEventListener('touchend', onEnd);
+    isDragging = false;
+  }
+  el.addEventListener('mousedown', onStart);
+  el.addEventListener('touchstart', onStart, { passive: false });
+}
+
+let _fpPopupTimer = null;
+function _fpShowPopup(e, tableNum) {
+  const popup = document.getElementById('fpPopup');
+  const { status, order, all } = _fpGetTableState(tableNum);
+  document.getElementById('fpPopupTable').textContent = 'โต๊ะ ' + tableNum;
+  const sEl = document.getElementById('fpPopupStatus');
+  sEl.className = _fpStatusChipClass(status);
+  sEl.textContent = _fpStatusIcon(status) + ' ' + _fpStatusLabel(status);
+  const iEl = document.getElementById('fpPopupItems');
+  if (order && order.items && order.items.length) {
+    iEl.innerHTML = order.items.slice(0, 6).map(it => '<div>× ' + it.qty + ' ' + escHtml(it.name) + '</div>').join('')
+      + (order.items.length > 6 ? '<div style="color:var(--brown-light)">…อีก ' + (order.items.length - 6) + ' รายการ</div>' : '');
+  } else { iEl.innerHTML = '<div style="color:var(--brown-light);font-style:italic">ไม่มีออเดอร์</div>'; }
+  const tEl = document.getElementById('fpPopupTotal');
+  tEl.textContent = order ? 'ยอด: ' + fmt(all.reduce((s, o) => s + (o.total || 0), 0)) : '';
+  popup.classList.remove('hidden');
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = e.clientX + 12, top = e.clientY - 20;
+  if (left + 250 > vw) left = e.clientX - 260;
+  if (top  + 200 > vh) top  = vh - 210;
+  if (left < 8) left = 8;
+  if (top  < 8) top  = 8;
+  popup.style.left = left + 'px'; popup.style.top = top + 'px';
+  clearTimeout(_fpPopupTimer);
+  _fpPopupTimer = setTimeout(() => popup.classList.add('hidden'), 4000);
+}
+
+function _fpEnterEditMode() {
+  _fpEditMode = true;
+  document.getElementById('fpEditModeBtn').classList.add('hidden');
+  document.getElementById('fpSaveBtn').classList.remove('hidden');
+  document.getElementById('fpCancelBtn').classList.remove('hidden');
+  document.getElementById('fpToolbar').style.display = '';
+  clearInterval(_fpAutoRefresh);
+  renderFloorPlan();
+}
+function _fpExitEditMode(save) {
+  _fpEditMode = false;
+  document.getElementById('fpEditModeBtn').classList.remove('hidden');
+  document.getElementById('fpSaveBtn').classList.add('hidden');
+  document.getElementById('fpCancelBtn').classList.add('hidden');
+  document.getElementById('fpToolbar').style.display = 'none';
+  if (save) { _fpSaveLayout(); } else { _fpLayout = _fpLoadLayout(); }
+  renderFloorPlan();
+  _fpStartAutoRefresh();
+}
+function _fpStartAutoRefresh() {
+  clearInterval(_fpAutoRefresh);
+  _fpAutoRefresh = setInterval(() => {
+    if (activePanelId === 'floorplan' && !_fpEditMode) renderFloorPlan();
+  }, 8000);
+}
+
+function initFloorPlan() {
+  if (!_fpInited) {
+    _fpInited = true;
+    _fpLayout = _fpLoadLayout();
+    _fpTableCount = parseInt(localStorage.getItem('ks90-table-count') || '9', 10) || 9;
+    document.getElementById('fpEditModeBtn').addEventListener('click', _fpEnterEditMode);
+    document.getElementById('fpSaveBtn').addEventListener('click', () => _fpExitEditMode(true));
+    document.getElementById('fpCancelBtn').addEventListener('click', () => _fpExitEditMode(false));
+    const ci = document.getElementById('fpTableCount');
+    if (ci) ci.addEventListener('change', () => {
+      _fpTableCount = Math.max(1, Math.min(30, parseInt(ci.value) || 9));
+      ci.value = _fpTableCount;
+      localStorage.setItem('ks90-table-count', String(_fpTableCount));
+      renderFloorPlan();
+    });
+    document.getElementById('fpResetLayoutBtn').addEventListener('click', () => {
+      _fpLayout = {}; renderFloorPlan();
+    });
+    document.getElementById('fpCanvas').addEventListener('click', (e) => {
+      if (!e.target.closest('.fp-table')) document.getElementById('fpPopup').classList.add('hidden');
+    });
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'ks90-table-count' && activePanelId === 'floorplan') {
+        _fpTableCount = parseInt(e.newValue || '9', 10);
+        if (!_fpEditMode) renderFloorPlan();
+      }
+    });
+    _fpStartAutoRefresh();
+  }
+  if (!_fpEditMode) renderFloorPlan();
 }
 
 // ── helper: ดึง admin key จากทุก storage ──
