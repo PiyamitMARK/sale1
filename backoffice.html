@@ -629,6 +629,19 @@ input[type="date"].field-input {
 .page-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .page-info { font-size: .82rem; color: var(--brown-light); margin: 0 .35rem; }
 
+/* ── History quick range ── */
+.hist-quick-row { display: flex; align-items: flex-start; gap: .75rem; flex-wrap: wrap; }
+.hist-quick-label { font-size: .82rem; font-weight: 600; color: var(--brown-light); white-space: nowrap; padding-top: .3rem; }
+.hist-quick-btns { display: flex; flex-wrap: wrap; gap: .4rem; }
+.hist-q-btn {
+  padding: .3rem .75rem; border-radius: var(--pill);
+  border: 1.5px solid var(--cream-dark); background: var(--cream);
+  color: var(--brown-mid); font-family: 'Sarabun', sans-serif;
+  font-size: .82rem; font-weight: 600; cursor: pointer; transition: var(--ease); white-space: nowrap;
+}
+.hist-q-btn:hover { border-color: var(--accent-light); color: var(--accent); }
+.hist-q-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 /* Daily chart */
 .daily-chart-wrap { overflow-x: auto; width: 100%; max-width: 100%; }
 .daily-chart {
@@ -2290,10 +2303,33 @@ canvas.ai-chart { width: 100% !important; }
       <div class="bo-panel" id="panelHistory">
         <div class="bo-panel-heading">
           <div>
-            <div class="bo-panel-title">📅 ย้อนหลัง 1 เดือน</div>
-            <div class="bo-panel-sub">ประวัติออเดอร์ย้อนหลัง 30 วัน</div>
+            <div class="bo-panel-title">📅 ประวัติออเดอร์</div>
+            <div class="bo-panel-sub" id="histRangeLabel">—</div>
           </div>
           <button class="btn btn-ghost btn-sm" id="histRefreshBtn">🔄 รีเฟรช</button>
+        </div>
+
+        <!-- Quick month selector -->
+        <div class="card">
+          <div class="card-body">
+            <div class="hist-quick-row">
+              <span class="hist-quick-label">เลือกช่วงเวลา</span>
+              <div class="hist-quick-btns" id="histQuickBtns">
+                <!-- rendered by JS -->
+              </div>
+            </div>
+            <div class="history-date-row" style="margin-top:.75rem">
+              <div class="field">
+                <label class="field-label">จากวันที่</label>
+                <input type="date" class="field-input" id="histDateFrom">
+              </div>
+              <div class="field">
+                <label class="field-label">ถึงวันที่</label>
+                <input type="date" class="field-input" id="histDateTo">
+              </div>
+              <button class="btn btn-primary btn-sm" id="histApplyFilter" style="align-self:flex-end">ดูข้อมูล</button>
+            </div>
+          </div>
         </div>
 
         <!-- Summary -->
@@ -2358,17 +2394,6 @@ canvas.ai-chart { width: 100% !important; }
                   <option value="served">เสิร์ฟแล้ว</option>
                 </select>
               </div>
-              <div class="history-date-row">
-                <div class="field">
-                  <label class="field-label">จากวันที่</label>
-                  <input type="date" class="field-input" id="histDateFrom">
-                </div>
-                <div class="field">
-                  <label class="field-label">ถึงวันที่</label>
-                  <input type="date" class="field-input" id="histDateTo">
-                </div>
-              </div>
-              <button class="btn btn-primary btn-sm" id="histApplyFilter">กรอง</button>
             </div>
           </div>
         </div>
@@ -3192,9 +3217,7 @@ function _startWs() {
             if (activePanelId === 'dashboard') loadDashboard();
             if (activePanelId === 'topsellers' && tsLoaded) renderTopSellers();
             if (activePanelId === 'history' && histLoaded) {
-              histFiltered = [...LIVE_ORDERS];
-              buildDailyChart(LIVE_ORDERS);
-              renderHistTable();
+              fetchHistoryAndRender();
             }
           }
         } catch(e) { console.warn('WS reload orders failed:', e); }
@@ -3739,12 +3762,89 @@ let histLoaded  = false;
 let histPage    = 1;
 const HIST_PER_PAGE = 15;
 let histFiltered = [];
+let histFetched  = [];  // ออเดอร์ที่โหลดมาจาก API ตาม range ปัจจุบัน
+let _histActiveQuick = 'month';
+
+// สร้างปุ่ม quick range: วันนี้, 7 วัน, เดือนนี้ + ย้อนหลัง 12 เดือน
+function renderHistQuickBtns() {
+  const container = document.getElementById('histQuickBtns');
+  if (!container) return;
+  const now   = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  const year  = now.getFullYear();
+  const month = now.getMonth();
+  const presets = [
+    { key: 'today', label: 'วันนี้' },
+    { key: 'week',  label: '7 วัน' },
+    { key: 'month', label: 'เดือนนี้' },
+  ];
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(year, month - i, 1);
+    const label = d.toLocaleDateString('th-TH', { month: 'short', year: '2-digit', timeZone: 'Asia/Bangkok' });
+    presets.push({ key: `m_${d.getFullYear()}_${d.getMonth()}`, label });
+  }
+  container.innerHTML = presets.map(p =>
+    `<button class="hist-q-btn${p.key === _histActiveQuick ? ' active' : ''}" data-quick="${p.key}">${p.label}</button>`
+  ).join('');
+  container.querySelectorAll('.hist-q-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _histActiveQuick = btn.dataset.quick;
+      container.querySelectorAll('.hist-q-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _applyQuickRange(_histActiveQuick);
+      fetchHistoryAndRender();
+    });
+  });
+}
+
+function _applyQuickRange(key) {
+  const now   = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  const today = todayStr();
+  let from, to;
+  if (key === 'today') {
+    from = to = today;
+  } else if (key === 'week') {
+    from = daysAgo(6); to = today;
+  } else if (key === 'month') {
+    const y = now.getFullYear(), m = now.getMonth();
+    from = new Date(y, m, 1).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    to   = today;
+  } else if (key.startsWith('m_')) {
+    const [, y, m] = key.split('_').map(Number);
+    from = new Date(y, m, 1).toLocaleDateString('en-CA',    { timeZone: 'Asia/Bangkok' });
+    to   = new Date(y, m + 1, 0).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  }
+  document.getElementById('histDateFrom').value = from || daysAgo(30);
+  document.getElementById('histDateTo').value   = to   || today;
+}
+
+async function fetchHistoryAndRender() {
+  const from  = document.getElementById('histDateFrom').value;
+  const to    = document.getElementById('histDateTo').value;
+  const body  = document.getElementById('histTableBody');
+  const label = document.getElementById('histRangeLabel');
+
+  body.innerHTML = `<tr><td colspan="7"><div class="loading-row"><div class="spinner"></div> กำลังโหลดข้อมูล…</div></td></tr>`;
+  document.getElementById('dailyChart').innerHTML = `<div class="loading-row"><div class="spinner"></div></div>`;
+
+  const fmtD = d => new Date(d + 'T00:00:00+07:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (label) label.textContent = (from && to) ? `${fmtD(from)} – ${fmtD(to)}` : '—';
+
+  try {
+    const raw = await api.getOrders({ from, to });
+    histFetched = Array.isArray(raw) ? raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt) : [];
+  } catch (e) {
+    console.warn('fetchHistory error:', e);
+    histFetched = [];
+  }
+  buildDailyChart(histFetched);
+  applyHistFilters();
+}
 
 function buildDailyChart(orders) {
   const map = {};
   orders.forEach(o => {
     if (o.status !== 'paid') return;
-    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(5, 10);
+    const d = dateStrBKK(o.createdAt || o.created_at).slice(5); // MM-DD
     map[d] = (map[d] || 0) + o.total;
   });
   const keys   = Object.keys(map).sort();
@@ -3765,16 +3865,10 @@ function buildDailyChart(orders) {
 function applyHistFilters() {
   const search = document.getElementById('histSearchInput').value.toLowerCase();
   const status = document.getElementById('histStatusFilter').value;
-  const from   = document.getElementById('histDateFrom').value;
-  const to     = document.getElementById('histDateTo').value;
-
-  histFiltered = MOCK_ORDERS.filter(o => {
+  histFiltered = histFetched.filter(o => {
     if (status && o.status !== status) return false;
-    const d = dateStrBKK(o.createdAt || o.created_at);
-    if (from && d < from) return false;
-    if (to   && d > to  ) return false;
     if (search) {
-      const hay = [o.orderNumber, 'โต๊ะ'+o.table, ...o.items.map(i => i.name)].join(' ').toLowerCase();
+      const hay = [o.orderNumber, 'โต๊ะ' + o.table, ...o.items.map(i => i.name)].join(' ').toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -3783,134 +3877,18 @@ function applyHistFilters() {
   renderHistTable();
 }
 
-function renderHistTable() {
-  const paid   = histFiltered.filter(o => o.status === 'paid');
-  const total  = paid.reduce((s, o) => s + o.total, 0);
-  const tables = new Set(histFiltered.map(o => o.table)).size;
-
-  document.getElementById('histTotalOrders').textContent  = fmtN(paid.length);
-  document.getElementById('histTotalRevenue').textContent = fmt(total);
-  document.getElementById('histAvgOrder').textContent     = paid.length ? fmt(total / paid.length) : '฿0';
-  document.getElementById('histActiveTables').textContent = tables + ' โต๊ะ';
-
-  const total_pages = Math.ceil(histFiltered.length / HIST_PER_PAGE) || 1;
-  const slice = histFiltered.slice((histPage-1)*HIST_PER_PAGE, histPage*HIST_PER_PAGE);
-
-  document.getElementById('histTableTitle').textContent =
-    `รายการออเดอร์ (${fmtN(histFiltered.length)} รายการ)`;
-
-  const STATUS_MAP = {
-    paid:      ['status-paid','✅ จ่ายแล้ว'],
-    pending:   ['status-pending','⏳ รอรับ'],
-    cooking:   ['status-cooking','👨‍🍳 กำลังทำ'],
-    served:    ['status-served','🍽 เสิร์ฟแล้ว'],
-    cancelled: ['status-cancelled','✕ ยกเลิก'],
-  };
-
-  const body = document.getElementById('histTableBody');
-  if (!slice.length) {
-    body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">ไม่มีข้อมูลที่ตรงกัน</div></div></td></tr>`;
-  } else {
-    body.innerHTML = slice.map(o => {
-      const [sc, sl] = STATUS_MAP[o.status] || ['status-pending', o.status];
-      return `
-        <tr data-id="${o.id}">
-          <td style="text-align:center">
-            <button class="btn-icon expand-btn" data-id="${o.id}" title="ดูรายละเอียด">▶</button>
-          </td>
-          <td class="order-num-chip">#${o.orderNumber}</td>
-          <td style="font-size:.82rem;color:var(--brown-light)">${dateLabel(o.createdAt)}</td>
-          <td>โต๊ะ ${o.table}</td>
-          <td>
-            <div class="items-preview">
-              ${o.items.slice(0,3).map(i => `<span class="item-mini-chip">${escHtml(i.name)}×${i.qty}</span>`).join('')}
-              ${o.items.length > 3 ? `<span class="item-mini-chip">+${o.items.length-3}</span>` : ''}
-            </div>
-          </td>
-          <td style="text-align:right;font-weight:700;color:var(--accent)">${fmt(o.total)}</td>
-          <td><span class="status-chip ${sc}">${sl}</span></td>
-        </tr>`;
-    }).join('');
-  }
-
-  // expand rows
-  body.querySelectorAll('.expand-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id       = btn.dataset.id;
-      const existing = body.querySelector(`.expand-row[data-for="${id}"]`);
-      if (existing) { existing.remove(); btn.textContent = '▶'; return; }
-      btn.textContent = '▼';
-      const o = histFiltered.find(x => x.id === id);
-      if (!o) return;
-      const tr = document.createElement('tr');
-      tr.className  = 'expand-row'; tr.dataset.for = id;
-      tr.innerHTML  = `<td colspan="7">
-        <div class="expand-inner">
-          <table>
-            <thead><tr><td><strong>รายการ</strong></td><td><strong>ราคา/ชิ้น</strong></td><td><strong>จำนวน</strong></td><td><strong>รวม</strong></td></tr></thead>
-            <tbody>${o.items.map(i => `
-              <tr>
-                <td>${escHtml(i.name)}</td>
-                <td>${fmt(i.price)}</td>
-                <td>×${i.qty}</td>
-                <td style="font-weight:700">${fmt(i.price * i.qty)}</td>
-              </tr>`).join('')}
-            </tbody>
-            <tfoot>
-              <tr><td colspan="3" style="font-weight:700">รวม</td><td style="font-weight:700;color:var(--accent)">${fmt(o.total)}</td></tr>
-            </tfoot>
-          </table>
-          <div style="margin-top:.5rem;font-size:.8rem;color:var(--brown-light)">
-            ชำระด้วย: ${o.paymentMethod} | หมายเลข: #${o.orderNumber}
-          </div>
-        </div>
-      </td>`;
-      btn.closest('tr').insertAdjacentElement('afterend', tr);
-    });
-  });
-
-  // paginator
-  const pag = document.getElementById('histPaginator');
-  pag.innerHTML = '';
-  if (total_pages <= 1) return;
-  const prev = document.createElement('button');
-  prev.className = 'page-btn'; prev.textContent = '‹'; prev.disabled = histPage === 1;
-  prev.addEventListener('click', () => { if (histPage > 1) { histPage--; renderHistTable(); } });
-  pag.appendChild(prev);
-  const info = document.createElement('span');
-  info.className = 'page-info'; info.textContent = `${histPage} / ${total_pages}`;
-  pag.appendChild(info);
-  const next = document.createElement('button');
-  next.className = 'page-btn'; next.textContent = '›'; next.disabled = histPage === total_pages;
-  next.addEventListener('click', () => { if (histPage < total_pages) { histPage++; renderHistTable(); } });
-  pag.appendChild(next);
-}
-
 async function loadHistory() {
   histLoaded = true;
-  document.getElementById('histDateFrom').value = daysAgo(30);
-  document.getElementById('histDateTo').value   = todayStr();
-  MOCK_ORDERS  = LIVE_ORDERS;
-  histFiltered = [...LIVE_ORDERS];
-  buildDailyChart(LIVE_ORDERS);
-  renderHistTable();
+  renderHistQuickBtns();
+  _applyQuickRange('month');
+  await fetchHistoryAndRender();
 }
 
-document.getElementById('histApplyFilter').addEventListener('click', applyHistFilters);
+document.getElementById('histApplyFilter').addEventListener('click', fetchHistoryAndRender);
 document.getElementById('histSearchInput').addEventListener('input', applyHistFilters);
 document.getElementById('histStatusFilter').addEventListener('change', applyHistFilters);
-document.getElementById('histRefreshBtn').addEventListener('click', async () => {
-  try {
-    const raw = await api.getOrders();
-    if (Array.isArray(raw)) {
-      LIVE_ORDERS  = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
-      MOCK_ORDERS  = LIVE_ORDERS;
-      histFiltered = [...LIVE_ORDERS];
-      buildDailyChart(LIVE_ORDERS);
-      renderHistTable();
-    }
-  } catch(e) { console.warn(e); }
-});
+document.getElementById('histRefreshBtn').addEventListener('click', fetchHistoryAndRender);
+
 
 document.getElementById('histExportCsvBtn').addEventListener('click', () => {
   const headers = ['ออเดอร์','วันที่','โต๊ะ','ชื่อเมนู','จำนวน','ราคา','ยอดรวม','สถานะ','ช่องทางชำระ'];

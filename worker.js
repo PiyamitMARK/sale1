@@ -199,7 +199,11 @@ async function handleGetOrders(request, env) {
   const status = url.searchParams.get('status');   // filter by status
   const table  = url.searchParams.get('table');    // filter by table
   const today  = url.searchParams.get('today');    // '1' = วันนี้เท่านั้น
-  const limit  = parseInt(url.searchParams.get('limit') || '200');
+  const from   = url.searchParams.get('from');     // YYYY-MM-DD (Bangkok) เริ่มต้น
+  const to     = url.searchParams.get('to');       // YYYY-MM-DD (Bangkok) สิ้นสุด
+  // ถ้ามี date range ให้ limit สูงขึ้น (ย้อนหลังหลายเดือน); ไม่มีคง default 200
+  const defaultLimit = (from || to) ? 5000 : 200;
+  const limit  = parseInt(url.searchParams.get('limit') || String(defaultLimit));
 
   let q    = 'SELECT * FROM orders';
   const wb = [];
@@ -208,6 +212,14 @@ async function handleGetOrders(request, env) {
   if (today === '1') {
     wb.push("date(created_at, '+7 hours') = ?");
     p.push(todayStr());
+  }
+  if (from) {
+    wb.push("date(created_at, '+7 hours') >= ?");
+    p.push(from);
+  }
+  if (to) {
+    wb.push("date(created_at, '+7 hours') <= ?");
+    p.push(to);
   }
   if (status) { wb.push('status = ?'); p.push(status); }
   if (table)  { wb.push('table_num = ?'); p.push(table); }

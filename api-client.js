@@ -33,11 +33,13 @@ async function apiFetch(path, options = {}) {
 // ─── REST API ─────────────────────────────────────────────────────────────────
 export const api = {
 
-  async getOrders({ status, table, today, limit } = {}) {
+  async getOrders({ status, table, today, limit, from, to } = {}) {
     const p = new URLSearchParams();
     if (status) p.set('status', status);
     if (table)  p.set('table', table);
     if (today)  p.set('today', '1');
+    if (from)   p.set('from', from);
+    if (to)     p.set('to', to);
     if (limit)  p.set('limit', String(limit));
     const qs = p.toString();
     return apiFetch('/api/orders' + (qs ? '?' + qs : ''));
