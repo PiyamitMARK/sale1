@@ -1379,6 +1379,27 @@ tr.drag-over td { background: var(--cream-dark) !important; }
    AI ANALYST PANEL
    ============================================================ */
 .ai-panel-wrap { display: flex; flex-direction: column; gap: 1.25rem; }
+.ai-range-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .6rem;
+  background: var(--white);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: .65rem 1rem;
+}
+.ai-range-custom {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.field-input-sm {
+  padding: .3rem .6rem;
+  font-size: .85rem;
+  height: 2rem;
+}
 
 /* KPI row */
 .ai-kpi-grid {
@@ -2543,12 +2564,23 @@ canvas.ai-chart { width: 100% !important; }
           <button class="btn btn-primary btn-sm" id="aiRefreshBtn">🔄 โหลดข้อมูล</button>
         </div>
 
+        <!-- Range selector -->
+        <div class="ai-range-bar">
+          <div class="hist-quick-btns" id="aiQuickBtns"></div>
+          <div class="ai-range-custom" id="aiRangeCustom" style="display:none">
+            <input type="date" class="field-input field-input-sm" id="aiDateFrom">
+            <span style="color:var(--brown-light);font-size:.85rem">–</span>
+            <input type="date" class="field-input field-input-sm" id="aiDateTo">
+            <button class="btn btn-primary btn-sm" id="aiApplyRange">ดูข้อมูล</button>
+          </div>
+        </div>
+
         <div class="ai-panel-wrap">
 
           <!-- KPI Big Numbers -->
           <div class="ai-kpi-grid" id="aiKpiGrid">
-            <div class="ai-kpi-card"><div class="ai-kpi-icon">💰</div><div class="ai-kpi-label">รายได้วันนี้</div><div class="ai-kpi-value accent" id="aiKpiRevToday">—</div></div>
-            <div class="ai-kpi-card"><div class="ai-kpi-icon">🧾</div><div class="ai-kpi-label">ออเดอร์วันนี้</div><div class="ai-kpi-value" id="aiKpiOrdersToday">—</div></div>
+            <div class="ai-kpi-card"><div class="ai-kpi-icon">💰</div><div class="ai-kpi-label" id="aiKpiRevLabel">รายได้</div><div class="ai-kpi-value accent" id="aiKpiRevToday">—</div></div>
+            <div class="ai-kpi-card"><div class="ai-kpi-icon">🧾</div><div class="ai-kpi-label" id="aiKpiOrdersLabel">ออเดอร์</div><div class="ai-kpi-value" id="aiKpiOrdersToday">—</div></div>
             <div class="ai-kpi-card"><div class="ai-kpi-icon">🍽</div><div class="ai-kpi-label">ค่าเฉลี่ย/บิล</div><div class="ai-kpi-value" id="aiKpiAvgBill">—</div></div>
             <div class="ai-kpi-card"><div class="ai-kpi-icon">📦</div><div class="ai-kpi-label">กลับบ้าน</div><div class="ai-kpi-value" id="aiKpiTakeaway">—</div></div>
           </div>
@@ -2632,7 +2664,7 @@ canvas.ai-chart { width: 100% !important; }
 
           <!-- Heatmap ชั่วโมงขายดี (ย้ายลงมาท้าย) -->
           <div class="ai-chart-card">
-            <div class="ai-chart-title">🕐 Heatmap ชั่วโมงขายดี (7 วัน) <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span></div>
+            <div class="ai-chart-title" id="aiHeatmapTitle">🕐 Heatmap ชั่วโมงขายดี (7 วัน) <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span></div>
             <div style="overflow-x:auto">
               <div class="ai-heatmap-grid" id="aiHeatmap" style="min-width:340px"></div>
             </div>
@@ -5073,53 +5105,85 @@ let _aiDataLoaded   = false;
 let _aiChartInst    = null;
 let _aiChatHistory  = [];
 let _aiIsBusy       = false;
+let _aiActiveRange  = 'today';   // today | 7d | month | year | custom
+let _aiFrom         = '';
+let _aiTo           = '';
+
+const AI_QUICK_RANGES = [
+  { key: 'today',  label: 'วันนี้' },
+  { key: '7d',     label: '7 วัน' },
+  { key: 'month',  label: 'เดือนนี้' },
+  { key: 'year',   label: 'ปีนี้' },
+  { key: 'custom', label: '📅 กำหนดเอง' },
+];
 
 // ── helpers ──
 function _fmtBaht(n) { return '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _fmtNum(n)  { return Number(n || 0).toLocaleString('th-TH'); }
 
+function _getAiDateRange() {
+  const today = todayStr();
+  if (_aiActiveRange === 'today')  return { from: today, to: today };
+  if (_aiActiveRange === '7d')     return { from: daysAgo(6), to: today };
+  if (_aiActiveRange === 'month')  return { from: today.slice(0, 8) + '01', to: today };
+  if (_aiActiveRange === 'year')   return { from: today.slice(0, 5) + '01-01', to: today };
+  return { from: _aiFrom || daysAgo(6), to: _aiTo || today };
+}
+
+function _aiRangeLabel() {
+  if (_aiActiveRange === 'today')  return 'วันนี้';
+  if (_aiActiveRange === '7d')     return '7 วันล่าสุด';
+  if (_aiActiveRange === 'month')  return 'เดือนนี้';
+  if (_aiActiveRange === 'year')   return 'ปีนี้';
+  const r = _getAiDateRange();
+  const fmt2 = d => new Date(d + 'T00:00:00+07:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+  return fmt2(r.from) + ' – ' + fmt2(r.to);
+}
+
 // ── สร้าง data snapshot จาก LIVE_ORDERS ──
 function _buildAiSnapshot() {
   const now      = new Date();
-  const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  const tStr     = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  const range    = _getAiDateRange();
+  const fromDate = range.from;
+  const toDate   = range.to;
 
-  // 7 วันล่าสุด
-  const days7 = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now); d.setDate(d.getDate() - (6 - i));
-    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-  });
+  // collect all days in range
+  const days = [];
+  const cur  = new Date(fromDate + 'T00:00:00+07:00');
+  const end  = new Date(toDate + 'T00:00:00+07:00');
+  while (cur <= end) {
+    days.push(cur.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }));
+    cur.setDate(cur.getDate() + 1);
+  }
+  if (!days.length) days.push(tStr);
 
-  // ใช้ dateStrBKK helper ที่นิยามไว้แล้ว
-  function _getDateStr(o) {
-    return dateStrBKK(o.createdAt || o.created_at || Date.now());
-  }
-  function _getDate(o) {
-    return o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt || o.created_at || Date.now());
-  }
-  function _isTakeaway(o) {
-    return !!(o.is_takeaway || o.isTakeaway);
-  }
+  function _getDateStr(o) { return dateStrBKK(o.createdAt || o.created_at || Date.now()); }
+  function _getDate(o)    { return o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt || o.created_at || Date.now()); }
+  function _isTakeaway(o) { return !!(o.is_takeaway || o.isTakeaway); }
 
   const paidOrders = LIVE_ORDERS.filter(o => o.status === 'paid' || o.status === 'served');
 
-  // per-day revenue
+  // per-day revenue (ในช่วงที่เลือก)
   const revenueByDay = {};
-  days7.forEach(d => { revenueByDay[d] = 0; });
-  paidOrders.forEach(o => {
+  days.forEach(d => { revenueByDay[d] = 0; });
+  const rangeOrders = paidOrders.filter(o => {
+    const d = _getDateStr(o);
+    return d >= fromDate && d <= toDate;
+  });
+  rangeOrders.forEach(o => {
     const d = _getDateStr(o);
     if (revenueByDay[d] !== undefined) revenueByDay[d] += Number(o.total || 0);
   });
 
-  // today
-  const todayOrders  = paidOrders.filter(o => _getDateStr(o) === todayStr);
-  const todayRev     = todayOrders.reduce((s, o) => s + Number(o.total || 0), 0);
-  const avgBill      = todayOrders.length ? todayRev / todayOrders.length : 0;
-  const takeawayToday = todayOrders.filter(o => _isTakeaway(o)).length;
+  // KPI summary สำหรับช่วงที่เลือก
+  const rangeRev     = rangeOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const avgBill      = rangeOrders.length ? rangeRev / rangeOrders.length : 0;
+  const takeawayRange = rangeOrders.filter(o => _isTakeaway(o)).length;
 
-  // top menus (7 วัน) — ใช้ o.items จาก normaliseOrder (flatten batches แล้ว)
+  // top menus
   const menuCount = {};
-  const orders7   = paidOrders.filter(o => days7.includes(_getDateStr(o)));
-  orders7.forEach(o => {
+  rangeOrders.forEach(o => {
     const items = Array.isArray(o.items) ? o.items : [];
     items.forEach(it => {
       const name = it.name || it.productName || 'ไม่ทราบ';
@@ -5131,44 +5195,55 @@ function _buildAiSnapshot() {
     .slice(0, 5)
     .map(([name, count]) => ({ name, count }));
 
-  // heatmap: [hour][dayOfWeek] สำหรับ 7 วัน
-  const heatmap = Array.from({ length: 16 }, () => Array(7).fill(0)); // 07:00–22:00 × 7 วัน
-  orders7.forEach(o => {
+  // heatmap: [hour][dayOfWeek]
+  const heatmap = Array.from({ length: 16 }, () => Array(7).fill(0));
+  rangeOrders.forEach(o => {
     const dt  = _getDate(o);
     const h   = dt.getHours();
-    const dow = dt.getDay(); // 0=อาทิตย์
+    const dow = dt.getDay();
     const hIdx = h - 7;
     if (hIdx >= 0 && hIdx < 16) heatmap[hIdx][dow] += Number(o.total || 0);
   });
 
-  // takeaway 7 วัน
-  const takeaway7  = orders7.filter(o => _isTakeaway(o)).length;
-  const dineIn7    = orders7.length - takeaway7;
-  const rev7Total  = Object.values(revenueByDay).reduce((s, v) => s + v, 0);
+  const takeaway7  = takeawayRange;
+  const dineIn7    = rangeOrders.length - takeaway7;
 
   return {
-    todayStr,
-    days7,
+    todayStr: tStr,
+    days7:    days,
     revenueByDay,
-    todayOrders: todayOrders.length,
-    todayRev,
+    todayOrders:   rangeOrders.length,
+    todayRev:      rangeRev,
     avgBill,
-    takeawayToday,
+    takeawayToday: takeawayRange,
     topMenus,
     heatmap,
-    orders7Total: orders7.length,
-    rev7Total,
+    orders7Total:  rangeOrders.length,
+    rev7Total:     rangeRev,
     takeaway7,
     dineIn7,
+    rangeLabel:    _aiRangeLabel(),
   };
 }
 
 // ── Render KPI ──
 function _renderAiKpi(snap) {
+  const lbl = snap.rangeLabel || 'ช่วงที่เลือก';
+  const revLabelEl = document.getElementById('aiKpiRevLabel');
+  const ordLabelEl = document.getElementById('aiKpiOrdersLabel');
+  if (revLabelEl) revLabelEl.textContent = 'รายได้ ' + lbl;
+  if (ordLabelEl) ordLabelEl.textContent = 'ออเดอร์ ' + lbl;
   document.getElementById('aiKpiRevToday').textContent    = _fmtBaht(snap.todayRev);
   document.getElementById('aiKpiOrdersToday').textContent = _fmtNum(snap.todayOrders);
   document.getElementById('aiKpiAvgBill').textContent     = _fmtBaht(snap.avgBill);
   document.getElementById('aiKpiTakeaway').textContent    = _fmtNum(snap.takeawayToday);
+  // update chart section titles
+  const chartTitle = document.querySelector('#panelAi .ai-charts-row .ai-chart-card:first-child .ai-chart-title');
+  if (chartTitle) chartTitle.textContent = '📈 รายได้ ' + lbl;
+  const topTitle = document.querySelector('#panelAi .ai-charts-row .ai-chart-card:last-child .ai-chart-title');
+  if (topTitle) topTitle.textContent = '🏆 Top 5 เมนูขายดี (' + lbl + ')';
+  const heatTitle = document.getElementById('aiHeatmapTitle');
+  if (heatTitle) heatTitle.innerHTML = '🕐 Heatmap ชั่วโมงขายดี (' + lbl + ') <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span>';
 }
 
 // ── Render Revenue Bar Chart ──
@@ -5562,13 +5637,23 @@ async function initAiPanel() {
     });
   }
 
+  _renderAiQuickBtns();
   await _aiLoadAndRender();
 
-  // Refresh button
+  // Refresh button — just reload data for current range
   document.getElementById('aiRefreshBtn').addEventListener('click', async () => {
-    _aiDataLoaded = false;
-    await initAiPanel();
+    await _aiLoadAndRender();
   });
+
+  // Apply custom range button
+  const applyBtn = document.getElementById('aiApplyRange');
+  if (applyBtn) {
+    applyBtn.addEventListener('click', function() {
+      _aiFrom = document.getElementById('aiDateFrom').value;
+      _aiTo   = document.getElementById('aiDateTo').value;
+      if (_aiFrom && _aiTo) _aiLoadAndRender();
+    });
+  }
 
   // Forecast button
   document.getElementById('aiForecastBtn').addEventListener('click', _runAiForecast);
@@ -5591,12 +5676,40 @@ async function initAiPanel() {
   });
 }
 
+function _renderAiQuickBtns() {
+  const container = document.getElementById('aiQuickBtns');
+  if (!container) return;
+  container.innerHTML = AI_QUICK_RANGES.map(p =>
+    '<button class="hist-q-btn' + (p.key === _aiActiveRange ? ' active' : '') + '" data-ai-quick="' + p.key + '">' + p.label + '</button>'
+  ).join('');
+  container.querySelectorAll('.hist-q-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      _aiActiveRange = btn.dataset.aiQuick;
+      _renderAiQuickBtns();
+      const customRow = document.getElementById('aiRangeCustom');
+      if (customRow) customRow.style.display = _aiActiveRange === 'custom' ? 'flex' : 'none';
+      if (_aiActiveRange !== 'custom') _aiLoadAndRender();
+    });
+  });
+  // init custom date inputs
+  const fromEl = document.getElementById('aiDateFrom');
+  const toEl   = document.getElementById('aiDateTo');
+  if (fromEl && !fromEl.value) fromEl.value = daysAgo(6);
+  if (toEl   && !toEl.value)   toEl.value   = todayStr();
+}
+
 async function _aiLoadAndRender() {
-  // ดึง orders 30 วัน เสมอ (ไม่ reuse cache เพราะ AI panel ต้องการข้อมูลครบ)
+  const range = _getAiDateRange();
+  _aiFrom = range.from;
+  _aiTo   = range.to;
+
+  // คำนวณ limit ตามจำนวนวัน
+  const days   = Math.ceil((new Date(_aiTo + 'T00:00:00+07:00') - new Date(_aiFrom + 'T00:00:00+07:00')) / 86400000) + 1;
+  const lim    = Math.max(500, days * 100);
+
   try {
-    const orders = await api.getOrders({ today: false, limit: 500 });
+    const orders = await api.getOrders({ from: _aiFrom, to: _aiTo, limit: lim });
     if (Array.isArray(orders)) {
-      // normalise ให้ตรงกับ panels อื่น (camelCase createdAt, status, total ฯลฯ)
       LIVE_ORDERS = orders.map(o => normaliseOrder(o, o.id))
         .sort((a, b) => b.createdAt - a.createdAt);
     }
