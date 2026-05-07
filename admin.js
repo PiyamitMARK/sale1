@@ -9,7 +9,7 @@
  */
 
 import { initBillFeature, bindBillButtons, injectMergeBillBtn } from './bill-feature.js';
-import { api, ws, adminLogin, adminLogout, verifyAdminKey, applyTheme, toggleTheme, getTheme } from './api-client.js';
+import { api, ws, adminLogin, adminLogout, verifyAdminKey, applyTheme, toggleTheme, getTheme, consumeSessionKey, getSessionTransferUrl } from './api-client.js';
 
 // ==================== Config ====================
 const AUTH_KEY = 'kaosoi-auth'; // ต้องตรงกับ api-client.js (localStorage key)
@@ -1553,6 +1553,97 @@ document.querySelectorAll('.tab-btn').forEach((tab) => {
 applyTheme(getTheme());
 document.getElementById('darkToggleBtn')?.addEventListener('click', toggleTheme);
 
+// ==================== Session Share (ข้ามเครื่อง) ====================
+(function initSessionShare() {
+  // สร้าง modal แบบ inline
+  const modal = document.createElement('div');
+  modal.id = 'sessionShareModal';
+  modal.className = 'modal';
+  modal.setAttribute('aria-hidden', 'true');
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:400px;text-align:center">
+      <h3 class="modal-title">📱 แชร์เซสชันไปเครื่องอื่น</h3>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">
+        สแกน QR หรือกด "คัดลอกลิงก์" เพื่อเปิดหน้าแอดมินบนเครื่องอื่น<br>
+        โดยไม่ต้องกรอก username/password ใหม่
+      </p>
+      <div id="sessionQrBox" style="margin:0 auto 1rem;width:160px;height:160px"></div>
+      <p id="sessionShareUrl" style="font-size:0.7rem;word-break:break-all;color:var(--text-muted);margin-bottom:1rem"></p>
+      <div class="modal-actions" style="justify-content:center;gap:0.5rem">
+        <button type="button" class="btn btn-outline" id="sessionShareCopy">📋 คัดลอกลิงก์</button>
+        <button type="button" class="btn btn-outline" id="sessionShareClose">ปิด</button>
+      </div>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.75rem">
+        ⚠️ ลิงก์นี้ใช้ได้เฉพาะคนที่ไว้วางใจ — ใครก็ตามที่มีลิงก์นี้จะเข้าระบบได้ทันที
+      </p>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // เพิ่มปุ่มใน header
+  const headerRight = document.querySelector('.admin-header-right');
+  if (headerRight) {
+    const shareBtn = document.createElement('button');
+    shareBtn.type = 'button';
+    shareBtn.className = 'btn btn-outline';
+    shareBtn.id = 'sessionShareBtn';
+    shareBtn.title = 'แชร์เซสชันไปเครื่องอื่น';
+    shareBtn.textContent = '📲 แชร์';
+    // แทรกก่อนปุ่ม logout
+    const logoutB = headerRight.querySelector('#logoutBtn');
+    headerRight.insertBefore(shareBtn, logoutB);
+  }
+
+  function openShareModal() {
+    const url = getSessionTransferUrl('admin.html');
+    if (!url) return;
+    document.getElementById('sessionShareUrl').textContent = url;
+    const qrBox = document.getElementById('sessionQrBox');
+    qrBox.innerHTML = '';
+    // ใช้ QRCode lib ที่โหลดอยู่แล้วใน admin.html
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(qrBox, { text: url, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+    }
+    modal.setAttribute('aria-hidden', 'false');
+    modal.style.display = 'flex';
+  }
+
+  document.getElementById('sessionShareBtn')?.addEventListener('click', openShareModal);
+
+  document.getElementById('sessionShareClose')?.addEventListener('click', () => {
+    modal.setAttribute('aria-hidden', 'true');
+    modal.style.display = '';
+  });
+
+  document.getElementById('sessionShareCopy')?.addEventListener('click', async () => {
+    const url = document.getElementById('sessionShareUrl').textContent;
+    try {
+      await navigator.clipboard.writeText(url);
+      const btn = document.getElementById('sessionShareCopy');
+      btn.textContent = '✅ คัดลอกแล้ว';
+      setTimeout(() => { btn.textContent = '📋 คัดลอกลิงก์'; }, 2000);
+    } catch (_) {
+      // fallback สำหรับ browser ที่ไม่รองรับ clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  });
+
+  // คลิก backdrop ปิด modal
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.setAttribute('aria-hidden', 'true');
+      modal.style.display = '';
+    }
+  });
+})();
+
 // ==================== Sound Toggle + Mode ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 const soundControl   = document.getElementById('soundControl');
@@ -1716,6 +1807,9 @@ document.addEventListener('click', (e) => {
 });
 
 // ==================== Init ====================
+// ── Session Transfer: รับ key จาก URL ?sk= (ข้ามเครื่อง) ──
+consumeSessionKey();
+
 checkAuth();
 initBillFeature({
   getOrders:        () => allOrders,

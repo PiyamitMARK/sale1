@@ -223,21 +223,68 @@ export function isLoggedIn() {
 export async function verifyAdminKey() {
   const key = localStorage.getItem('ks90-admin-key');
   if (!key) return false;
-  try {
-    const res = await fetch('/api/meta', { headers: { 'X-Admin-Key': key } });
-    if (res.ok) {
-      // key ยังใช้ได้ → refresh auth flag
-      localStorage.setItem('kaosoi-auth', 'true');
-      sessionStorage.setItem('kaosoi-auth', 'true');
-      return true;
+
+  // retry สูงสุด 2 ครั้ง เพื่อรองรับ network blip ชั่วคราว
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch('/api/meta', { headers: { 'X-Admin-Key': key } });
+      if (res.ok) {
+        localStorage.setItem('kaosoi-auth', 'true');
+        sessionStorage.setItem('kaosoi-auth', 'true');
+        return true;
+      }
+      // 401/403 → key ไม่ถูกต้องจริงๆ (ไม่ใช่ network error)
+      // แต่ไม่ logout ทันที — อาจเป็น CF edge cache หรือ transient 5xx
+      if (res.status === 401 || res.status === 403) {
+        // ลอง re-verify อีกรอบด้วย timeout สั้นๆ
+        if (attempt === 0) {
+          await new Promise(r => setTimeout(r, 800));
+          continue;
+        }
+        // ลองแล้ว 2 รอบยังไม่ผ่าน → logout จริง
+        adminLogout();
+        return false;
+      }
+      // 5xx หรือ status อื่น → treat เหมือน network error
+      break;
+    } catch (_) {
+      break; // network error → ออกจาก loop ไปใช้ fallback
     }
-    // key ไม่ถูกต้อง → ล้างออก
-    adminLogout();
-    return false;
-  } catch (_) {
-    // network error → ถ้ามี flag เก่าอยู่ให้ผ่านก่อน (offline-friendly)
-    return !!localStorage.getItem('kaosoi-auth');
   }
+
+  // network error หรือ 5xx → ถ้ามี flag เก่าและ key ยังอยู่ → อนุญาตก่อน (offline-friendly)
+  // key จะถูก verify อีกครั้งเมื่อ WS reconnect หรือ API call ครั้งต่อไป
+  return !!localStorage.getItem('kaosoi-auth');
+}
+
+// ─── Session Transfer (ใช้ข้ามเครื่องโดยไม่ต้อง login ซ้ำ) ───────────────────
+/**
+ * getSessionTransferUrl — คืน URL ที่มี key แนบมา
+ * ใช้เปิดบนเครื่องอื่น (หรือสแกน QR) เพื่อ transfer session ทันที
+ */
+export function getSessionTransferUrl(page = 'admin.html') {
+  const key = localStorage.getItem('ks90-admin-key');
+  if (!key) return null;
+  return `${location.origin}/${page}?sk=${encodeURIComponent(key)}`;
+}
+
+/**
+ * consumeSessionKey — เรียกตอน page load
+ * ถ้า URL มี ?sk= → เก็บ key, ลบออกจาก URL (ไม่ให้ key ค้างใน browser history)
+ * คืน true ถ้า import สำเร็จ
+ */
+export function consumeSessionKey() {
+  const params = new URLSearchParams(location.search);
+  const sk = params.get('sk');
+  if (!sk) return false;
+  localStorage.setItem('ks90-admin-key', sk);
+  localStorage.setItem('kaosoi-auth', 'true');
+  sessionStorage.setItem('kaosoi-auth', 'true');
+  // ลบ ?sk= ออกจาก URL ทันที ป้องกัน key หลุดใน referer/history
+  params.delete('sk');
+  const newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
+  history.replaceState({}, '', newUrl);
+  return true;
 }
 
 // ─── Dark Mode (shared) ───────────────────────────────────────────────────────
