@@ -3113,12 +3113,12 @@ function normaliseOrder(o, key) {
     : (Array.isArray(o.items) ? o.items : []);
   return {
     id:            key || o.id,
-    orderNumber:   o.orderNumber || o.id || key,
+    orderNumber:   o.orderNumber || o.order_num || o.id || key,
     table:         o.table || o.table_num || o.tableNumber || '—',
     status:        o.status || 'pending',
     total:         o.total || 0,
     items,
-    createdAt:     o.date ? new Date(o.date) : (o.createdAt ? new Date(o.createdAt) : new Date(o.timestamp || Date.now())),
+    createdAt:     o.date ? new Date(o.date) : (o.createdAt ? new Date(o.createdAt) : (o.created_at ? new Date(o.created_at) : new Date(o.timestamp || Date.now()))),
     paymentMethod: o.paymentMethod || o.payment_method || 'cash',
   };
 }
