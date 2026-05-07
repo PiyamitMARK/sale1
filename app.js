@@ -394,10 +394,14 @@ window.addEventListener('storage', (e) => {
 
 // ==================== Products ====================
 function renderProducts() {
-  productsGrid.innerHTML = (products[currentCategory] || []).map((p, idx) => `
-    <button type="button" class="product-card"
+  productsGrid.innerHTML = (products[currentCategory] || []).map((p, idx) => {
+    const isDisabled = p.enabled === false;
+    return `
+    <button type="button" class="product-card${isDisabled ? ' product-card--disabled' : ''}"
       data-id="${p.id}" data-name="${escapeAttr(p.name)}"
-      data-price="${p.price}" data-image="${escapeAttr(p.image)}">
+      data-price="${p.price}" data-image="${escapeAttr(p.image)}"
+      ${isDisabled ? 'disabled aria-disabled="true"' : ''}>
+      ${isDisabled ? '<span class="pos-soldout-badge">หมดชั่วคราว</span>' : ''}
       <div class="product-img-wrap pos-img-skeleton">
         <img class="product-img" src="${p.image}" alt="${escapeAttr(p.name)}"
              loading="${idx < 6 ? 'eager' : 'lazy'}" decoding="async"
@@ -407,9 +411,9 @@ function renderProducts() {
       <p class="product-name">${escapeHtml(p.name)}</p>
       <p class="product-price">${formatMoney(p.price)}</p>
     </button>
-  `).join('');
+  `}).join('');
 
-  productsGrid.querySelectorAll('.product-card').forEach((btn) => {
+  productsGrid.querySelectorAll('.product-card:not([disabled])').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (!selectedTable) return;
       openOptionModal(btn.dataset);
