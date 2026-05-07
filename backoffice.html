@@ -3877,6 +3877,112 @@ function applyHistFilters() {
   renderHistTable();
 }
 
+function renderHistTable() {
+  const body      = document.getElementById('histTableBody');
+  const paginator = document.getElementById('histPaginator');
+  const titleEl   = document.getElementById('histTableTitle');
+
+  const STATUS_LABEL = { pending: 'รอรับ', cooking: 'กำลังทำ', served: 'เสิร์ฟแล้ว', paid: 'จ่ายแล้ว', cancelled: 'ยกเลิก' };
+  const STATUS_ICON  = { pending: '⏳', cooking: '👨‍🍳', served: '🍽', paid: '✅', cancelled: '❌' };
+
+  const paid    = histFiltered.filter(o => o.status === 'paid');
+  const revenue = paid.reduce((s, o) => s + o.total, 0);
+  document.getElementById('histTotalOrders').textContent  = fmtN(paid.length);
+  document.getElementById('histTotalRevenue').textContent = fmt(revenue);
+  const avgEl = document.getElementById('histAvgOrder');
+  if (avgEl) avgEl.textContent = paid.length ? fmt(revenue / paid.length) : '฿0';
+  const tblEl = document.getElementById('histActiveTables');
+  if (tblEl) {
+    const tbls = new Set(histFiltered.filter(o => o.status !== 'cancelled').map(o => o.table));
+    tblEl.textContent = fmtN(tbls.size);
+  }
+
+  if (titleEl) titleEl.textContent = 'รายการออเดอร์ (' + fmtN(histFiltered.length) + ' รายการ)';
+
+  if (!histFiltered.length) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--brown-light)">ไม่มีข้อมูลในช่วงที่เลือก</td></tr>';
+    if (paginator) paginator.innerHTML = '';
+    return;
+  }
+
+  const totalPages = Math.ceil(histFiltered.length / HIST_PER_PAGE);
+  if (histPage > totalPages) histPage = totalPages;
+  const pageOrders = histFiltered.slice((histPage - 1) * HIST_PER_PAGE, histPage * HIST_PER_PAGE);
+
+  body.innerHTML = pageOrders.map(o => {
+    const itemsPreview = o.items.slice(0, 3).map(i =>
+      '<span class="item-mini-chip">' + escHtml(i.name) + '\xd7' + i.qty + '</span>'
+    ).join('') + (o.items.length > 3 ? '<span class="item-mini-chip">+' + (o.items.length - 3) + '</span>' : '');
+    const statusCls = 'status-chip status-' + (o.status || 'pending');
+    const expandId  = 'expand-' + escHtml(o.id);
+    return '<tr class="hist-row" data-id="' + escHtml(o.id) + '" style="cursor:pointer">' +
+      '<td style="width:28px;text-align:center;color:var(--brown-light);font-size:.8rem">\u25b6</td>' +
+      '<td class="order-num-chip">#' + escHtml(String(o.orderNumber)) + '</td>' +
+      '<td style="white-space:nowrap">' + dateLabel(o.createdAt) + '</td>' +
+      '<td>' + (o.is_takeaway ? '\ud83d\udce6 \u0e01\u0e25\u0e31\u0e1a\u0e1a\u0e49\u0e32\u0e19' : '\u0e42\u0e15\u0e4a\u0e30 ' + escHtml(String(o.table))) + '</td>' +
+      '<td><div class="items-preview">' + itemsPreview + '</div></td>' +
+      '<td style="text-align:right;font-weight:700;color:var(--accent)">' + fmt(o.total) + '</td>' +
+      '<td><span class="' + statusCls + '">' + (STATUS_ICON[o.status] || '') + ' ' + (STATUS_LABEL[o.status] || o.status) + '</span></td>' +
+      '</tr>' +
+      '<tr class="expand-row hidden" id="' + expandId + '">' +
+      '<td colspan="7"><div class="expand-inner"><table>' +
+      '<thead><tr><td style="font-weight:700">\u0e40\u0e21\u0e19\u016b</td>' +
+      '<td style="font-weight:700;text-align:right">\u0e08\u0e33\u0e19\u0e27\u0e19</td>' +
+      '<td style="font-weight:700;text-align:right">\u0e23\u0e32\u0e04\u0e32/\u0e0a\u0e34\u0e49\u0e19</td>' +
+      '<td style="font-weight:700;text-align:right">\u0e23\u0e27\u0e21</td>' +
+      '</tr></thead><tbody>' +
+      o.items.map(i =>
+        '<tr><td>' + escHtml(i.name) + (i.note ? ' <span style="color:var(--brown-light);font-size:.8rem">(' + escHtml(i.note) + ')</span>' : '') + '</td>' +
+        '<td style="text-align:right">' + i.qty + '</td>' +
+        '<td style="text-align:right">' + fmt(i.price || 0) + '</td>' +
+        '<td style="text-align:right;font-weight:600">' + fmt((i.price || 0) * i.qty) + '</td></tr>'
+      ).join('') +
+      '</tbody></table>' +
+      '<div style="padding:.4rem .5rem;font-size:.82rem;color:var(--brown-light)">' +
+      '\ud83d\udcb3 ' + escHtml(o.paymentMethod || '\u2014') +
+      (o.note ? ' &nbsp;\ud83d\udcdd ' + escHtml(o.note) : '') +
+      '</div></div></td></tr>';
+  }).join('');
+
+  body.querySelectorAll('.hist-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      const id     = row.dataset.id;
+      const expRow = document.getElementById('expand-' + id);
+      const arrow  = row.querySelector('td:first-child');
+      const isOpen = !expRow.classList.contains('hidden');
+      body.querySelectorAll('.expand-row').forEach(function(r) { r.classList.add('hidden'); });
+      body.querySelectorAll('.hist-row td:first-child').forEach(function(a) { a.textContent = '\u25b6'; });
+      if (!isOpen) {
+        expRow.classList.remove('hidden');
+        if (arrow) arrow.textContent = '\u25bc';
+      }
+    });
+  });
+
+  if (paginator) {
+    if (totalPages <= 1) { paginator.innerHTML = ''; return; }
+    var pages = [];
+    for (var p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || Math.abs(p - histPage) <= 2) {
+        pages.push(p);
+      } else if (pages[pages.length - 1] !== '\u2026') {
+        pages.push('\u2026');
+      }
+    }
+    paginator.innerHTML = pages.map(function(p) {
+      return p === '\u2026'
+        ? '<span style="padding:.25rem .4rem;color:var(--brown-light)">\u2026</span>'
+        : '<button class="page-btn' + (p === histPage ? ' active' : '') + '" data-p="' + p + '">' + p + '</button>';
+    }).join('');
+    paginator.querySelectorAll('.page-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        histPage = parseInt(btn.dataset.p);
+        renderHistTable();
+      });
+    });
+  }
+}
+
 async function loadHistory() {
   histLoaded = true;
   renderHistQuickBtns();
