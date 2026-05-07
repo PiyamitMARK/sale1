@@ -3034,8 +3034,15 @@ async function savePtToppings(ptValue, groups) {
 const fmt  = n => '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
 const fmtN = n => Number(n || 0).toLocaleString('th-TH');
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function daysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().slice(0, 10); }
+function todayStr() {
+  // ใช้ Bangkok time (UTC+7) ให้ตรงกับ worker.js — ป้องกัน mismatch ตอนตี 0-7 โมงเช้า
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }); // YYYY-MM-DD
+}
+function daysAgo(d) {
+  const dt = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+  dt.setDate(dt.getDate() - d);
+  return dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+}
 function dateLabel(ts) {
   if (!ts) return '—';
   const d = ts instanceof Date ? ts : new Date(ts);
@@ -3280,19 +3287,23 @@ function todayTH() {
   return new Date().toLocaleDateString('th-TH', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 }
 
+// แปลง Date/ISO string เป็น YYYY-MM-DD ตาม Bangkok timezone
+function dateStrBKK(dateOrIso) {
+  const d = dateOrIso instanceof Date ? dateOrIso : new Date(dateOrIso);
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+}
+
 function getOrdersToday() {
-  const today = todayStr();
+  const today = todayStr(); // ใช้ Bangkok time แล้ว
   return LIVE_ORDERS.filter(o => {
-    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
-    return d === today;
+    return dateStrBKK(o.createdAt || o.created_at) === today;
   });
 }
 
 function getOrdersYesterday() {
   const yest = daysAgo(1);
   return LIVE_ORDERS.filter(o => {
-    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
-    return d === yest;
+    return dateStrBKK(o.createdAt || o.created_at) === yest;
   });
 }
 
@@ -3531,7 +3542,7 @@ function getExportOrders() {
              ? document.getElementById('exportDateTo').value || today
              : today;
   return MOCK_ORDERS.filter(o => {
-    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
+    const d = dateStrBKK(o.createdAt || o.created_at);
     return d >= from && d <= to && o.status === 'paid';
   });
 }
@@ -3759,7 +3770,7 @@ function applyHistFilters() {
 
   histFiltered = MOCK_ORDERS.filter(o => {
     if (status && o.status !== status) return false;
-    const d = (o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt)).toISOString().slice(0, 10);
+    const d = dateStrBKK(o.createdAt || o.created_at);
     if (from && d < from) return false;
     if (to   && d > to  ) return false;
     if (search) {
@@ -4612,7 +4623,7 @@ document.getElementById('clearDataConfirm').addEventListener('click', async () =
   }
   errEl.textContent = '';
   try {
-    const today = new Date(Date.now() + 7*60*60*1000).toISOString().slice(0,10);
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     // ลบ orders ทั้งหมด + reset meta.orderNumber
     const orders = await api.getOrders();
     if (Array.isArray(orders)) {
@@ -4986,18 +4997,17 @@ function _fmtNum(n)  { return Number(n || 0).toLocaleString('th-TH'); }
 // ── สร้าง data snapshot จาก LIVE_ORDERS ──
 function _buildAiSnapshot() {
   const now      = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 
   // 7 วันล่าสุด
   const days7 = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(now); d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().slice(0, 10);
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   });
 
-  // ใช้ createdAt (normalised camelCase) — หลัง _aiLoadAndRender normalise แล้ว
+  // ใช้ dateStrBKK helper ที่นิยามไว้แล้ว
   function _getDateStr(o) {
-    const d = o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt || o.created_at || Date.now());
-    return d.toISOString().slice(0, 10);
+    return dateStrBKK(o.createdAt || o.created_at || Date.now());
   }
   function _getDate(o) {
     return o.createdAt instanceof Date ? o.createdAt : new Date(o.createdAt || o.created_at || Date.now());

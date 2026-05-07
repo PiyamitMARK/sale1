@@ -377,7 +377,9 @@ async function handleGetTable(path, env) {
     await env.DB.prepare('DELETE FROM table_orders WHERE table_num = ?').bind(tableNum).run();
     return json(null);
   }
-  return json(deserializeOrder(order));
+  const deserialized = deserializeOrder(order);
+  // คืน order_id ด้วย เพื่อให้ customer.js อ่าน data.order_id ได้ (data.id ก็ยังมีอยู่)
+  return json({ ...deserialized, order_id: deserialized.id });
 }
 
 async function handleClearTable(path, env) {
