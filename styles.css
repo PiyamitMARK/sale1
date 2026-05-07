@@ -193,6 +193,37 @@ body {
   flex-direction: column;
   align-items: stretch;
   animation: cardIn 0.22s ease both;
+  position: relative;
+}
+
+/* เมนูหมดชั่วคราว — POS */
+.product-card--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(55%);
+  pointer-events: none;
+}
+.product-card--disabled:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--cream-dark);
+}
+.pos-soldout-badge {
+  position: absolute;
+  top: 6px; left: 6px;
+  background: rgba(61,43,31,0.78);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: 'Sarabun', sans-serif;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  z-index: 2;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+[data-theme="dark"] .pos-soldout-badge {
+  background: rgba(200,133,58,0.85);
 }
 
 @keyframes cardIn {
