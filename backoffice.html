@@ -430,6 +430,9 @@ tr.drag-over td { background:var(--cream-dark) !important; }
       <hr class="bo-nav-divider">
     </nav>
     <div class="bo-sidebar-footer">
+      <button class="bo-nav-item" id="boClearDataBtn" style="color:#f87171">
+        <span class="bo-nav-icon">🗑</span>ล้างข้อมูล
+      </button>
       <a href="admin.html" class="bo-nav-item" style="text-decoration:none">
         <span class="bo-nav-icon">⬅</span>กลับแอดมิน
       </a>
@@ -842,6 +845,28 @@ tr.drag-over td { background:var(--cream-dark) !important; }
   </div>
 </div>
 
+<!-- ============ MODAL: ล้างข้อมูล ============ -->
+<div class="bo-modal" id="boClearDataModal">
+  <div class="bo-modal-box" style="max-width:400px">
+    <div class="bo-modal-header">
+      <span class="bo-modal-title">🗑 ล้างรายการสั่งซื้อทั้งหมด</span>
+      <button class="bo-modal-close" data-close="boClearDataModal">✕</button>
+    </div>
+    <div class="bo-modal-body">
+      <p style="font-size:.9rem;color:var(--brown-mid)">กรอกรหัสผ่านแอดมินเพื่อยืนยันการล้างข้อมูลและรีเซ็ตหมายเลขออเดอร์</p>
+      <div class="field">
+        <label class="field-label">รหัสยืนยัน</label>
+        <input type="password" id="boClearDataCode" class="field-input" placeholder="••••••" autocomplete="off">
+      </div>
+      <p id="boClearDataError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
+    </div>
+    <div class="bo-modal-footer">
+      <button class="btn btn-outline" data-close="boClearDataModal">ยกเลิก</button>
+      <button class="btn btn-danger" id="boClearDataConfirm">ล้างข้อมูล</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 // ============================================================
 //  CONFIG — แก้ค่าเหล่านี้ให้ตรงกับ project ของคุณ
@@ -1036,6 +1061,36 @@ document.querySelectorAll('[data-close]').forEach(btn => {
 });
 document.querySelectorAll('.bo-modal').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+});
+
+// ── ล้างข้อมูล ──
+document.getElementById('boClearDataBtn').addEventListener('click', () => {
+  document.getElementById('boClearDataCode').value = '';
+  document.getElementById('boClearDataError').textContent = '';
+  openModal('boClearDataModal');
+});
+document.getElementById('boClearDataConfirm').addEventListener('click', async () => {
+  const code = document.getElementById('boClearDataCode').value;
+  const errEl = document.getElementById('boClearDataError');
+  errEl.textContent = '';
+  // ดึง ADMIN_USERS จาก Firebase เพื่อตรวจสอบ (เหมือนกับ admin.js)
+  try {
+    const snap = await get(ref(fbDb, 'adminUsers'));
+    const users = snap.exists() ? snap.val() : { admin: { password:'admin123', role:'admin' } };
+    const valid = Object.values(users).some(u => u.password === code);
+    if (!valid) { errEl.textContent = 'รหัสผ่านไม่ถูกต้อง'; return; }
+    // ลบข้อมูลออเดอร์ + รีเซ็ต counter
+    await remove(ref(fbDb, 'orders'));
+    await set(ref(fbDb, 'orderCounter'), 1000);
+    LIVE_ORDERS = [];
+    if (activePanelId === 'dashboard') loadDashboard();
+    if (activePanelId === 'history')   renderHistTable();
+    closeModal('boClearDataModal');
+    setSyncStatus('ok', '✅ ล้างข้อมูลสำเร็จ');
+    setTimeout(() => { document.getElementById('syncStatusChip').textContent = ''; }, 3000);
+  } catch(e) {
+    errEl.textContent = 'เกิดข้อผิดพลาด: ' + e.message;
+  }
 });
 
 // ============================================================
