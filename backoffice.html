@@ -341,7 +341,6 @@ tr.drag-over td { background:var(--cream-dark) !important; }
 .toggle input:checked + .toggle-slider::after { transform:translateX(16px); }
 
 .cat-chip { display:inline-flex; align-items:center; gap:.25rem; font-size:.75rem; font-weight:700; padding:.18rem .55rem; border-radius:var(--pill); background:var(--cream-mid); color:var(--brown-mid); }
-.type-chip { display:inline-flex; align-items:center; font-size:.7rem; font-weight:600; padding:.12rem .45rem; border-radius:var(--pill); background:#e8f4fd; color:#1565c0; margin-left:.3rem; }
 
 .btn-icon { background:none; border:none; font-size:1rem; cursor:pointer; padding:.2rem .3rem; border-radius:4px; transition:background var(--ease); }
 .btn-icon:hover { background:var(--cream-dark); }
@@ -692,16 +691,15 @@ tr.drag-over td { background:var(--cream-dark) !important; }
         <div class="bo-panel-heading">
           <div>
             <div class="bo-panel-title">🍽 จัดการเมนู</div>
-            <div class="bo-panel-sub">เพิ่ม • แก้ไข • ลบ • เรียงลำดับเมนู</div>
+            <div class="bo-panel-sub">ดึงข้อมูลจากระบบใหญ่ (Cloudflare D1) • sync กลับ Firebase</div>
           </div>
           <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            <button class="btn btn-outline btn-sm" id="manageCatsBtn">🗂 หมวดหมู่</button>
-            <button class="btn btn-outline btn-sm" id="manageTypesBtn">🏷 ประเภท</button>
+            <button class="btn btn-outline btn-sm" id="menuSyncBtn">🔄 Sync จากระบบใหญ่</button>
             <button class="btn btn-primary" id="menuAddBtn">＋ เพิ่มเมนู</button>
           </div>
         </div>
 
-        <!-- Status banner -->
+        <!-- Sync status -->
         <div id="menuSyncBanner" class="sync-banner hidden"></div>
 
         <!-- Toolbar -->
@@ -744,52 +742,97 @@ tr.drag-over td { background:var(--cream-dark) !important; }
 
 <!-- ============ MODAL: เพิ่ม/แก้ไขเมนู ============ -->
 <div class="bo-modal" id="menuModal">
-  <div class="bo-modal-box">
+  <div class="bo-modal-box" style="max-width:560px">
     <div class="bo-modal-header">
       <span class="bo-modal-title" id="menuModalTitle">＋ เพิ่มเมนู</span>
       <button class="bo-modal-close" data-close="menuModal">✕</button>
     </div>
     <div class="bo-modal-body">
-      <div class="bo-modal-grid2">
-        <div class="field" style="grid-column:1/-1">
-          <label class="field-label">ชื่อเมนู *</label>
-          <input type="text" class="field-input" id="menuName" placeholder="เช่น ข้าวกระเพราหมูสับ">
+
+      <!-- รูปภาพ -->
+      <div class="field">
+        <label class="field-label">รูปภาพ</label>
+        <div class="img-upload-area" id="menuImgDropZone">
+          <div id="menuImgPreviewWrap" style="display:none;width:100%">
+            <img id="menuImgPreview" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">
+            <button type="button" id="menuImgClear" style="display:block;margin:.4rem auto 0;background:none;border:none;color:var(--brown-light);font-size:.78rem;cursor:pointer;text-decoration:underline">ลบรูป</button>
+          </div>
+          <div id="menuImgPlaceholder" style="display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:.5rem 0">
+            <span style="font-size:2rem">📷</span>
+            <span class="img-upload-label">คลิกเพื่ออัปโหลดรูป</span>
+            <span class="img-upload-sub">JPG / PNG / WebP — ขนาดไม่เกิน 2 MB</span>
+          </div>
+          <input type="file" id="menuImgFile" accept="image/jpeg,image/png,image/webp" style="display:none">
         </div>
+        <input type="url" class="field-input" id="menuImgUrl" placeholder="หรือวาง URL รูปภาพ" style="margin-top:.5rem">
+      </div>
+
+      <!-- ชื่อเมนู -->
+      <div class="field">
+        <label class="field-label">ชื่อเมนู *</label>
+        <input type="text" class="field-input" id="menuName" placeholder="เช่น ข้าวซอยไก่">
+      </div>
+
+      <!-- หมวด -->
+      <div class="field">
+        <label class="field-label">หมวด *</label>
+        <div style="position:relative">
+          <select class="field-input" id="menuCategory" style="appearance:none;padding-right:2rem"></select>
+          <span style="position:absolute;right:.8rem;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--brown-light)">▾</span>
+        </div>
+      </div>
+
+      <!-- ประเภทเมนู (PRODUCTTYPE) -->
+      <div class="field">
+        <label class="field-label">ประเภทเมนู (PRODUCTTYPE) *</label>
+        <div style="position:relative">
+          <select class="field-input" id="menuProductType" style="appearance:none;padding-right:2rem">
+            <option value="">— ไม่กำหนด —</option>
+            <option value="khao_soi">🍜 ข้าวซอย — มีตัวเลือกท็อปปิ้ง</option>
+            <option value="pad_kra_pao">🍛 ผัดกระเพรา — เลือกความเผ็ด</option>
+            <option value="khao_man_gai">🍗 ข้าวมันไก่ — ไม่มีตัวเลือก</option>
+            <option value="drink">🥤 เครื่องดื่ม — เลือกหวาน/แข็ง</option>
+            <option value="set">🍱 เซ็ตอาหาร — มีตัวเลือกพิเศษ</option>
+            <option value="custom">⚙️ กำหนดเอง</option>
+          </select>
+          <span style="position:absolute;right:.8rem;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--brown-light)">▾</span>
+        </div>
+        <p style="font-size:.75rem;color:var(--brown-light);margin-top:.25rem">
+          กำหนดว่าลูกค้าจะเห็น option อะไรเมื่อสั่งเมนูนี้ ·
+          <a href="#" id="manageProductTypesLink" style="color:var(--accent);text-decoration:none;font-weight:600">จัดการประเภท →</a>
+        </p>
+      </div>
+
+      <!-- ราคา + ลำดับ -->
+      <div class="bo-modal-grid2">
         <div class="field">
           <label class="field-label">ราคา (฿) *</label>
           <input type="number" class="field-input" id="menuPrice" placeholder="0" min="0" step="0.5">
         </div>
         <div class="field">
-          <label class="field-label">หมวดหมู่</label>
-          <select class="field-input" id="menuCategory"></select>
-        </div>
-        <div class="field" style="grid-column:1/-1">
-          <label class="field-label">รายละเอียด</label>
-          <input type="text" class="field-input" id="menuDesc" placeholder="เช่น เผ็ดได้ตามสั่ง">
-        </div>
-        <div class="field">
-          <label class="field-label">URL รูปภาพ</label>
-          <input type="url" class="field-input" id="menuImgUrl" placeholder="https://...">
-        </div>
-        <div class="field">
           <label class="field-label">ลำดับการแสดง</label>
           <input type="number" class="field-input" id="menuSortOrder" placeholder="0" min="0">
         </div>
-        <div class="field">
-          <label class="field-label">ประเภทเมนู</label>
-          <select class="field-input" id="menuType"></select>
-        </div>
       </div>
+
+      <!-- รายละเอียด -->
       <div class="field">
-        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:600;font-size:.88rem">
-          <input type="checkbox" id="menuPromoEnabled" style="accent-color:var(--accent)">
+        <label class="field-label">รายละเอียด (ไม่บังคับ)</label>
+        <input type="text" class="field-input" id="menuDesc" placeholder="บรรยายสั้นๆ เช่น เส้นหมี่ ซอสแกงกะหรี่ เนื้อหมู">
+      </div>
+
+      <!-- โปรโมชั่น -->
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:.55rem;cursor:pointer;font-weight:600;font-size:.9rem;color:var(--brown-mid)">
+          <input type="checkbox" id="menuPromoEnabled" style="accent-color:var(--accent);width:16px;height:16px">
           🏷 เปิดโปรโมชั่น / ราคาลด
         </label>
-        <div id="menuPromoFields" style="display:none;margin-top:.65rem;display:none;grid-template-columns:1fr 1fr;gap:.65rem">
+        <div id="menuPromoFields" style="display:none;margin-top:.65rem;grid-template-columns:1fr 1fr;gap:.65rem">
           <div class="field"><label class="field-label">ราคาโปร (฿)</label><input type="number" class="field-input" id="menuPromoPrice" placeholder="0" min="0" step="0.5"></div>
           <div class="field"><label class="field-label">ป้ายโปร</label><input type="text" class="field-input" id="menuPromoLabel" placeholder="เช่น ลด 20%"></div>
         </div>
       </div>
+
       <div id="menuSaveError" style="color:var(--red);font-size:.82rem;min-height:1rem"></div>
     </div>
     <div class="bo-modal-footer">
@@ -799,67 +842,22 @@ tr.drag-over td { background:var(--cream-dark) !important; }
   </div>
 </div>
 
-<!-- ============ MODAL: จัดการหมวดหมู่ ============ -->
-<div class="bo-modal" id="catModal">
-  <div class="bo-modal-box" style="max-width:480px">
-    <div class="bo-modal-header">
-      <span class="bo-modal-title">🗂 จัดการหมวดหมู่</span>
-      <button class="bo-modal-close" data-close="catModal">✕</button>
-    </div>
-    <div class="bo-modal-body">
-      <p style="font-size:.8rem;color:var(--brown-light);margin-bottom:.5rem">ลากแถว <strong>⠿</strong> เพื่อเรียงลำดับ</p>
-      <div id="catSortList" style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:1rem"></div>
-      <div id="catOrderSaveRow" style="display:none;justify-content:flex-end;margin-bottom:.5rem">
-        <button class="btn btn-primary btn-sm" id="catSaveOrderBtn">💾 บันทึกลำดับ</button>
-      </div>
-      <div style="border-top:1.5px dashed var(--cream-dark);padding-top:.85rem;display:flex;flex-direction:column;gap:.5rem">
-        <p style="font-size:.82rem;font-weight:700;color:var(--brown-mid)">＋ เพิ่มหมวดใหม่</p>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <input type="text" class="field-input" id="newCatId"    placeholder="id (a-z เช่น dessert)" style="flex:1;min-width:110px">
-          <input type="text" class="field-input" id="newCatLabel" placeholder="ชื่อ เช่น 🍮 ของหวาน"   style="flex:1;min-width:130px">
-          <button class="btn btn-primary btn-sm" id="addCatBtn" style="align-self:flex-end">＋ เพิ่ม</button>
-        </div>
-        <p id="catModalError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
-      </div>
-    </div>
-    <div class="bo-modal-footer">
-      <button class="btn btn-outline" data-close="catModal">ปิด</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ MODAL: จัดการประเภทเมนู ============ -->
-<div class="bo-modal" id="typeModal">
-  <div class="bo-modal-box" style="max-width:480px">
-    <div class="bo-modal-header">
-      <span class="bo-modal-title">🏷 จัดการประเภทเมนู</span>
-      <button class="bo-modal-close" data-close="typeModal">✕</button>
-    </div>
-    <div class="bo-modal-body">
-      <p style="font-size:.8rem;color:var(--brown-light);margin-bottom:.75rem">ประเภทใช้แบ่งกลุ่มเมนูย่อย เช่น กับข้าว, เส้น, ของหวาน</p>
-      <div id="typeList" style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:1rem"></div>
-      <div style="border-top:1.5px dashed var(--cream-dark);padding-top:.85rem;display:flex;flex-direction:column;gap:.5rem">
-        <p style="font-size:.82rem;font-weight:700;color:var(--brown-mid)">＋ เพิ่มประเภทใหม่</p>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-          <input type="text" class="field-input" id="newTypeId"    placeholder="id (a-z เช่น noodle)" style="flex:1;min-width:110px">
-          <input type="text" class="field-input" id="newTypeLabel" placeholder="ชื่อ เช่น 🍜 เส้น"      style="flex:1;min-width:130px">
-          <button class="btn btn-primary btn-sm" id="addTypeBtn" style="align-self:flex-end">＋ เพิ่ม</button>
-        </div>
-        <p id="typeModalError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
-      </div>
-    </div>
-    <div class="bo-modal-footer">
-      <button class="btn btn-outline" data-close="typeModal">ปิด</button>
-    </div>
-  </div>
-</div>
-
 <script type="module">
 // ============================================================
-//  CONFIG
+//  CONFIG — แก้ค่าเหล่านี้ให้ตรงกับ project ของคุณ
 // ============================================================
 
-// ── Firebase (ระบบครัวคุณแม่) ──
+// ── ระบบใหญ่ (Cloudflare D1) ──
+// URL ของ Cloudflare Worker ระบบใหญ่ (เช่น https://kaosoi.your-subdomain.workers.dev)
+const CF_BASE = 'https://YOUR_CLOUDFLARE_WORKER_URL'; // ← เปลี่ยนตรงนี้
+
+// admin key ของระบบใหญ่ (SHA-256 hash ของ username:password)
+// ถ้าล็อกอินระบบใหญ่อยู่แล้ว ระบบจะดึงจาก localStorage อัตโนมัติ
+function getCfAdminKey() {
+  return localStorage.getItem('ks90-admin-key') || '';
+}
+
+// ── ระบบเล็ก (Firebase) ──
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, update, remove, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -880,10 +878,39 @@ const fbAuth = getAuth(fbApp);
 signInAnonymously(fbAuth).catch(e => console.error('FB auth:', e));
 
 // ============================================================
-//  FIREBASE API CLIENT
+//  CLOUDFLARE API CLIENT (ระบบใหญ่)
+// ============================================================
+async function cfFetch(path, options = {}) {
+  const key = getCfAdminKey();
+  const headers = { 'Content-Type':'application/json' };
+  if (key) headers['X-Admin-Key'] = key;
+  const res = await fetch(CF_BASE + path, { ...options, headers: { ...headers, ...options.headers } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+const cfApi = {
+  getOrders: (params = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(params).forEach(([k,v]) => v && p.set(k, v));
+    const qs = p.toString();
+    return cfFetch('/api/orders' + (qs ? '?' + qs : ''));
+  },
+  getMenu: () => cfFetch('/api/menu'),
+  getMeta: () => cfFetch('/api/meta'),
+  patchMenuItem: (id, data) => cfFetch(`/api/menu/${encodeURIComponent(id)}`, { method:'PATCH', body: JSON.stringify(data) }),
+  putMenu: (data) => cfFetch('/api/menu', { method:'PUT', body: JSON.stringify(data) }),
+  deleteMenuItem: (id) => cfFetch(`/api/menu/${encodeURIComponent(id)}`, { method:'DELETE' }),
+};
+
+// ============================================================
+//  FIREBASE API CLIENT (ระบบเล็ก — orders อ่านอย่างเดียว, menu อ่าน-เขียน)
 // ============================================================
 const fbApi = {
-  // Orders (read-only)
   getOrders: () => new Promise((res, rej) => {
     onValue(ref(fbDb, 'orders'), snap => {
       const orders = [];
@@ -892,32 +919,18 @@ const fbApi = {
       res(orders);
     }, rej, { onlyOnce: true });
   }),
-
-  // Menu (read-write)
-  getMenu:        () => get(ref(fbDb, 'menu')).then(s => s.exists() ? s.val() : {}),
-  setMenu:        (obj) => set(ref(fbDb, 'menu'), obj),
-  patchMenuItem:  (id, data) => update(ref(fbDb, `menu/${id}`), data),
+  getMenu: () => get(ref(fbDb, 'menu')).then(s => s.exists() ? s.val() : {}),
+  setMenu: (menuObj) => set(ref(fbDb, 'menu'), menuObj),
+  patchMenuItem: (id, data) => update(ref(fbDb, `menu/${id}`), data),
   deleteMenuItem: (id) => remove(ref(fbDb, `menu/${id}`)),
-
-  // Categories — เก็บใน Firebase path: meta/categories  { id: label }
-  getCategories:    () => get(ref(fbDb, 'meta/categories')).then(s => s.exists() ? s.val() : {}),
-  setCategories:    (obj) => set(ref(fbDb, 'meta/categories'), obj),
-  getCatSort:       () => get(ref(fbDb, 'meta/categoriesSort')).then(s => s.exists() ? s.val() : []),
-  setCatSort:       (arr) => set(ref(fbDb, 'meta/categoriesSort'), arr),
-
-  // Types — เก็บใน Firebase path: meta/menuTypes  { id: label }
-  getTypes:    () => get(ref(fbDb, 'meta/menuTypes')).then(s => s.exists() ? s.val() : {}),
-  setTypes:    (obj) => set(ref(fbDb, 'meta/menuTypes'), obj),
 };
 
 // ============================================================
 //  STATE
 // ============================================================
-let LIVE_ORDERS = [];
-let LIVE_MENU   = {};       // { id: menuItem } จาก Firebase
+let LIVE_ORDERS = [];       // normalised orders จาก Firebase
+let LIVE_MENU   = {};       // { id: menuItem } จาก Cloudflare D1
 let LIVE_CATEGORIES = { pad:'🥘 ผัด', khao:'🍚 ข้าว', tom:'🍲 ต้ม/แกง', nam:'🥤 เครื่องดื่ม' };
-let LIVE_CAT_SORT   = [];   // ['pad','khao',...]  ลำดับหมวด
-let LIVE_TYPES      = {};   // { id: label } ประเภทเมนู
 let activePanelId  = 'dashboard';
 let tsLoaded = false, histLoaded = false, menuLoaded = false;
 let histFiltered = [], histPage = 1;
@@ -1031,12 +1044,10 @@ document.querySelectorAll('.bo-modal').forEach(m => {
 async function initData() {
   setSyncStatus('loading', '⏳ กำลังเชื่อมต่อ…');
 
-  const [fbOrdersRes, fbMenuRes, fbCatRes, fbCatSortRes, fbTypesRes] = await Promise.allSettled([
+  const [fbOrdersRes, cfMenuRes, cfMetaRes] = await Promise.allSettled([
     fbApi.getOrders(),
-    fbApi.getMenu(),
-    fbApi.getCategories(),
-    fbApi.getCatSort(),
-    fbApi.getTypes(),
+    cfApi.getMenu(),
+    cfApi.getMeta(),
   ]);
 
   if (fbOrdersRes.status === 'fulfilled') {
@@ -1046,20 +1057,22 @@ async function initData() {
     setSyncStatus('err', '⚠️ ไม่สามารถเชื่อมต่อ Firebase ได้');
   }
 
-  if (fbMenuRes.status === 'fulfilled' && fbMenuRes.value) {
-    LIVE_MENU = fbMenuRes.value;
+  if (cfMenuRes.status === 'fulfilled' && cfMenuRes.value) {
+    LIVE_MENU = cfMenuRes.value;
+    try { localStorage.setItem('km-menu-cache', JSON.stringify(LIVE_MENU)); } catch(_){}
+  } else {
+    // fallback LS cache
+    try {
+      const cached = localStorage.getItem('km-menu-cache');
+      if (cached) LIVE_MENU = JSON.parse(cached);
+    } catch(_){}
+    if (cfMenuRes.status !== 'fulfilled') {
+      console.warn('CF menu failed:', cfMenuRes.reason);
+    }
   }
 
-  if (fbCatRes.status === 'fulfilled' && Object.keys(fbCatRes.value).length > 0) {
-    LIVE_CATEGORIES = fbCatRes.value;
-  }
-
-  if (fbCatSortRes.status === 'fulfilled' && Array.isArray(fbCatSortRes.value)) {
-    LIVE_CAT_SORT = fbCatSortRes.value;
-  }
-
-  if (fbTypesRes.status === 'fulfilled') {
-    LIVE_TYPES = fbTypesRes.value;
+  if (cfMetaRes.status === 'fulfilled' && cfMetaRes.value?.categories) {
+    LIVE_CATEGORIES = cfMetaRes.value.categories;
   }
 
   setSyncStatus('ok', '✅ เชื่อมต่อสำเร็จ');
@@ -1067,7 +1080,7 @@ async function initData() {
 
   loadDashboard();
 
-  // Realtime: orders
+  // realtime Firebase listener
   onValue(ref(fbDb, 'orders'), snap => {
     const orders = [];
     if (snap.exists()) snap.forEach(c => orders.push({ firebaseKey: c.key, ...c.val() }));
@@ -1076,24 +1089,6 @@ async function initData() {
     if (activePanelId === 'dashboard')  loadDashboard();
     if (activePanelId === 'topsellers' && tsLoaded) renderTopSellers();
     if (activePanelId === 'history' && histLoaded) renderHistTable();
-  });
-
-  // Realtime: menu
-  onValue(ref(fbDb, 'menu'), snap => {
-    LIVE_MENU = snap.exists() ? snap.val() : {};
-    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
-  });
-
-  // Realtime: categories
-  onValue(ref(fbDb, 'meta/categories'), snap => {
-    if (snap.exists()) LIVE_CATEGORIES = snap.val();
-    if (activePanelId === 'menu' && menuLoaded) { renderCatBtns(); renderMenuTable(); }
-  });
-
-  // Realtime: types
-  onValue(ref(fbDb, 'meta/menuTypes'), snap => {
-    LIVE_TYPES = snap.exists() ? snap.val() : {};
-    if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
   });
 }
 
@@ -1545,7 +1540,9 @@ document.getElementById('histExportCsvBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-//  PANEL: MENU MANAGER — อ่าน-เขียนตรง Firebase
+//  PANEL: MENU MANAGER
+//  อ่าน-เขียนจาก Cloudflare D1 (ระบบใหญ่)
+//  sync กลับ Firebase (ระบบเล็ก) หลังบันทึกสำเร็จ
 // ============================================================
 let menuCatFilter = 'all';
 let menuSearch    = '';
@@ -1560,20 +1557,11 @@ function getFilteredMenu() {
     .sort((a,b) => (a.sortOrder || 999) - (b.sortOrder || 999));
 }
 
-// ── ordered categories (ใช้ LIVE_CAT_SORT ถ้ามี) ──
-function orderedCatEntries() {
-  const entries = Object.entries(LIVE_CATEGORIES);
-  if (!LIVE_CAT_SORT.length) return entries;
-  const sorted = LIVE_CAT_SORT.filter(id => LIVE_CATEGORIES[id]).map(id => [id, LIVE_CATEGORIES[id]]);
-  const rest   = entries.filter(([id]) => !LIVE_CAT_SORT.includes(id));
-  return [...sorted, ...rest];
-}
-
 function renderCatBtns() {
   const wrap = document.getElementById('menuCatBtns');
   if (!wrap) return;
   wrap.innerHTML = `<button class="menu-cat-btn${menuCatFilter==='all'?' active':''}" data-cat="all">🍽 ทั้งหมด</button>`
-    + orderedCatEntries().map(([id, label]) =>
+    + Object.entries(LIVE_CATEGORIES).map(([id, label]) =>
         `<button class="menu-cat-btn${menuCatFilter===id?' active':''}" data-cat="${id}">${escHtml(label)}</button>`
       ).join('');
   const newWrap = wrap.cloneNode(true);
@@ -1591,7 +1579,7 @@ function renderCatBtns() {
 function rebuildCategorySelect(currentVal) {
   const sel = document.getElementById('menuCategory');
   if (!sel) return;
-  sel.innerHTML = orderedCatEntries()
+  sel.innerHTML = Object.entries(LIVE_CATEGORIES)
     .map(([id, label]) => `<option value="${id}"${id === currentVal ? ' selected' : ''}>${escHtml(label)}</option>`)
     .join('');
   if (currentVal) sel.value = currentVal;
@@ -1606,9 +1594,8 @@ function renderMenuTable() {
     return;
   }
   body.innerHTML = items.map(m => {
-    const hasPromo = m.promo?.enabled;
-    const catLabel = LIVE_CATEGORIES[m.category] || m.category || '—';
-    const typeLabel = m.menuType ? (LIVE_TYPES[m.menuType] || m.menuType) : '';
+    const hasPromo  = m.promo?.enabled;
+    const catLabel  = LIVE_CATEGORIES[m.category] || m.category || '—';
     return `
       <tr class="${m.enabled === false ? 'menu-disabled' : ''}" data-id="${m.id}" draggable="true">
         <td><span class="drag-handle" title="ลากเพื่อเรียง">⠿</span></td>
@@ -1621,7 +1608,6 @@ function renderMenuTable() {
         <td>
           ${escHtml(m.name)}
           ${hasPromo ? `<span class="promo-badge">${escHtml(m.promo.label||'โปร')}</span>` : ''}
-          ${typeLabel ? `<span class="type-chip">${escHtml(typeLabel)}</span>` : ''}
         </td>
         <td><span class="cat-chip">${escHtml(catLabel)}</span></td>
         <td style="text-align:right">
@@ -1670,12 +1656,42 @@ function renderMenuTable() {
       body.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
       row.classList.add('drag-over');
       const rows = [...body.querySelectorAll('tr[data-id]')];
-      const si = rows.indexOf(draggingRow), ti = rows.indexOf(row);
+      const si   = rows.indexOf(draggingRow), ti = rows.indexOf(row);
       if (si < ti) row.after(draggingRow); else row.before(draggingRow);
     });
     row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
     row.addEventListener('drop', e => { e.preventDefault(); row.classList.remove('drag-over'); });
   });
+}
+
+async function loadMenuPanel() {
+  menuLoaded = true;
+  renderCatBtns();
+  renderMenuTable();
+
+  if (Object.keys(LIVE_MENU).length === 0) {
+    await syncMenuFromCF();
+  }
+}
+
+// ── sync เมนูจาก Cloudflare → แสดงใน backoffice ──
+async function syncMenuFromCF() {
+  showMenuBanner('⏳ กำลังดึงข้อมูลจากระบบใหญ่…', '');
+  try {
+    const menuObj = await cfApi.getMenu();
+    if (menuObj && Object.keys(menuObj).length > 0) {
+      LIVE_MENU = menuObj;
+      try { localStorage.setItem('km-menu-cache', JSON.stringify(LIVE_MENU)); } catch(_){}
+      renderCatBtns();
+      renderMenuTable();
+      showMenuBanner('✅ ซิงค์เมนูสำเร็จ — ' + Object.keys(LIVE_MENU).length + ' รายการ', 'ok');
+    } else {
+      showMenuBanner('⚠️ ไม่พบข้อมูลเมนูจากระบบใหญ่', 'err');
+    }
+  } catch(e) {
+    showMenuBanner('❌ ซิงค์ไม่สำเร็จ: ' + e.message, 'err');
+  }
+  setTimeout(() => document.getElementById('menuSyncBanner').classList.add('hidden'), 4000);
 }
 
 function showMenuBanner(msg, type) {
@@ -1685,25 +1701,31 @@ function showMenuBanner(msg, type) {
   el.classList.remove('hidden');
 }
 
-function loadMenuPanel() {
-  menuLoaded = true;
-  renderCatBtns();
-  renderMenuTable();
-}
+document.getElementById('menuSyncBtn').addEventListener('click', syncMenuFromCF);
 
 // ── toggle enable/disable ──
 async function toggleMenuItem(id, enabled) {
   if (!LIVE_MENU[id]) return;
   LIVE_MENU[id] = { ...LIVE_MENU[id], enabled };
-  try { await fbApi.patchMenuItem(id, { enabled }); }
-  catch(e) { console.warn('toggle failed:', e); LIVE_MENU[id].enabled = !enabled; renderMenuTable(); }
+  renderMenuTable();
+  try {
+    await cfApi.patchMenuItem(id, { enabled });
+    // sync กลับ Firebase ด้วย
+    await fbApi.patchMenuItem(id, { enabled }).catch(() => {});
+  } catch(e) {
+    console.warn('toggle failed:', e);
+    LIVE_MENU[id].enabled = !enabled; // rollback
+    renderMenuTable();
+  }
 }
 
 // ── update sort order ──
 async function updateSortOrders(ids) {
   ids.forEach((id, i) => { if (LIVE_MENU[id]) LIVE_MENU[id].sortOrder = i + 1; });
   await Promise.all(ids.map((id, i) =>
-    fbApi.patchMenuItem(id, { sortOrder: i+1 }).catch(e => console.warn('sort error', e))
+    cfApi.patchMenuItem(id, { sortOrder: i+1 })
+      .then(() => fbApi.patchMenuItem(id, { sortOrder: i+1 }).catch(() => {}))
+      .catch(e => console.warn('sort error', e))
   ));
 }
 
@@ -1711,21 +1733,15 @@ async function updateSortOrders(ids) {
 async function deleteMenuItem(id) {
   delete LIVE_MENU[id];
   renderMenuTable();
-  try { await fbApi.deleteMenuItem(id); }
-  catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
+  try {
+    await cfApi.deleteMenuItem(id);
+    await fbApi.deleteMenuItem(id).catch(() => {});
+  } catch(e) {
+    alert('ลบไม่สำเร็จ: ' + e.message);
+  }
 }
 
-// ── menu modal ──
-function rebuildTypeSelect(currentVal) {
-  const sel = document.getElementById('menuType');
-  if (!sel) return;
-  sel.innerHTML = `<option value="">— ไม่ระบุ —</option>`
-    + Object.entries(LIVE_TYPES)
-      .map(([id, label]) => `<option value="${id}"${id === currentVal ? ' selected' : ''}>${escHtml(label)}</option>`)
-      .join('');
-  if (currentVal) sel.value = currentVal;
-}
-
+// ── modal ──
 function clearMenuModal() {
   editingMenuId = null;
   document.getElementById('menuModalTitle').textContent = '＋ เพิ่มเมนู';
@@ -1734,8 +1750,11 @@ function clearMenuModal() {
   document.getElementById('menuPromoEnabled').checked = false;
   document.getElementById('menuPromoFields').style.display = 'none';
   document.getElementById('menuSaveError').textContent = '';
-  rebuildCategorySelect(orderedCatEntries()[0]?.[0] || '');
-  rebuildTypeSelect('');
+  document.getElementById('menuProductType').value = '';
+  // reset image
+  if (typeof setImgPreview === 'function') setImgPreview(null);
+  const fi = document.getElementById('menuImgFile'); if (fi) fi.value = '';
+  rebuildCategorySelect(Object.keys(LIVE_CATEGORIES)[0] || 'pad');
 }
 
 function openMenuModal(id = null) {
@@ -1744,14 +1763,15 @@ function openMenuModal(id = null) {
     const m = LIVE_MENU[id];
     if (!m) return;
     editingMenuId = id;
-    document.getElementById('menuModalTitle').textContent = '✏️ แก้ไขเมนู';
+    document.getElementById('menuModalTitle').textContent    = '✏️ แก้ไขเมนู';
     document.getElementById('menuName').value      = m.name || '';
     document.getElementById('menuDesc').value      = m.desc || '';
     document.getElementById('menuPrice').value     = m.price || '';
     document.getElementById('menuSortOrder').value = m.sortOrder || '';
     document.getElementById('menuImgUrl').value    = m.imageUrl || '';
+    document.getElementById('menuProductType').value = m.productType || '';
+    if (m.imageUrl) setImgPreview(m.imageUrl);
     rebuildCategorySelect(m.category);
-    rebuildTypeSelect(m.menuType || '');
     if (m.promo?.enabled) {
       document.getElementById('menuPromoEnabled').checked       = true;
       document.getElementById('menuPromoFields').style.display = 'grid';
@@ -1765,6 +1785,71 @@ function openMenuModal(id = null) {
 document.getElementById('menuPromoEnabled').addEventListener('change', function() {
   document.getElementById('menuPromoFields').style.display = this.checked ? 'grid' : 'none';
 });
+
+// ============================================================
+//  IMAGE UPLOAD HANDLING
+// ============================================================
+const imgDropZone    = document.getElementById('menuImgDropZone');
+const imgFileInput   = document.getElementById('menuImgFile');
+const imgPreview     = document.getElementById('menuImgPreview');
+const imgPreviewW    = document.getElementById('menuImgPreviewWrap');
+const imgPlaceholder = document.getElementById('menuImgPlaceholder');
+const imgClearBtn    = document.getElementById('menuImgClear');
+let menuImgBase64    = null;
+
+function setImgPreview(src) {
+  if (!src) {
+    imgPreviewW.style.display    = 'none';
+    imgPlaceholder.style.display = 'flex';
+    menuImgBase64 = null;
+    return;
+  }
+  imgPreview.src = src;
+  imgPreviewW.style.display    = 'flex';
+  imgPreviewW.style.flexDirection = 'column';
+  imgPlaceholder.style.display = 'none';
+}
+
+imgDropZone.addEventListener('click', e => {
+  if (e.target === imgClearBtn) return;
+  imgFileInput.click();
+});
+imgFileInput.addEventListener('change', () => {
+  const file = imgFileInput.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { alert('ไฟล์ใหญ่เกิน 2 MB'); return; }
+  const reader = new FileReader();
+  reader.onload = e => { menuImgBase64 = e.target.result; document.getElementById('menuImgUrl').value = ''; setImgPreview(menuImgBase64); };
+  reader.readAsDataURL(file);
+});
+imgClearBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  imgFileInput.value = '';
+  document.getElementById('menuImgUrl').value = '';
+  menuImgBase64 = null;
+  setImgPreview(null);
+});
+document.getElementById('menuImgUrl').addEventListener('input', function() {
+  const url = this.value.trim();
+  if (url) { menuImgBase64 = null; setImgPreview(url); }
+  else      { setImgPreview(null); }
+});
+imgDropZone.addEventListener('dragover',  e => { e.preventDefault(); imgDropZone.style.borderColor = 'var(--accent)'; });
+imgDropZone.addEventListener('dragleave', () => { imgDropZone.style.borderColor = ''; });
+imgDropZone.addEventListener('drop', e => {
+  e.preventDefault(); imgDropZone.style.borderColor = '';
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  if (file.size > 2 * 1024 * 1024) { alert('ไฟล์ใหญ่เกิน 2 MB'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => { menuImgBase64 = ev.target.result; document.getElementById('menuImgUrl').value = ''; setImgPreview(menuImgBase64); };
+  reader.readAsDataURL(file);
+});
+document.getElementById('manageProductTypesLink').addEventListener('click', e => {
+  e.preventDefault();
+  alert('ฟีเจอร์จัดการประเภทเมนูจะเพิ่มในเวอร์ชันถัดไป');
+});
+
 document.getElementById('menuAddBtn').addEventListener('click', () => openMenuModal());
 
 document.getElementById('menuSaveBtn').addEventListener('click', async () => {
@@ -1779,16 +1864,16 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
   saveBtn.disabled = true; saveBtn.textContent = '⏳ กำลังบันทึก…';
 
   const promoEnabled = document.getElementById('menuPromoEnabled').checked;
-  const typeVal = document.getElementById('menuType')?.value || '';
   const item = {
-    id:        editingMenuId || ('km_' + Date.now()),
-    name, price,
-    category:  document.getElementById('menuCategory').value,
-    menuType:  typeVal,
-    desc:      document.getElementById('menuDesc').value.trim(),
-    imageUrl:  document.getElementById('menuImgUrl').value.trim(),
-    sortOrder: parseInt(document.getElementById('menuSortOrder').value) || Object.keys(LIVE_MENU).length + 1,
-    enabled:   true,
+    id:          editingMenuId || ('km_' + Date.now()),
+    name,
+    price,
+    category:    document.getElementById('menuCategory').value,
+    productType: document.getElementById('menuProductType').value,
+    desc:        document.getElementById('menuDesc').value.trim(),
+    imageUrl:    menuImgBase64 || document.getElementById('menuImgUrl').value.trim(),
+    sortOrder:   parseInt(document.getElementById('menuSortOrder').value) || Object.keys(LIVE_MENU).length + 1,
+    enabled:     true,
     promo: promoEnabled ? {
       enabled:    true,
       promoPrice: parseFloat(document.getElementById('menuPromoPrice').value) || price,
@@ -1796,13 +1881,31 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
     } : { enabled: false },
   };
 
+  LIVE_MENU[item.id] = item;
+  renderMenuTable();
+
   try {
-    await fbApi.patchMenuItem(item.id, item);
+    // บันทึกไป Cloudflare D1 ก่อน
+    if (editingMenuId) {
+      await cfApi.patchMenuItem(item.id, item);
+    } else {
+      // สร้างใหม่ — ใช้ PUT menu ทั้งก้อนหรือ PATCH แบบ upsert
+      await cfApi.patchMenuItem(item.id, item).catch(async () => {
+        // fallback: PUT ทั้งก้อน
+        await cfApi.putMenu(LIVE_MENU);
+      });
+    }
+    // sync กลับ Firebase
+    await fbApi.patchMenuItem(item.id, item).catch(e => console.warn('FB sync warn:', e));
+
     closeModal('menuModal');
     showMenuBanner('✅ บันทึกเมนูสำเร็จ', 'ok');
     setTimeout(() => document.getElementById('menuSyncBanner').classList.add('hidden'), 3000);
   } catch(e) {
     errEl.textContent = 'บันทึกไม่สำเร็จ: ' + e.message;
+    // rollback
+    if (!editingMenuId) delete LIVE_MENU[item.id];
+    renderMenuTable();
   } finally {
     saveBtn.disabled = false; saveBtn.textContent = '💾 บันทึก';
   }
@@ -1812,180 +1915,6 @@ document.getElementById('menuSearchInput').addEventListener('input', e => {
   menuSearch = e.target.value;
   renderMenuTable();
 });
-
-// ============================================================
-//  CATEGORY MANAGER
-// ============================================================
-function openCategoryModal() {
-  renderCatModalContent();
-  openModal('catModal');
-}
-
-function renderCatModalContent() {
-  const entries = orderedCatEntries();
-  const list    = document.getElementById('catSortList');
-  list.innerHTML = entries.map(([id, label]) => `
-    <div class="cat-sort-row" data-id="${id}" draggable="true"
-      style="display:flex;align-items:center;gap:.5rem;background:var(--white);
-             border:1.5px solid var(--cream-dark);border-radius:8px;padding:.35rem .5rem">
-      <span style="font-size:1.1rem;color:var(--brown-light);cursor:grab;padding:0 .25rem;user-select:none;flex-shrink:0">⠿</span>
-      <input type="text" class="field-input cat-label-input" data-id="${id}" value="${escHtml(label)}"
-             style="flex:1;min-width:0;padding:.35rem .6rem">
-      <button class="btn btn-outline btn-sm cat-save-btn" data-id="${id}">💾</button>
-      <button class="btn btn-danger btn-sm cat-del-btn" data-id="${id}">🗑</button>
-    </div>`).join('');
-
-  // drag-sort
-  let dragSrc = null;
-  const saveRow = document.getElementById('catOrderSaveRow');
-  list.querySelectorAll('.cat-sort-row').forEach(row => {
-    row.addEventListener('dragstart', e => { dragSrc = row; row.style.opacity='.4'; e.dataTransfer.effectAllowed='move'; });
-    row.addEventListener('dragend',   () => { row.style.opacity=''; list.querySelectorAll('.cat-sort-row').forEach(r => r.style.boxShadow=''); });
-    row.addEventListener('dragover',  e => { e.preventDefault(); if(row!==dragSrc) row.style.boxShadow='0 0 0 2px var(--accent)'; });
-    row.addEventListener('dragleave', () => row.style.boxShadow='');
-    row.addEventListener('drop', e => {
-      e.preventDefault(); row.style.boxShadow='';
-      if (!dragSrc || dragSrc===row) return;
-      const rows=[...list.querySelectorAll('.cat-sort-row')];
-      const si=rows.indexOf(dragSrc), ti=rows.indexOf(row);
-      if(si<ti) row.after(dragSrc); else row.before(dragSrc);
-      saveRow.style.display='flex';
-    });
-  });
-
-  // save order btn
-  document.getElementById('catSaveOrderBtn').onclick = async () => {
-    const ids = [...list.querySelectorAll('.cat-sort-row')].map(r => r.dataset.id);
-    LIVE_CAT_SORT = ids;
-    try { await fbApi.setCatSort(ids); saveRow.style.display='none'; renderCatBtns(); }
-    catch(e) { alert('บันทึกลำดับไม่สำเร็จ: ' + e.message); }
-  };
-
-  // rename save
-  list.querySelectorAll('.cat-save-btn').forEach(btn => {
-    btn.onclick = async () => {
-      const id  = btn.dataset.id;
-      const val = list.querySelector(`.cat-label-input[data-id="${id}"]`).value.trim();
-      if (!val) return;
-      btn.disabled = true;
-      LIVE_CATEGORIES[id] = val;
-      try {
-        await fbApi.setCategories(LIVE_CATEGORIES);
-        btn.textContent = '✅'; setTimeout(() => { btn.textContent='💾'; btn.disabled=false; }, 1200);
-        renderCatBtns();
-      } catch(e) { alert('แก้ไม่สำเร็จ: ' + e.message); btn.disabled=false; }
-    };
-  });
-
-  // delete cat
-  list.querySelectorAll('.cat-del-btn').forEach(btn => {
-    btn.onclick = async () => {
-      const id = btn.dataset.id;
-      if (!confirm(`ลบหมวด "${LIVE_CATEGORIES[id]}" ?\nเมนูในหมวดนี้จะยังอยู่`)) return;
-      delete LIVE_CATEGORIES[id];
-      LIVE_CAT_SORT = LIVE_CAT_SORT.filter(x => x !== id);
-      try {
-        await Promise.all([fbApi.setCategories(LIVE_CATEGORIES), fbApi.setCatSort(LIVE_CAT_SORT)]);
-        renderCatModalContent(); renderCatBtns();
-      } catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
-    };
-  });
-}
-
-// เพิ่มหมวดใหม่
-document.getElementById('addCatBtn').addEventListener('click', async () => {
-  const idEl  = document.getElementById('newCatId');
-  const lblEl = document.getElementById('newCatLabel');
-  const errEl = document.getElementById('catModalError');
-  errEl.textContent = '';
-  let id = idEl.value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
-  const label = lblEl.value.trim();
-  if (!id)    { errEl.textContent = 'id ต้องเป็นตัวอักษร a-z / ตัวเลขเท่านั้น'; return; }
-  if (!label) { errEl.textContent = 'กรุณาใส่ชื่อหมวด'; return; }
-  if (LIVE_CATEGORIES[id]) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
-  LIVE_CATEGORIES[id] = label;
-  LIVE_CAT_SORT.push(id);
-  try {
-    await Promise.all([fbApi.setCategories(LIVE_CATEGORIES), fbApi.setCatSort(LIVE_CAT_SORT)]);
-    idEl.value = ''; lblEl.value = '';
-    renderCatModalContent(); renderCatBtns();
-  } catch(e) { errEl.textContent = 'เพิ่มไม่สำเร็จ: ' + e.message; }
-});
-
-document.getElementById('manageCatsBtn').addEventListener('click', openCategoryModal);
-
-// ============================================================
-//  TYPE MANAGER (ประเภทเมนู)
-// ============================================================
-function openTypeModal() {
-  renderTypeModalContent();
-  openModal('typeModal');
-}
-
-function renderTypeModalContent() {
-  const list  = document.getElementById('typeList');
-  const entries = Object.entries(LIVE_TYPES);
-  if (!entries.length) {
-    list.innerHTML = '<div class="dash-empty">ยังไม่มีประเภทเมนู</div>';
-    return;
-  }
-  list.innerHTML = entries.map(([id, label]) => `
-    <div style="display:flex;align-items:center;gap:.5rem;background:var(--white);
-                border:1.5px solid var(--cream-dark);border-radius:8px;padding:.35rem .5rem">
-      <input type="text" class="field-input type-label-input" data-id="${id}" value="${escHtml(label)}"
-             style="flex:1;min-width:0;padding:.35rem .6rem">
-      <button class="btn btn-outline btn-sm type-save-btn" data-id="${id}">💾</button>
-      <button class="btn btn-danger btn-sm type-del-btn" data-id="${id}">🗑</button>
-    </div>`).join('');
-
-  list.querySelectorAll('.type-save-btn').forEach(btn => {
-    btn.onclick = async () => {
-      const id  = btn.dataset.id;
-      const val = list.querySelector(`.type-label-input[data-id="${id}"]`).value.trim();
-      if (!val) return;
-      btn.disabled = true;
-      LIVE_TYPES[id] = val;
-      try {
-        await fbApi.setTypes(LIVE_TYPES);
-        btn.textContent = '✅'; setTimeout(() => { btn.textContent='💾'; btn.disabled=false; }, 1200);
-        if (activePanelId==='menu') renderMenuTable();
-      } catch(e) { alert('แก้ไม่สำเร็จ: ' + e.message); btn.disabled=false; }
-    };
-  });
-
-  list.querySelectorAll('.type-del-btn').forEach(btn => {
-    btn.onclick = async () => {
-      const id = btn.dataset.id;
-      if (!confirm(`ลบประเภท "${LIVE_TYPES[id]}" ?`)) return;
-      delete LIVE_TYPES[id];
-      try {
-        await fbApi.setTypes(LIVE_TYPES);
-        renderTypeModalContent();
-        if (activePanelId==='menu') renderMenuTable();
-      } catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
-    };
-  });
-}
-
-document.getElementById('addTypeBtn').addEventListener('click', async () => {
-  const idEl  = document.getElementById('newTypeId');
-  const lblEl = document.getElementById('newTypeLabel');
-  const errEl = document.getElementById('typeModalError');
-  errEl.textContent = '';
-  let id = idEl.value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
-  const label = lblEl.value.trim();
-  if (!id)    { errEl.textContent = 'id ต้องเป็นตัวอักษร a-z / ตัวเลขเท่านั้น'; return; }
-  if (!label) { errEl.textContent = 'กรุณาใส่ชื่อประเภท'; return; }
-  if (LIVE_TYPES[id]) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
-  LIVE_TYPES[id] = label;
-  try {
-    await fbApi.setTypes(LIVE_TYPES);
-    idEl.value = ''; lblEl.value = '';
-    renderTypeModalContent();
-  } catch(e) { errEl.textContent = 'เพิ่มไม่สำเร็จ: ' + e.message; }
-});
-
-document.getElementById('manageTypesBtn').addEventListener('click', openTypeModal);
 
 // ============================================================
 //  START
