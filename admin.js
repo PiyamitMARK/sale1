@@ -126,13 +126,19 @@ let unsubscribeListener = null;
 
 // ==================== Auth ====================
 function isLoggedIn() {
-  return localStorage.getItem(AUTH_KEY) === 'true';
+  // ตรวจสอบทั้ง sessionStorage และ localStorage
+  return sessionStorage.getItem(AUTH_KEY) === 'true'
+      || localStorage.getItem(AUTH_KEY) === 'true';
 }
 
 function setLoggedIn(value) {
-  value
-    ? localStorage.setItem(AUTH_KEY, 'true')
-    : localStorage.removeItem(AUTH_KEY);
+  if (value) {
+    sessionStorage.setItem(AUTH_KEY, 'true');
+    try { localStorage.setItem(AUTH_KEY, 'true'); } catch (_) {}
+  } else {
+    sessionStorage.removeItem(AUTH_KEY);
+    try { localStorage.removeItem(AUTH_KEY); } catch (_) {}
+  }
 }
 
 function showScreen(screen) {
