@@ -4,7 +4,7 @@
  * เมนูโหลดจาก Firebase (จัดการผ่าน Backoffice)
  */
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, push, update, get, runTransaction, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
@@ -19,7 +19,7 @@ const firebaseConfig = {
   appId:             "1:731609021582:web:42184726ee92575ea8dddf",
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
+const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db   = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
