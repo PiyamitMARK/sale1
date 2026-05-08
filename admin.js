@@ -9,7 +9,7 @@
  *     วิธี generate: เปิด console แล้วรัน hashPassword('รหัสผ่านของคุณ')
  */
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, update, remove, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
@@ -25,7 +25,7 @@ const firebaseConfig = {
   appId:             "1:731609021582:web:42184726ee92575ea8dddf",
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
+const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const db   = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
@@ -125,33 +125,16 @@ let allOrders = [];
 let unsubscribeListener = null;
 
 // ==================== Auth ====================
-const AUTH_EXPIRY_HOURS = 8; // session อยู่ได้กี่ชั่วโมง (ปรับได้)
-
 function isLoggedIn() {
-  // ลอง sessionStorage ก่อน (เร็วกว่า)
-  if (sessionStorage.getItem(AUTH_KEY) === 'true') return true;
-  // ตรวจ localStorage พร้อม expiry
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return false;
-    const { value, expiry } = JSON.parse(raw);
-    if (value === 'true' && Date.now() < expiry) {
-      // sync กลับ sessionStorage เพื่อ tab ปัจจุบัน
-      sessionStorage.setItem(AUTH_KEY, 'true');
-      return true;
-    }
-    localStorage.removeItem(AUTH_KEY); // expired
-  } catch (_) {}
-  return false;
+  // ตรวจสอบทั้ง sessionStorage และ localStorage
+  return sessionStorage.getItem(AUTH_KEY) === 'true'
+      || localStorage.getItem(AUTH_KEY) === 'true';
 }
 
 function setLoggedIn(value) {
   if (value) {
     sessionStorage.setItem(AUTH_KEY, 'true');
-    try {
-      const expiry = Date.now() + AUTH_EXPIRY_HOURS * 60 * 60 * 1000;
-      localStorage.setItem(AUTH_KEY, JSON.stringify({ value: 'true', expiry }));
-    } catch (_) {}
+    try { localStorage.setItem(AUTH_KEY, 'true'); } catch (_) {}
   } else {
     sessionStorage.removeItem(AUTH_KEY);
     try { localStorage.removeItem(AUTH_KEY); } catch (_) {}
