@@ -697,6 +697,7 @@ tr.drag-over td { background:var(--cream-dark) !important; }
           <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
             <button class="btn btn-outline btn-sm" id="manageCatsBtn">🗂 หมวดหมู่</button>
             <button class="btn btn-outline btn-sm" id="manageTypesBtn">🏷 ประเภท</button>
+            <button class="btn btn-outline btn-sm" id="manageToppingsBtn">🧂 Topping</button>
             <button class="btn btn-primary" id="menuAddBtn">＋ เพิ่มเมนู</button>
           </div>
         </div>
@@ -791,6 +792,13 @@ tr.drag-over td { background:var(--cream-dark) !important; }
         </div>
       </div>
       <div id="menuSaveError" style="color:var(--red);font-size:.82rem;min-height:1rem"></div>
+      <!-- Topping Groups -->
+      <div class="field" style="margin-top:.25rem">
+        <label class="field-label">Topping ที่เลือกได้</label>
+        <div id="menuToppingCheckboxes" style="display:flex;flex-direction:column;gap:.35rem;max-height:180px;overflow-y:auto;padding:.5rem .6rem;border:2px solid var(--cream-dark);border-radius:var(--radius-sm);background:var(--cream)">
+          <span style="font-size:.8rem;color:var(--brown-light)">ยังไม่มี Topping</span>
+        </div>
+      </div>
     </div>
     <div class="bo-modal-footer">
       <button class="btn btn-outline" data-close="menuModal">ยกเลิก</button>
@@ -854,6 +862,33 @@ tr.drag-over td { background:var(--cream-dark) !important; }
   </div>
 </div>
 
+<!-- ============ MODAL: จัดการ Topping ============ -->
+<div class="bo-modal" id="toppingModal">
+  <div class="bo-modal-box" style="max-width:520px">
+    <div class="bo-modal-header">
+      <span class="bo-modal-title">🧂 จัดการ Topping</span>
+      <button class="bo-modal-close" data-close="toppingModal">✕</button>
+    </div>
+    <div class="bo-modal-body">
+      <p style="font-size:.8rem;color:var(--brown-light);margin-bottom:.75rem">กำหนด topping ที่ลูกค้าเลือกเพิ่มได้ พร้อมราคา (+฿)</p>
+      <div id="toppingList" style="display:flex;flex-direction:column;gap:.45rem;margin-bottom:1rem"></div>
+      <div style="border-top:1.5px dashed var(--cream-dark);padding-top:.85rem;display:flex;flex-direction:column;gap:.5rem">
+        <p style="font-size:.82rem;font-weight:700;color:var(--brown-mid)">＋ เพิ่ม Topping ใหม่</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+          <input type="text"   class="field-input" id="newToppingId"    placeholder="id (a-z เช่น egg)"       style="flex:1;min-width:100px">
+          <input type="text"   class="field-input" id="newToppingLabel" placeholder="ชื่อ เช่น 🥚 ไข่ดาว"    style="flex:1;min-width:120px">
+          <input type="number" class="field-input" id="newToppingPrice" placeholder="ราคา (฿)" min="0" step="0.5" style="width:110px">
+          <button class="btn btn-primary btn-sm" id="addToppingBtn" style="align-self:flex-end">＋ เพิ่ม</button>
+        </div>
+        <p id="toppingModalError" style="color:var(--red);font-size:.82rem;min-height:1rem"></p>
+      </div>
+    </div>
+    <div class="bo-modal-footer">
+      <button class="btn btn-outline" data-close="toppingModal">ปิด</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 // ============================================================
 //  CONFIG
@@ -908,6 +943,10 @@ const fbApi = {
   // Types — เก็บใน Firebase path: meta/menuTypes  { id: label }
   getTypes:    () => get(ref(fbDb, 'meta/menuTypes')).then(s => s.exists() ? s.val() : {}),
   setTypes:    (obj) => set(ref(fbDb, 'meta/menuTypes'), obj),
+
+  // Toppings — เก็บใน Firebase path: meta/toppings  { id: { label, price } }
+  getToppings:    () => get(ref(fbDb, 'meta/toppings')).then(s => s.exists() ? s.val() : {}),
+  setToppings:    (obj) => set(ref(fbDb, 'meta/toppings'), obj),
 };
 
 // ============================================================
@@ -918,6 +957,7 @@ let LIVE_MENU   = {};       // { id: menuItem } จาก Firebase
 let LIVE_CATEGORIES = { pad:'🥘 ผัด', khao:'🍚 ข้าว', tom:'🍲 ต้ม/แกง', nam:'🥤 เครื่องดื่ม' };
 let LIVE_CAT_SORT   = [];   // ['pad','khao',...]  ลำดับหมวด
 let LIVE_TYPES      = {};   // { id: label } ประเภทเมนู
+let LIVE_TOPPINGS   = {};   // { id: { label, price } } topping
 let activePanelId  = 'dashboard';
 let tsLoaded = false, histLoaded = false, menuLoaded = false;
 let histFiltered = [], histPage = 1;
@@ -1031,12 +1071,13 @@ document.querySelectorAll('.bo-modal').forEach(m => {
 async function initData() {
   setSyncStatus('loading', '⏳ กำลังเชื่อมต่อ…');
 
-  const [fbOrdersRes, fbMenuRes, fbCatRes, fbCatSortRes, fbTypesRes] = await Promise.allSettled([
+  const [fbOrdersRes, fbMenuRes, fbCatRes, fbCatSortRes, fbTypesRes, fbToppingsRes] = await Promise.allSettled([
     fbApi.getOrders(),
     fbApi.getMenu(),
     fbApi.getCategories(),
     fbApi.getCatSort(),
     fbApi.getTypes(),
+    fbApi.getToppings(),
   ]);
 
   if (fbOrdersRes.status === 'fulfilled') {
@@ -1060,6 +1101,10 @@ async function initData() {
 
   if (fbTypesRes.status === 'fulfilled') {
     LIVE_TYPES = fbTypesRes.value;
+  }
+
+  if (fbToppingsRes.status === 'fulfilled') {
+    LIVE_TOPPINGS = fbToppingsRes.value;
   }
 
   setSyncStatus('ok', '✅ เชื่อมต่อสำเร็จ');
@@ -1094,6 +1139,11 @@ async function initData() {
   onValue(ref(fbDb, 'meta/menuTypes'), snap => {
     LIVE_TYPES = snap.exists() ? snap.val() : {};
     if (activePanelId === 'menu' && menuLoaded) renderMenuTable();
+  });
+
+  // Realtime: toppings
+  onValue(ref(fbDb, 'meta/toppings'), snap => {
+    LIVE_TOPPINGS = snap.exists() ? snap.val() : {};
   });
 }
 
@@ -1622,6 +1672,7 @@ function renderMenuTable() {
           ${escHtml(m.name)}
           ${hasPromo ? `<span class="promo-badge">${escHtml(m.promo.label||'โปร')}</span>` : ''}
           ${typeLabel ? `<span class="type-chip">${escHtml(typeLabel)}</span>` : ''}
+          ${(m.toppings && m.toppings.length) ? `<span class="type-chip" style="background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7">🧂 ${m.toppings.length}</span>` : ''}
         </td>
         <td><span class="cat-chip">${escHtml(catLabel)}</span></td>
         <td style="text-align:right">
@@ -1726,7 +1777,26 @@ function rebuildTypeSelect(currentVal) {
   if (currentVal) sel.value = currentVal;
 }
 
-function clearMenuModal() {
+function rebuildToppingCheckboxes(selectedIds = []) {
+  const wrap = document.getElementById('menuToppingCheckboxes');
+  if (!wrap) return;
+  const entries = Object.entries(LIVE_TOPPINGS);
+  if (!entries.length) {
+    wrap.innerHTML = '<span style="font-size:.8rem;color:var(--brown-light)">ยังไม่มี Topping — กด 🧂 Topping เพื่อเพิ่ม</span>';
+    return;
+  }
+  wrap.innerHTML = entries.map(([id, t]) => `
+    <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.88rem">
+      <input type="checkbox" class="topping-chk" value="${id}" ${selectedIds.includes(id) ? 'checked' : ''}
+             style="accent-color:var(--accent);width:15px;height:15px">
+      <span>${escHtml(t.label)}</span>
+      ${Number(t.price) > 0 ? `<span style="font-size:.78rem;color:var(--accent);font-weight:700">+฿${Number(t.price).toLocaleString('th-TH')}</span>` : '<span style="font-size:.78rem;color:var(--brown-light)">ฟรี</span>'}
+    </label>`).join('');
+}
+
+function getSelectedToppingIds() {
+  return [...document.querySelectorAll('.topping-chk:checked')].map(c => c.value);
+}
   editingMenuId = null;
   document.getElementById('menuModalTitle').textContent = '＋ เพิ่มเมนู';
   ['menuName','menuDesc','menuImgUrl'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
@@ -1736,6 +1806,7 @@ function clearMenuModal() {
   document.getElementById('menuSaveError').textContent = '';
   rebuildCategorySelect(orderedCatEntries()[0]?.[0] || '');
   rebuildTypeSelect('');
+  rebuildToppingCheckboxes([]);
 }
 
 function openMenuModal(id = null) {
@@ -1752,6 +1823,7 @@ function openMenuModal(id = null) {
     document.getElementById('menuImgUrl').value    = m.imageUrl || '';
     rebuildCategorySelect(m.category);
     rebuildTypeSelect(m.menuType || '');
+    rebuildToppingCheckboxes(m.toppings || []);
     if (m.promo?.enabled) {
       document.getElementById('menuPromoEnabled').checked       = true;
       document.getElementById('menuPromoFields').style.display = 'grid';
@@ -1785,6 +1857,7 @@ document.getElementById('menuSaveBtn').addEventListener('click', async () => {
     name, price,
     category:  document.getElementById('menuCategory').value,
     menuType:  typeVal,
+    toppings:  getSelectedToppingIds(),
     desc:      document.getElementById('menuDesc').value.trim(),
     imageUrl:  document.getElementById('menuImgUrl').value.trim(),
     sortOrder: parseInt(document.getElementById('menuSortOrder').value) || Object.keys(LIVE_MENU).length + 1,
@@ -1986,6 +2059,82 @@ document.getElementById('addTypeBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('manageTypesBtn').addEventListener('click', openTypeModal);
+
+// ============================================================
+//  TOPPING MANAGER
+// ============================================================
+function openToppingModal() {
+  renderToppingModalContent();
+  openModal('toppingModal');
+}
+
+function renderToppingModalContent() {
+  const list    = document.getElementById('toppingList');
+  const entries = Object.entries(LIVE_TOPPINGS);
+  if (!entries.length) {
+    list.innerHTML = '<div class="dash-empty">ยังไม่มี Topping</div>';
+    return;
+  }
+  list.innerHTML = entries.map(([id, t]) => `
+    <div style="display:flex;align-items:center;gap:.5rem;background:var(--white);
+                border:1.5px solid var(--cream-dark);border-radius:8px;padding:.35rem .5rem">
+      <input type="text" class="field-input topping-label-input" data-id="${id}" value="${escHtml(t.label)}"
+             style="flex:1;min-width:0;padding:.35rem .6rem">
+      <input type="number" class="field-input topping-price-input" data-id="${id}" value="${t.price ?? 0}"
+             min="0" step="0.5" placeholder="฿" style="width:90px;padding:.35rem .5rem">
+      <button class="btn btn-outline btn-sm topping-save-btn" data-id="${id}">💾</button>
+      <button class="btn btn-danger  btn-sm topping-del-btn"  data-id="${id}">🗑</button>
+    </div>`).join('');
+
+  list.querySelectorAll('.topping-save-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const id    = btn.dataset.id;
+      const label = list.querySelector(`.topping-label-input[data-id="${id}"]`).value.trim();
+      const price = parseFloat(list.querySelector(`.topping-price-input[data-id="${id}"]`).value) || 0;
+      if (!label) return;
+      btn.disabled = true;
+      LIVE_TOPPINGS[id] = { label, price };
+      try {
+        await fbApi.setToppings(LIVE_TOPPINGS);
+        btn.textContent = '✅'; setTimeout(() => { btn.textContent='💾'; btn.disabled=false; }, 1200);
+      } catch(e) { alert('แก้ไม่สำเร็จ: ' + e.message); btn.disabled=false; }
+    };
+  });
+
+  list.querySelectorAll('.topping-del-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      if (!confirm(`ลบ topping "${LIVE_TOPPINGS[id]?.label}" ?`)) return;
+      delete LIVE_TOPPINGS[id];
+      try {
+        await fbApi.setToppings(LIVE_TOPPINGS);
+        renderToppingModalContent();
+      } catch(e) { alert('ลบไม่สำเร็จ: ' + e.message); }
+    };
+  });
+}
+
+document.getElementById('addToppingBtn').addEventListener('click', async () => {
+  const idEl    = document.getElementById('newToppingId');
+  const lblEl   = document.getElementById('newToppingLabel');
+  const priceEl = document.getElementById('newToppingPrice');
+  const errEl   = document.getElementById('toppingModalError');
+  errEl.textContent = '';
+  let id = idEl.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const label = lblEl.value.trim();
+  const price = parseFloat(priceEl.value) || 0;
+  if (!id)    { errEl.textContent = 'id ต้องเป็นตัวอักษร a-z / ตัวเลขเท่านั้น'; return; }
+  if (!label) { errEl.textContent = 'กรุณาใส่ชื่อ Topping'; return; }
+  if (LIVE_TOPPINGS[id]) { errEl.textContent = `id "${id}" มีอยู่แล้ว`; return; }
+  LIVE_TOPPINGS[id] = { label, price };
+  try {
+    await fbApi.setToppings(LIVE_TOPPINGS);
+    idEl.value = ''; lblEl.value = ''; priceEl.value = '';
+    renderToppingModalContent();
+  } catch(e) { errEl.textContent = 'เพิ่มไม่สำเร็จ: ' + e.message; }
+});
+
+document.getElementById('manageToppingsBtn').addEventListener('click', openToppingModal);
 
 // ============================================================
 //  START
