@@ -1797,6 +1797,8 @@ function rebuildToppingCheckboxes(selectedIds = []) {
 function getSelectedToppingIds() {
   return [...document.querySelectorAll('.topping-chk:checked')].map(c => c.value);
 }
+
+function clearMenuModal() {
   editingMenuId = null;
   document.getElementById('menuModalTitle').textContent = '＋ เพิ่มเมนู';
   ['menuName','menuDesc','menuImgUrl'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
