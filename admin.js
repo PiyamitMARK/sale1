@@ -126,13 +126,13 @@ let unsubscribeListener = null;
 
 // ==================== Auth ====================
 function isLoggedIn() {
-  return sessionStorage.getItem(AUTH_KEY) === 'true';
+  return localStorage.getItem(AUTH_KEY) === 'true';
 }
 
 function setLoggedIn(value) {
   value
-    ? sessionStorage.setItem(AUTH_KEY, 'true')
-    : sessionStorage.removeItem(AUTH_KEY);
+    ? localStorage.setItem(AUTH_KEY, 'true')
+    : localStorage.removeItem(AUTH_KEY);
 }
 
 function showScreen(screen) {
