@@ -46,9 +46,7 @@
         <span class="admin-user-chip" id="adminUserChip">Admin</span>
       </div>
       <div class="admin-header-right">
-        <button type="button" class="btn btn-green" id="exportSheetBtn">Export Sheet</button>
         <button type="button" class="btn btn-sound" id="soundToggleBtn" title="เสียงแจ้งเตือน">🔔 เสียงเปิด</button>
-        <button type="button" class="btn btn-outline-danger" id="clearDataBtn">🗑 ล้างข้อมูล</button>
         <a href="backoffice.html" class="btn btn-outline">📊 Backoffice</a>
         <a href="index.html" class="btn btn-outline">POS</a>
         <button type="button" class="btn btn-outline" id="logoutBtn">ออกจากระบบ</button>
@@ -101,45 +99,6 @@
       </div>
 
     </main>
-  </div>
-
-  <!-- =============== MODAL: Export =============== -->
-  <div class="modal" id="exportModal" aria-hidden="true">
-    <div class="modal-box">
-      <h3 class="modal-title">📊 Export ไปยัง Google Sheet</h3>
-      <p class="modal-desc">เลือกช่วงวันที่ที่ต้องการ</p>
-      <div class="export-options">
-        <label class="export-option">
-          <input type="radio" name="exportRange" value="today" checked>
-          <span>วันนี้เท่านั้น</span>
-        </label>
-        <label class="export-option">
-          <input type="radio" name="exportRange" value="month">
-          <span>ย้อนหลัง 30 วัน</span>
-        </label>
-        <label class="export-option">
-          <input type="radio" name="exportRange" value="custom">
-          <span>เลือกช่วงวันเอง</span>
-        </label>
-      </div>
-      <div id="customDateRange" class="date-range hidden">
-        <div class="date-row">
-          <div class="date-field">
-            <label class="field-label" for="dateFrom">จาก</label>
-            <input type="date" id="dateFrom" class="field-input">
-          </div>
-          <div class="date-field">
-            <label class="field-label" for="dateTo">ถึง</label>
-            <input type="date" id="dateTo" class="field-input">
-          </div>
-        </div>
-      </div>
-      <p id="exportStatus" class="export-status" aria-live="polite"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-outline" id="exportCancel">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" id="exportConfirm">📤 ส่งข้อมูล</button>
-      </div>
-    </div>
   </div>
 
   <!-- =============== MODAL: Clear Data =============== -->
