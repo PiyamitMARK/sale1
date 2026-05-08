@@ -1,17 +1,14 @@
 /**
  * ครัวคุณแม่ — POS System
  * Firebase Realtime Database — sync real-time
- *
- * การตั้งค่า Firebase: ใส่ค่าจาก Firebase Console ของคุณด้านล่าง
- * ไม่ควร commit ไฟล์นี้ขึ้น public repository
+ * เมนูโหลดจาก Firebase (จัดการผ่าน Backoffice)
  */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, update, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, update, get, runTransaction, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ==================== Firebase Config ====================
-// ⚠️ เปลี่ยนค่าเหล่านี้เป็น Firebase project ของคุณเอง
 const firebaseConfig = {
   apiKey:            "AIzaSyDa7d8jAUXYGC0XSJ449tM974JFq7JvAm8",
   authDomain:        "sale1-e0cdc.firebaseapp.com",
@@ -26,84 +23,24 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db   = getDatabase(firebaseApp);
 const auth = getAuth(firebaseApp);
 
-// Sign in anonymously so Firebase Security Rules (auth != null) pass
 signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
 
-// ==================== รูปสินค้า ====================
-const IMG = (n) => 'images/img' + n + '.png';
-
-// ==================== เมนูสินค้า (ภาษาไทย) ====================
-const products = {
-
-  // ====== ผัด ======
-  pad: [
-    { id: 'pad1',  name: 'ผัดไวไวหมู',          price: 50,  image: IMG(1001) },
-    { id: 'pad2',  name: 'ผัดไวไวไข่',           price: 50,  image: IMG(1002) },
-    { id: 'pad3',  name: 'ผัดสปาเก็ตตี',          price: 65,  image: IMG(1003) },
-    { id: 'pad4',  name: 'ราดหน้าหมู',            price: 55,  image: IMG(1004) },
-    { id: 'pad5',  name: 'ราดหน้าทะเล',           price: 68,  image: IMG(1005) },
-    { id: 'pad6',  name: 'ไก่ผัดขิง',             price: 50,  image: IMG(1006) },
-    { id: 'pad7',  name: 'ไข่เจียวหมูสับ',         price: 45,  image: IMG(1007) },
-    { id: 'pad8',  name: 'ไข่เจียวกุ้ง',           price: 50,  image: IMG(1008) },
-    { id: 'pad9',  name: 'ไข่ต้ม',                price: 8,   image: IMG(1009) },
-    { id: 'pad10', name: 'ไข่ดาว',               price: 5,   image: IMG(1010) },
-    { id: 'pad11', name: 'ผัดพริกแกงป่าหมู',      price: 75,  image: IMG(1011) },
-    { id: 'pad12', name: 'ผัดพริกแกงป่าไก่',      price: 75,  image: IMG(1012) },
-    { id: 'pad13', name: 'หมูผัดพริกหยวก',        price: 65,  image: IMG(1013) },
-    { id: 'pad14', name: 'เป็ดผัดพริกเกลือ',      price: 75,  image: IMG(1014) },
-    { id: 'pad15', name: 'ไข่ยัดไส้ (จาน)',       price: 65,  image: IMG(1015) },
-    { id: 'pad16', name: 'ไก่สับ (จาน)',          price: 150, image: IMG(1016) },
-    { id: 'pad17', name: 'หมูแดง + หมูกรอบ (จาน)', price: 150, image: IMG(1017) },
-    { id: 'pad18', name: 'เป็ดต้มพะโล้ (จาน)',    price: 150, image: IMG(1018) },
-    { id: 'pad19', name: 'ขาหมูล้วน (จาน)',       price: 150, image: IMG(1019) },
-  ],
-
-  // ====== ข้าว ======
-  khao: [
-    { id: 'khao1',  name: 'ข้าวขาหมู',            price: 50, image: IMG(1020) },
-    { id: 'khao2',  name: 'ข้าวมันไก่ต้ม',         price: 50, image: IMG(1021) },
-    { id: 'khao3',  name: 'ข้าวกระเพราหมูสับ',     price: 50, image: IMG(1022) },
-    { id: 'khao4',  name: 'ข้าวผัดกุ้ง',           price: 50, image: IMG(1023) },
-    { id: 'khao5',  name: 'ข้าวผัดหมู',            price: 50, image: IMG(1024) },
-    { id: 'khao6',  name: 'ข้าวหมูแดง',            price: 50, image: IMG(1025) },
-    { id: 'khao7',  name: 'ข้าวหน้าเป็ด',          price: 50, image: IMG(1026) },
-    { id: 'khao8',  name: 'ข้าวกระเพราหมูกรอบ',   price: 50, image: IMG(1027) },
-    { id: 'khao9',  name: 'ข้าวกระเพราเป็ด',       price: 50, image: IMG(1041) },
-    { id: 'khao10', name: 'ข้าวไข่เจียวหมูสับ',    price: 50, image: IMG(1028) },
-    { id: 'khao11', name: 'ข้าวหน้าไก่',           price: 50, image: IMG(1029) },
-    { id: 'khao12', name: 'ข้าวมันขาหมู',          price: 50, image: IMG(1030) },
-    { id: 'khao13', name: 'ข้าวมันหน้าเป็ด',       price: 50, image: IMG(1031) },
-    { id: 'khao14', name: 'ข้าวกระเพรากุ้ง',       price: 50, image: IMG(1032) },
-    { id: 'khao15', name: 'ข้าวเปล่า',             price: 15, image: IMG(1033) },
-  ],
-
-  // ====== ต้ม / แกง ======
-  tom: [
-    { id: 'tom1', name: 'ต้มยำกุ้ง',                      price: 102, image: IMG(1034) },
-    { id: 'tom2', name: 'ต้มข่าไก่ใส่กะทิ',               price: 68,  image: IMG(1035) },
-    { id: 'tom3', name: 'ต้มจืดสาหร่ายเต้าหู้หมูสับ',     price: 50,  image: IMG(1036) },
-  ],
-
-  // ====== เครื่องดื่ม ======
-  nam: [
-    { id: 'water',  name: 'น้ำเปล่า',   price: 5,  image: IMG(1037) },
-    { id: 'pepsi',  name: 'เป็ปซี่',    price: 10, image: IMG(1038) },
-    { id: 'fanta',  name: 'แฟนต้า',     price: 10, image: IMG(1039) },
-    { id: 'sprite', name: 'สไปร์ท',    price: 10, image: IMG(1040) },
-  ],
-};
-
 // ==================== State ====================
+let LIVE_MENU       = {};   // { id: { name, price, category, image, available } }
+let LIVE_CATEGORIES = { pad: '🥘 ผัด', khao: '🍚 ข้าว', tom: '🍲 ต้ม/แกง', nam: '🥤 เครื่องดื่ม' };
+let LIVE_CAT_SORT   = [];   // ['pad','khao',...]
+let LIVE_TOPPINGS   = {};   // { id: { label, price } }
+
 let cart = [];
 let orderNumber = 1001;
-let currentCategory = 'pad';
+let currentCategory = '';
 let selectedTable = null;
 
 // ==================== DOM ====================
 const currentDateEl    = document.getElementById('currentDate');
 const orderNumberEl    = document.getElementById('orderNumber');
 const tableChipEl      = document.getElementById('tableChip');
-const categoryBtns     = document.querySelectorAll('.category-btn');
+const categoriesNav    = document.querySelector('.categories');
 const productsGrid     = document.getElementById('productsGrid');
 const productsOverlay  = document.getElementById('productsOverlay');
 const cartItemsEl      = document.getElementById('cartItems');
@@ -137,14 +74,23 @@ function setDate() {
   });
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function escapeAttr(str) {
+  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ==================== Table Selection ====================
 function selectTable(tableNum) {
   selectedTable = tableNum;
-
   document.querySelectorAll('.table-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.table === String(tableNum));
   });
-
   productsOverlay.classList.add('hidden');
   tableChipEl.textContent = ` · โต๊ะ ${tableNum}`;
   renderProducts();
@@ -154,13 +100,59 @@ document.querySelectorAll('.table-btn').forEach(btn => {
   btn.addEventListener('click', () => selectTable(parseInt(btn.dataset.table)));
 });
 
+// ==================== Category Tabs (dynamic) ====================
+function getCatOrder() {
+  const allCats = Object.keys(LIVE_CATEGORIES);
+  if (LIVE_CAT_SORT && LIVE_CAT_SORT.length > 0) {
+    const sorted = LIVE_CAT_SORT.filter(id => allCats.includes(id));
+    const rest   = allCats.filter(id => !sorted.includes(id));
+    return [...sorted, ...rest];
+  }
+  return allCats;
+}
+
+function renderCategoryTabs() {
+  const order = getCatOrder();
+  if (!currentCategory || !LIVE_CATEGORIES[currentCategory]) {
+    currentCategory = order[0] || '';
+  }
+
+  categoriesNav.innerHTML = order.map((id) => {
+    const label = LIVE_CATEGORIES[id] || id;
+    return `<button class="category-btn${id === currentCategory ? ' active' : ''}" data-category="${id}">${escapeHtml(label)}</button>`;
+  }).join('');
+
+  categoriesNav.querySelectorAll('.category-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      categoriesNav.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategory = btn.dataset.category;
+      renderProducts();
+    });
+  });
+}
+
 // ==================== Products ====================
+function getMenuForCategory(catId) {
+  return Object.entries(LIVE_MENU)
+    .filter(([, m]) => m.category === catId && m.available !== false)
+    .map(([id, m]) => ({ id, ...m }))
+    .sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999) || a.name.localeCompare(b.name, 'th'));
+}
+
 function renderProducts() {
-  productsGrid.innerHTML = (products[currentCategory] || []).map((p) => `
+  const items = getMenuForCategory(currentCategory);
+
+  if (items.length === 0) {
+    productsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--text-muted,#999);padding:2rem">ไม่มีเมนูในหมวดนี้</p>';
+    return;
+  }
+
+  productsGrid.innerHTML = items.map((p) => `
     <button type="button" class="product-card"
-      data-id="${p.id}" data-name="${escapeAttr(p.name)}"
-      data-price="${p.price}" data-image="${escapeAttr(p.image)}">
-      <img class="product-img" src="${p.image}" alt="${escapeAttr(p.name)}" loading="lazy"
+      data-id="${escapeAttr(p.id)}" data-name="${escapeAttr(p.name)}"
+      data-price="${p.price}" data-image="${escapeAttr(p.image || '')}">
+      <img class="product-img" src="${escapeAttr(p.image || '')}" alt="${escapeAttr(p.name)}" loading="lazy"
            onerror="this.style.display='none'">
       <p class="product-name">${escapeHtml(p.name)}</p>
       <p class="product-price">${formatMoney(p.price)}</p>
@@ -175,93 +167,35 @@ function renderProducts() {
   });
 }
 
-// ==================== XSS helpers ====================
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-function escapeAttr(str) {
-  return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
 // ==================== Option Modal ====================
 const optionModal       = document.getElementById('optionModal');
-const optionModalTitle  = document.getElementById('optionModalTitle');
 const optionProductName = document.getElementById('optionProductName');
 const optionNote        = document.getElementById('optionNote');
 const optionCancel      = document.getElementById('optionCancel');
 const optionConfirm     = document.getElementById('optionConfirm');
 
-let pendingProduct = null; // product dataset waiting for options
+let pendingProduct = null;
 
-// ==================== Category Options Config ====================
-const CATEGORY_OPTIONS = {
-  pad: {
-    spice: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
-    toppings: [
-      { label: 'เพิ่มไข่ดาว +฿5',  price: 5 },
-      { label: 'เพิ่มไข่ต้ม +฿8',  price: 8 },
-      { label: 'เพิ่มหมู',          price: 0 },
-      { label: 'เพิ่มกุ้ง',         price: 0 },
-      { label: 'ไม่ใส่ผัก',         price: 0 },
-      { label: 'ราดข้าว',           price: 0 },
-      { label: 'พิเศษ',             price: 0 },
-    ],
-  },
-  khao: {
-    spice: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
-    toppings: [
-      { label: 'เพิ่มไข่ดาว +฿5',  price: 5 },
-      { label: 'เพิ่มไข่ต้ม +฿8',  price: 8 },
-      { label: 'เพิ่มหมูกรอบ',      price: 0 },
-      { label: 'ไม่ใส่ผัก',         price: 0 },
-      { label: 'ไม่ใส่น้ำจิ้ม',     price: 0 },
-      { label: 'พิเศษ',             price: 0 },
-    ],
-  },
-  tom: {
-    spice: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
-    toppings: [
-      { label: 'เพิ่มเต้าหู้',      price: 0 },
-      { label: 'เพิ่มเห็ด',         price: 0 },
-      { label: 'เพิ่มกุ้ง',         price: 0 },
-      { label: 'ไม่ใส่ผักชี',       price: 0 },
-      { label: 'พิเศษ',             price: 0 },
-    ],
-  },
-  nam: {
-    spice: [],
-    toppings: [
-      { label: 'ไม่เอาน้ำแข็ง',    price: 0 },
-      { label: 'น้ำแข็งน้อย',       price: 0 },
-      { label: 'หวานน้อย',          price: 0 },
-    ],
-  },
+// spice options ตามหมวด (คงเดิม — ปรับได้ภายหลัง)
+const SPICE_BY_CATEGORY = {
+  pad:  ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
+  khao: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
+  tom:  ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
 };
 
-function getCategoryFromId(productId) {
-  if (productId.startsWith('pad'))   return 'pad';
-  if (productId.startsWith('khao'))  return 'khao';
-  if (productId.startsWith('tom'))   return 'tom';
-  return 'nam';
-}
-
 function renderOptionModal(category) {
-  const config = CATEGORY_OPTIONS[category] || CATEGORY_OPTIONS.pad;
   const spiceGroup   = document.getElementById('spiceGroup');
   const toppingGroup = document.getElementById('toppingGroup');
   const spiceSection = document.getElementById('spiceSection');
 
-  // Spice pills
-  if (config.spice.length === 0) {
+  // Spice
+  const spiceList = SPICE_BY_CATEGORY[category] || [];
+  if (spiceList.length === 0) {
     spiceSection.style.display = 'none';
   } else {
     spiceSection.style.display = '';
-    spiceGroup.innerHTML = config.spice.map((s, i) =>
-      `<button type="button" class="option-pill${i === 0 ? ' active' : ''}" data-group="spice" data-value="${i === 0 ? '' : s}">${s}</button>`
+    spiceGroup.innerHTML = spiceList.map((s, i) =>
+      `<button type="button" class="option-pill${i === 0 ? ' active' : ''}" data-group="spice" data-value="${i === 0 ? '' : escapeAttr(s)}">${escapeHtml(s)}</button>`
     ).join('');
     spiceGroup.querySelectorAll('.option-pill').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -271,13 +205,21 @@ function renderOptionModal(category) {
     });
   }
 
-  // Topping pills
-  toppingGroup.innerHTML = config.toppings.map(t =>
-    `<button type="button" class="option-pill toggle" data-group="topping" data-value="${escapeAttr(t.label)}" data-price="${t.price}">${escapeHtml(t.label)}</button>`
-  ).join('');
-  toppingGroup.querySelectorAll('.option-pill.toggle').forEach(btn => {
-    btn.addEventListener('click', () => btn.classList.toggle('active'));
-  });
+  // Toppings — ดึงจาก Firebase (LIVE_TOPPINGS)
+  const toppingEntries = Object.entries(LIVE_TOPPINGS);
+  if (toppingEntries.length === 0) {
+    toppingGroup.innerHTML = '<p style="font-size:.82rem;color:#999">ไม่มี topping</p>';
+  } else {
+    toppingGroup.innerHTML = toppingEntries.map(([, t]) => {
+      const label = t.label || t;
+      const price = t.price || 0;
+      const display = price > 0 ? `${label} +฿${price}` : label;
+      return `<button type="button" class="option-pill toggle" data-group="topping" data-value="${escapeAttr(label)}" data-price="${price}">${escapeHtml(display)}</button>`;
+    }).join('');
+    toppingGroup.querySelectorAll('.option-pill.toggle').forEach(btn => {
+      btn.addEventListener('click', () => btn.classList.toggle('active'));
+    });
+  }
 }
 
 function openOptionModal(dataset) {
@@ -285,7 +227,9 @@ function openOptionModal(dataset) {
   optionProductName.textContent = dataset.name;
   optionNote.value = '';
 
-  const category = getCategoryFromId(dataset.id);
+  // หาหมวดของสินค้าจาก LIVE_MENU
+  const menuItem = LIVE_MENU[dataset.id];
+  const category = menuItem?.category || currentCategory;
   renderOptionModal(category);
 
   optionModal.setAttribute('aria-hidden', 'false');
@@ -306,14 +250,12 @@ optionConfirm.addEventListener('click', () => {
   const toppings = [...document.querySelectorAll('#toppingGroup .option-pill.toggle.active')];
   const note     = optionNote.value.trim();
 
-  // Build option label
   const optionParts = [];
   if (spice) optionParts.push(spice);
   toppings.forEach(t => optionParts.push(t.dataset.value));
   if (note) optionParts.push(note);
   const optionLabel = optionParts.join(' · ');
 
-  // Extra price from toppings
   const extraPrice = toppings.reduce((sum, t) => sum + (parseFloat(t.dataset.price) || 0), 0);
 
   addToCart(pendingProduct, optionLabel, extraPrice);
@@ -323,7 +265,6 @@ optionConfirm.addEventListener('click', () => {
 // ==================== Cart ====================
 function addToCart({ id, name, price, image }, optionLabel = '', extraPrice = 0) {
   const basePrice = parseFloat(price) + extraPrice;
-  // Use id + optionLabel as unique cart key so same item with diff options is separate
   const cartKey = id + '|' + optionLabel;
   const existing = cart.find(i => i.cartKey === cartKey);
   if (existing) {
@@ -414,6 +355,66 @@ function clearCart() {
   localStorage.removeItem('krua-cart');
   cart = [];
   renderCart();
+}
+
+// ==================== Firebase: Load Menu ====================
+async function loadMenuFromFirebase() {
+  try {
+    const [menuSnap, catSnap, catSortSnap, toppingsSnap] = await Promise.all([
+      get(ref(db, 'menu')),
+      get(ref(db, 'meta/categories')),
+      get(ref(db, 'meta/categoriesSort')),
+      get(ref(db, 'meta/toppings')),
+    ]);
+
+    if (menuSnap.exists()) {
+      LIVE_MENU = menuSnap.val();
+    }
+    if (catSnap.exists() && Object.keys(catSnap.val()).length > 0) {
+      LIVE_CATEGORIES = catSnap.val();
+    }
+    if (catSortSnap.exists() && Array.isArray(catSortSnap.val())) {
+      LIVE_CAT_SORT = catSortSnap.val();
+    }
+    if (toppingsSnap.exists()) {
+      LIVE_TOPPINGS = toppingsSnap.val();
+    }
+  } catch (err) {
+    console.error('loadMenuFromFirebase error:', err);
+  }
+
+  renderCategoryTabs();
+  renderProducts();
+
+  // Realtime sync: menu
+  onValue(ref(db, 'menu'), snap => {
+    LIVE_MENU = snap.exists() ? snap.val() : {};
+    renderCategoryTabs();
+    renderProducts();
+  });
+
+  // Realtime sync: categories
+  onValue(ref(db, 'meta/categories'), snap => {
+    if (snap.exists() && Object.keys(snap.val()).length > 0) {
+      LIVE_CATEGORIES = snap.val();
+    }
+    renderCategoryTabs();
+    renderProducts();
+  });
+
+  // Realtime sync: category sort
+  onValue(ref(db, 'meta/categoriesSort'), snap => {
+    if (snap.exists() && Array.isArray(snap.val())) {
+      LIVE_CAT_SORT = snap.val();
+    }
+    renderCategoryTabs();
+    renderProducts();
+  });
+
+  // Realtime sync: toppings
+  onValue(ref(db, 'meta/toppings'), snap => {
+    LIVE_TOPPINGS = snap.exists() ? snap.val() : {};
+  });
 }
 
 // ==================== Firebase: Order Number ====================
@@ -528,15 +529,6 @@ async function startNewOrder() {
 }
 
 // ==================== Event Listeners ====================
-categoryBtns.forEach((btn) => {
-  btn.addEventListener('click', () => {
-    categoryBtns.forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentCategory = btn.dataset.category;
-    renderProducts();
-  });
-});
-
 clearCartBtn.addEventListener('click', clearCart);
 
 completeOrderBtn.addEventListener('click', () => {
@@ -610,7 +602,6 @@ function closeCartOnMobile() { if (isMobile()) closeCart(); }
 
 cartBackdrop.addEventListener('click', () => closeCart());
 
-// Drag
 let dragStartY     = 0;
 let dragStartOffset = 0;
 let isDragging     = false;
@@ -683,6 +674,6 @@ window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0
 // ==================== Init ====================
 setDate();
 loadCartFromLocal();
-renderProducts();
-renderCart();
 loadOrderNumber();
+loadMenuFromFirebase();   // โหลดเมนูจาก Firebase (แทน hardcode)
+renderCart();
