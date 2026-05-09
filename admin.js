@@ -481,8 +481,14 @@ function openEditOrderModal(firebaseKey, order) {
   editOrderData      = JSON.parse(JSON.stringify(order));  // deep copy
   editCatActive      = 'all';
   editOrderTitle.textContent = `แก้ไขออเดอร์ #${order.orderNumber} · โต๊ะ ${order.table || '-'}`;
+
+  // รีเซ็ต toggle — ซ่อนกริดเมนูก่อนเสมอ
+  const menuContainer  = document.getElementById('editAddMenuContainer');
+  const toggleBtn      = document.getElementById('toggleAddMenuBtn');
+  if (menuContainer) menuContainer.classList.add('hidden');
+  if (toggleBtn)     { toggleBtn.textContent = '➕ เพิ่มเมนู'; toggleBtn.classList.remove('active'); }
+
   renderEditOrderItems();
-  renderEditAddMenu();
   editOrderModal.setAttribute('aria-hidden', 'false');
 }
 
@@ -596,13 +602,33 @@ function renderEditAddMenu() {
         editOrderData.items.push({ name, price, qty: 1 });
       }
       renderEditOrderItems();
-      renderEditAddMenu();
+      renderEditAddMenu();   // อัพ badge โดยไม่ซ่อน container
     });
   });
 }
 
 if (editOrderCancel) editOrderCancel.addEventListener('click', closeEditOrderModal);
 if (editOrderModal)  editOrderModal.addEventListener('click', (e) => { if (e.target === editOrderModal) closeEditOrderModal(); });
+
+// Toggle เพิ่มเมนู
+const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
+if (toggleAddMenuBtn) {
+  toggleAddMenuBtn.addEventListener('click', () => {
+    const menuContainer = document.getElementById('editAddMenuContainer');
+    if (!menuContainer) return;
+    const isHidden = menuContainer.classList.toggle('hidden');
+    if (!isHidden) {
+      // เพิ่งเปิด — render และเลื่อน scroll ลงมา
+      renderEditAddMenu();
+      toggleAddMenuBtn.textContent = '✕ ปิดเมนู';
+      toggleAddMenuBtn.classList.add('active');
+      setTimeout(() => menuContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    } else {
+      toggleAddMenuBtn.textContent = '➕ เพิ่มเมนู';
+      toggleAddMenuBtn.classList.remove('active');
+    }
+  });
+}
 
 if (editOrderSave) {
   editOrderSave.addEventListener('click', async () => {
