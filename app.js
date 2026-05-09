@@ -1,35 +1,19 @@
 /**
  * ครัวคุณแม่ — POS System
- * Firebase Realtime Database — sync real-time
- * เมนูโหลดจาก Firebase (จัดการผ่าน Backoffice)
+ * Cloudflare D1 (ผ่าน Worker API) — แทนที่ Firebase Realtime Database
  */
 
-import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, update, get, runTransaction, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-
-// ==================== Firebase Config ====================
-const firebaseConfig = {
-  apiKey:            "AIzaSyDa7d8jAUXYGC0XSJ449tM974JFq7JvAm8",
-  authDomain:        "sale1-e0cdc.firebaseapp.com",
-  databaseURL:       "https://sale1-e0cdc-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "sale1-e0cdc",
-  storageBucket:     "sale1-e0cdc.firebasestorage.app",
-  messagingSenderId: "731609021582",
-  appId:             "1:731609021582:web:42184726ee92575ea8dddf",
-};
-
-const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const db   = getDatabase(firebaseApp);
-const auth = getAuth(firebaseApp);
-
-signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
+// ============================================================
+// ⚙️  CONFIG — เปลี่ยน URL ให้ตรงกับ Worker ของคุณ
+// ============================================================
+const API_BASE = 'https://krua-khun-mae-api.YOUR_SUBDOMAIN.workers.dev';
+// ถ้าใช้ Custom Domain: const API_BASE = 'https://api.krua-khun-mae.com';
 
 // ==================== State ====================
-let LIVE_MENU       = {};   // { id: { name, price, category, image, available } }
+let LIVE_MENU       = {};
 let LIVE_CATEGORIES = { pad: '🥘 ผัด', khao: '🍚 ข้าว', tom: '🍲 ต้ม/แกง', nam: '🥤 เครื่องดื่ม' };
-let LIVE_CAT_SORT   = [];   // ['pad','khao',...]
-let LIVE_TOPPINGS   = {};   // { id: { label, price } }
+let LIVE_CAT_SORT   = [];
+let LIVE_TOPPINGS   = {};
 
 let cart = [];
 let orderNumber = 1001;
@@ -76,13 +60,21 @@ function setDate() {
 
 function escapeHtml(str) {
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 function escapeAttr(str) {
   return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ==================== API Helpers ====================
+async function apiFetch(path, options = {}) {
+  const res = await fetch(API_BASE + path, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+  });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json();
 }
 
 // ==================== Table Selection ====================
@@ -176,7 +168,6 @@ const optionConfirm     = document.getElementById('optionConfirm');
 
 let pendingProduct = null;
 
-// spice options ตามหมวด (คงเดิม — ปรับได้ภายหลัง)
 const SPICE_BY_CATEGORY = {
   pad:  ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
   khao: ['ปกติ', 'ไม่เผ็ด', 'เผ็ดน้อย', 'เผ็ดมาก', 'เผ็ดพิเศษ'],
@@ -188,7 +179,6 @@ function renderOptionModal(category) {
   const toppingGroup = document.getElementById('toppingGroup');
   const spiceSection = document.getElementById('spiceSection');
 
-  // Spice
   const spiceList = SPICE_BY_CATEGORY[category] || [];
   if (spiceList.length === 0) {
     spiceSection.style.display = 'none';
@@ -205,7 +195,6 @@ function renderOptionModal(category) {
     });
   }
 
-  // Toppings — ดึงจาก Firebase (LIVE_TOPPINGS)
   const toppingEntries = Object.entries(LIVE_TOPPINGS);
   if (toppingEntries.length === 0) {
     toppingGroup.innerHTML = '<p style="font-size:.82rem;color:#999">ไม่มี topping</p>';
@@ -226,12 +215,9 @@ function openOptionModal(dataset) {
   pendingProduct = dataset;
   optionProductName.textContent = dataset.name;
   optionNote.value = '';
-
-  // หาหมวดของสินค้าจาก LIVE_MENU
   const menuItem = LIVE_MENU[dataset.id];
   const category = menuItem?.category || currentCategory;
   renderOptionModal(category);
-
   optionModal.setAttribute('aria-hidden', 'false');
 }
 
@@ -357,103 +343,51 @@ function clearCart() {
   renderCart();
 }
 
-// ==================== Firebase: Load Menu ====================
-async function loadMenuFromFirebase() {
+// ==================== API: Load Menu ====================
+async function loadMenu() {
   try {
-    const [menuSnap, catSnap, catSortSnap, toppingsSnap] = await Promise.all([
-      get(ref(db, 'menu')),
-      get(ref(db, 'meta/categories')),
-      get(ref(db, 'meta/categoriesSort')),
-      get(ref(db, 'meta/toppings')),
+    const [menuData, metaData] = await Promise.all([
+      apiFetch('/api/menu'),
+      apiFetch('/api/meta'),
     ]);
 
-    if (menuSnap.exists()) {
-      LIVE_MENU = menuSnap.val();
+    LIVE_MENU = menuData;
+
+    if (metaData.categories && Object.keys(metaData.categories).length > 0) {
+      LIVE_CATEGORIES = metaData.categories;
     }
-    if (catSnap.exists() && Object.keys(catSnap.val()).length > 0) {
-      LIVE_CATEGORIES = catSnap.val();
+    if (metaData.categoriesSort && Array.isArray(metaData.categoriesSort)) {
+      LIVE_CAT_SORT = metaData.categoriesSort;
     }
-    if (catSortSnap.exists() && Array.isArray(catSortSnap.val())) {
-      LIVE_CAT_SORT = catSortSnap.val();
+    if (metaData.toppings) {
+      LIVE_TOPPINGS = metaData.toppings;
     }
-    if (toppingsSnap.exists()) {
-      LIVE_TOPPINGS = toppingsSnap.val();
+    if (metaData.orderNumber) {
+      orderNumber = metaData.orderNumber;
+      orderNumberEl.textContent = orderNumber;
     }
   } catch (err) {
-    console.error('loadMenuFromFirebase error:', err);
+    console.error('loadMenu error:', err);
   }
 
   renderCategoryTabs();
   renderProducts();
 
-  // Realtime sync: menu
-  onValue(ref(db, 'menu'), snap => {
-    LIVE_MENU = snap.exists() ? snap.val() : {};
-    renderCategoryTabs();
-    renderProducts();
-  });
-
-  // Realtime sync: categories
-  onValue(ref(db, 'meta/categories'), snap => {
-    if (snap.exists() && Object.keys(snap.val()).length > 0) {
-      LIVE_CATEGORIES = snap.val();
-    }
-    renderCategoryTabs();
-    renderProducts();
-  });
-
-  // Realtime sync: category sort
-  onValue(ref(db, 'meta/categoriesSort'), snap => {
-    if (snap.exists() && Array.isArray(snap.val())) {
-      LIVE_CAT_SORT = snap.val();
-    }
-    renderCategoryTabs();
-    renderProducts();
-  });
-
-  // Realtime sync: toppings
-  onValue(ref(db, 'meta/toppings'), snap => {
-    LIVE_TOPPINGS = snap.exists() ? snap.val() : {};
-  });
+  // Poll menu ทุก 30 วินาที (เมนูไม่ได้เปลี่ยนบ่อย)
+  setInterval(async () => {
+    try {
+      const menuData = await apiFetch('/api/menu');
+      LIVE_MENU = menuData;
+      renderProducts();
+    } catch (e) {}
+  }, 30_000);
 }
 
-// ==================== Firebase: Order Number ====================
-async function loadOrderNumber() {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const metaSnap = await get(ref(db, 'meta'));
-    const meta = metaSnap.exists() ? metaSnap.val() : {};
-
-    if (meta.lastOrderDate !== today) {
-      orderNumber = 1001;
-      await update(ref(db, 'meta'), { orderNumber: 1001, lastOrderDate: today });
-    } else {
-      orderNumber = meta.orderNumber || 1001;
-    }
-    orderNumberEl.textContent = orderNumber;
-  } catch (err) {
-    console.error('loadOrderNumber error:', err);
-  }
-}
-
-// ==================== Firebase: Save Order ====================
+// ==================== API: Save Order ====================
 async function saveOrder() {
-  const today = new Date().toISOString().slice(0, 10);
-  let newOrderNumber;
-
-  await runTransaction(ref(db, 'meta'), (meta) => {
-    if (!meta) meta = {};
-    if (meta.lastOrderDate !== today) {
-      meta.orderNumber = 1001;
-      meta.lastOrderDate = today;
-    } else {
-      meta.orderNumber = (meta.orderNumber || 1000) + 1;
-    }
-    newOrderNumber = meta.orderNumber;
-    return meta;
-  });
-
-  orderNumber = newOrderNumber;
+  // ขอ orderNumber จาก server (atomic)
+  const { orderNumber: nextNum } = await apiFetch('/api/order-number', { method: 'POST' });
+  orderNumber = nextNum;
   orderNumberEl.textContent = orderNumber;
 
   const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -461,11 +395,18 @@ async function saveOrder() {
     orderNumber,
     table: selectedTable,
     date: new Date().toISOString(),
-    items: cart.map((i) => ({ name: i.name, price: i.price, qty: i.qty, ...(i.optionLabel ? { option: i.optionLabel } : {}) })),
+    items: cart.map((i) => ({
+      name: i.name, price: i.price, qty: i.qty,
+      ...(i.optionLabel ? { option: i.optionLabel } : {}),
+    })),
     total,
     status: 'pending',
   };
-  await push(ref(db, 'orders'), order);
+
+  await apiFetch('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify(order),
+  });
 }
 
 // ==================== Receipt ====================
@@ -509,16 +450,6 @@ function closeConfirmOrderModal() {
 // ==================== New Order ====================
 async function startNewOrder() {
   localStorage.removeItem('krua-cart');
-  orderNumber += 1;
-  orderNumberEl.textContent = orderNumber;
-  try {
-    await update(ref(db, 'meta'), {
-      orderNumber,
-      lastOrderDate: new Date().toISOString().slice(0, 10),
-    });
-  } catch (err) {
-    console.error('startNewOrder error:', err);
-  }
   cart = [];
   selectedTable = null;
   tableChipEl.textContent = '';
@@ -563,7 +494,7 @@ confirmOrderOk.addEventListener('click', async () => {
   showReceipt();
 });
 
-// ==================== Mobile Cart Toggle + Smooth Drag ====================
+// ==================== Mobile Cart Toggle ====================
 const cartSection = document.querySelector('.cart-section');
 const cartHeader  = document.querySelector('.cart-header');
 
@@ -573,10 +504,7 @@ document.body.appendChild(cartBackdrop);
 
 function isMobile() { return window.innerWidth <= 900; }
 
-let cartH        = 0;
-let closedOffset = 0;
-let currentOffset = 0;
-let isOpen       = false;
+let cartH = 0, closedOffset = 0, currentOffset = 0, isOpen = false;
 
 function getCartMetrics() {
   cartH        = cartSection.offsetHeight;
@@ -587,7 +515,6 @@ function setOffset(offset, animate = false) {
   currentOffset = Math.max(0, Math.min(offset, closedOffset));
   cartSection.style.transition = animate ? 'transform 0.32s cubic-bezier(0.34,1.1,0.64,1)' : 'none';
   cartSection.style.transform  = `translateY(${currentOffset}px)`;
-
   const progress = closedOffset > 0 ? 1 - currentOffset / closedOffset : 0;
   cartBackdrop.style.opacity        = Math.max(0, Math.min(progress * 0.5, 0.5));
   cartBackdrop.style.visibility     = currentOffset < closedOffset ? 'visible' : 'hidden';
@@ -596,36 +523,28 @@ function setOffset(offset, animate = false) {
 
 function openCart(animate = true)  { isOpen = true;  setOffset(0, animate);            cartSection.classList.add('open'); }
 function closeCart(animate = true) { isOpen = false; getCartMetrics(); setOffset(closedOffset, animate); cartSection.classList.remove('open'); }
-
 function openCartOnMobile()  { if (isMobile()) { getCartMetrics(); openCart(); } }
 function closeCartOnMobile() { if (isMobile()) closeCart(); }
 
 cartBackdrop.addEventListener('click', () => closeCart());
 
-let dragStartY     = 0;
-let dragStartOffset = 0;
-let isDragging     = false;
-let rafId          = null;
-let latestY        = 0;
+let dragStartY = 0, dragStartOffset = 0, isDragging = false, rafId = null, latestY = 0;
 
 function onPointerStart(clientY) {
   if (!isMobile()) return;
   getCartMetrics();
-  isDragging      = true;
-  dragStartY      = clientY;
-  dragStartOffset = currentOffset;
+  isDragging = true; dragStartY = clientY; dragStartOffset = currentOffset;
   cartSection.style.transition = 'none';
   document.body.style.overflow = 'hidden';
 }
-
 function onPointerMove(clientY) {
   if (!isDragging) return;
   latestY = clientY;
   if (!rafId) {
     rafId = requestAnimationFrame(() => {
-      const delta     = latestY - dragStartY;
+      const delta = latestY - dragStartY;
       const newOffset = Math.max(0, Math.min(dragStartOffset + delta, closedOffset));
-      currentOffset   = newOffset;
+      currentOffset = newOffset;
       cartSection.style.transform = `translateY(${newOffset}px)`;
       const progress = closedOffset > 0 ? 1 - newOffset / closedOffset : 0;
       cartBackdrop.style.opacity       = Math.max(0, Math.min(progress * 0.5, 0.5));
@@ -635,27 +554,19 @@ function onPointerMove(clientY) {
     });
   }
 }
-
 function onPointerEnd(clientY) {
   if (!isDragging) return;
   isDragging = false;
   document.body.style.overflow = '';
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-
-  const delta    = clientY - dragStartY;
-  const velocity = delta;
-
-  if (velocity > 80 || currentOffset > closedOffset * 0.5) {
-    closeCart(true);
-  } else {
-    openCart(true);
-  }
+  const delta = clientY - dragStartY;
+  if (delta > 80 || currentOffset > closedOffset * 0.5) closeCart(true);
+  else openCart(true);
 }
 
 cartHeader.addEventListener('touchstart', (e) => { onPointerStart(e.touches[0].clientY); }, { passive: true });
 document.addEventListener('touchmove',   (e) => { if (isDragging) onPointerMove(e.touches[0].clientY); }, { passive: true });
 document.addEventListener('touchend',    (e) => { onPointerEnd(e.changedTouches[0].clientY); });
-
 cartHeader.addEventListener('mousedown', (e) => { onPointerStart(e.clientY); e.preventDefault(); });
 document.addEventListener('mousemove',   (e) => { if (isDragging) onPointerMove(e.clientY); });
 document.addEventListener('mouseup',     (e) => { if (isDragging) onPointerEnd(e.clientY); });
@@ -674,6 +585,5 @@ window.addEventListener('resize', () => { getCartMetrics(); setOffset(isOpen ? 0
 // ==================== Init ====================
 setDate();
 loadCartFromLocal();
-loadOrderNumber();
-loadMenuFromFirebase();   // โหลดเมนูจาก Firebase (แทน hardcode)
+loadMenu();
 renderCart();
