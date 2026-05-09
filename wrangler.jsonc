@@ -1,49 +1,43 @@
 {
-	"name": "kaosoi2",
-	"compatibility_date": "2026-05-03",
-	"main": "worker.js",
+  "name": "sale1",
+  "compatibility_date": "2026-05-03",
+  "main": "worker.js",
 	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "kaosoi3-db",
-			"database_id": "3af0f400-c05a-4f0b-8fc0-71ffd1c592ea"
-		},
-		{
-			"binding": "kaosoi3_db",
-			"database_name": "kaosoi3-db",
-			"database_id": "3af0f400-c05a-4f0b-8fc0-71ffd1c592ea",
-			"remote": true
-		}
-	],
-	"kv_namespaces": [
-		{
-			"binding": "KV",
-			"id": "f024484385b14bcab0807febb167b3f4"
-		}
-	],
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "TABLE_ROOM",
-				"class_name": "TableRoom"
-			}
-		]
-	},
-	"migrations": [
-	{ "tag": "v1", "new_sqlite_classes": ["TableRoom"] }
-	],
-	"assets": {
-		"directory": "./",
-		"exclude": [
-			".git",
-			"node_modules",
-			"*.pack",
-			"*.log",
-			"schema.sql",
-			"wrangler.jsonc",
-			"wrangler.toml",
-			"worker.js",
-			"*.assetsignore"
-		]
+	{
+		"binding": "DB",
+		"database_name": "kaosoi3-db",
+		"database_id": "3af0f400-c05a-4f0b-8fc0-71ffd1c592ea"
 	}
+	],
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "f024484385b14bcab0807febb167b3f4"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TABLE_ROOM",
+        "class_name": "TableRoom"
+      }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TableRoom"] }
+  ],
+  "assets": {
+    "directory": "./",
+    "exclude": [
+      ".git",
+      "node_modules",
+      "*.pack",
+      "*.log",
+      "schema.sql",
+      "wrangler.jsonc",
+      "wrangler.toml",
+      "worker.js",
+      "*.assetsignore"
+    ]
+  }
 }
