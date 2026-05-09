@@ -1028,6 +1028,37 @@ body {
   margin-top: 0.25rem;
 }
 
+/* ================================================ TOGGLE ADD MENU BUTTON */
+.btn-toggle-add-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.1rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border: 1.5px dashed var(--cream-dark);
+  border-radius: var(--radius-pill);
+  background: var(--cream);
+  color: var(--brown-mid);
+  cursor: pointer;
+  transition: all var(--transition);
+  width: 100%;
+  justify-content: center;
+}
+.btn-toggle-add-menu:hover {
+  border-color: var(--brown-light);
+  background: var(--cream-mid);
+  color: var(--brown);
+}
+.btn-toggle-add-menu.active {
+  border-style: solid;
+  border-color: var(--brown-light);
+  background: var(--cream-mid);
+  color: var(--brown);
+}
+
 /* ================================================ EDIT ORDER BUTTON */
 .btn-edit-order {
   padding: 0.35rem 0.8rem;
