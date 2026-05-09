@@ -6,7 +6,7 @@
 // ============================================================
 // ⚙️  CONFIG — เปลี่ยน URL ให้ตรงกับ Worker ของคุณ
 // ============================================================
-const API_BASE = 'https://krua-khun-mae-api.YOUR_SUBDOMAIN.workers.dev';
+const API_BASE = 'https://krua-khun-mae-api.zzmarkzz1329.workers.dev';
 // ถ้าใช้ Custom Domain: const API_BASE = 'https://api.krua-khun-mae.com';
 
 // ==================== State ====================

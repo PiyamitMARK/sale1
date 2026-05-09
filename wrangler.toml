@@ -9,9 +9,9 @@ compatibility_flags = ["nodejs_compat"]
 # account_id = "YOUR_ACCOUNT_ID"
 
 [[d1_databases]]
-binding     = "DB"
-database_name = "krua-khun-mae"
-database_id   = "YOUR_D1_DATABASE_ID"   # ← เปลี่ยนหลังรัน: wrangler d1 create krua-khun-mae
+binding = "sale1"
+database_name = "sale1"
+database_id = "91dc223e-08a2-426a-9355-d94ed1c2d32f"
 
 [vars]
 # ADMIN_TOKEN ตั้งผ่าน wrangler secret แทน (ห้ามใส่ที่นี่)

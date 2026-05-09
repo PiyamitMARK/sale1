@@ -9,8 +9,8 @@
 // ============================================================
 // ⚙️  CONFIG — เปลี่ยนให้ตรงกับ Worker และ token ของคุณ
 // ============================================================
-const API_BASE    = 'https://krua-khun-mae-api.YOUR_SUBDOMAIN.workers.dev';
-const ADMIN_TOKEN = 'YOUR_ADMIN_TOKEN_HERE'; // ต้องตรงกับที่ตั้งใน wrangler secret
+const API_BASE    = 'https://krua-khun-mae-api.zzmarkzz1329.workers.dev';
+const ADMIN_TOKEN = 'mySecret123'; // ตรงกับที่ตั้งในข้อ 1
 
 // ==================== Config ====================
 const ADMIN_USER = 'Admin';
