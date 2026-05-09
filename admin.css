@@ -894,3 +894,154 @@ body {
   font-style: italic;
 }
 
+/* ================================================ EDIT ORDER MODAL */
+.edit-order-modal-box {
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.modal-section-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brown-light);
+  margin-bottom: 0.35rem;
+}
+
+.edit-order-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.edit-order-empty {
+  text-align: center;
+  color: var(--brown-light);
+  font-size: 0.88rem;
+  padding: 0.75rem 0;
+}
+
+.edit-order-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--cream);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  transition: border-color var(--transition);
+}
+.edit-order-item:hover { border-color: var(--brown-light); }
+
+.edit-order-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.edit-order-item-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--brown);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edit-order-item-opt {
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-style: italic;
+}
+
+.edit-order-item-price {
+  font-size: 0.78rem;
+  color: var(--brown-light);
+}
+
+.edit-order-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.edit-qty-btn {
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--cream-dark);
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--brown);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  font-family: inherit;
+  line-height: 1;
+}
+.edit-qty-btn:hover {
+  background: var(--cream-mid);
+  border-color: var(--brown-light);
+}
+
+.edit-qty-num {
+  min-width: 22px;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--brown);
+}
+
+.edit-remove-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+  line-height: 1;
+}
+.edit-remove-btn:hover { background: #fff0f0; }
+
+.edit-order-total {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--brown);
+  text-align: right;
+  padding: 0.5rem 0 0;
+  border-top: 1.5px solid var(--cream-dark);
+  margin-top: 0.25rem;
+}
+
+/* ================================================ EDIT ORDER BUTTON */
+.btn-edit-order {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  font-weight: 600;
+  background: var(--cream-mid);
+  color: var(--brown-mid);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-edit-order:hover {
+  background: var(--cream-dark);
+  border-color: var(--brown-light);
+  color: var(--brown);
+  transform: translateY(-1px);
+}
