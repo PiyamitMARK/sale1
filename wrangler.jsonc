@@ -5,8 +5,14 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "kaosoi2-db",
-			"database_id": "d2dc51af-1016-420a-8c70-03c84f9c20df"
+			"database_name": "kaosoi3-db",
+			"database_id": "3af0f400-c05a-4f0b-8fc0-71ffd1c592ea"
+		},
+		{
+			"binding": "kaosoi3_db",
+			"database_name": "kaosoi3-db",
+			"database_id": "3af0f400-c05a-4f0b-8fc0-71ffd1c592ea",
+			"remote": true
 		}
 	],
 	"kv_namespaces": [
@@ -24,7 +30,12 @@
 		]
 	},
 	"migrations": [
-  { "tag": "v1", "new_classes": ["TableRoom"] }
+		{
+			"tag": "v1",
+			"new_classes": [
+				"TableRoom"
+			]
+		}
 	],
 	"assets": {
 		"directory": "./",
