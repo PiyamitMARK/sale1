@@ -455,6 +455,176 @@ async function addItemToOrder({ name, price }) {
 if (addItemCancel) addItemCancel.addEventListener('click', closeAddItemModal);
 if (addItemModal)  addItemModal.addEventListener('click', (e) => { if (e.target === addItemModal) closeAddItemModal(); });
 
+// ==================== Edit Order Modal ====================
+let editOrderTargetKey   = null;
+let editOrderData        = null;   // deep copy ของ order ที่กำลังแก้
+
+const editOrderModal     = document.getElementById('editOrderModal');
+const editOrderTitle     = document.getElementById('editOrderTitle');
+const editOrderItemsList = document.getElementById('editOrderItemsList');
+const editOrderTotal     = document.getElementById('editOrderTotal');
+const editOrderCancel    = document.getElementById('editOrderCancel');
+const editOrderSave      = document.getElementById('editOrderSave');
+
+// แบ่งหมวด สำหรับ tab เพิ่มเมนูใน edit modal
+const EDIT_CATEGORIES = [
+  { id: 'all',   label: '🍽 ทั้งหมด' },
+  { id: 'pad',   label: '🥘 ผัด' },
+  { id: 'khao',  label: '🍚 ข้าว' },
+  { id: 'tom',   label: '🍲 ต้ม/แกง' },
+  { id: 'drink', label: '🥤 เครื่องดื่ม' },
+];
+let editCatActive = 'all';
+
+function openEditOrderModal(firebaseKey, order) {
+  editOrderTargetKey = firebaseKey;
+  editOrderData      = JSON.parse(JSON.stringify(order));  // deep copy
+  editCatActive      = 'all';
+  editOrderTitle.textContent = `แก้ไขออเดอร์ #${order.orderNumber} · โต๊ะ ${order.table || '-'}`;
+  renderEditOrderItems();
+  renderEditAddMenu();
+  editOrderModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeEditOrderModal() {
+  editOrderModal.setAttribute('aria-hidden', 'true');
+  editOrderTargetKey = null;
+  editOrderData      = null;
+}
+
+function recalcEditTotal() {
+  const total = (editOrderData.items || []).reduce((s, i) => s + i.price * i.qty, 0);
+  editOrderData.total = total;
+  editOrderTotal.textContent = `รวมทั้งหมด: ${formatMoney(total)}`;
+}
+
+function renderEditOrderItems() {
+  const items = editOrderData.items || [];
+  if (items.length === 0) {
+    editOrderItemsList.innerHTML = '<p class="edit-order-empty">ยังไม่มีรายการ</p>';
+    recalcEditTotal();
+    return;
+  }
+  editOrderItemsList.innerHTML = items.map((item, idx) => `
+    <div class="edit-order-item" data-idx="${idx}">
+      <div class="edit-order-item-info">
+        <span class="edit-order-item-name">${escapeHtml(item.name)}</span>
+        ${item.option ? `<span class="edit-order-item-opt">${escapeHtml(item.option)}</span>` : ''}
+        <span class="edit-order-item-price">${formatMoney(item.price)} / ชิ้น</span>
+      </div>
+      <div class="edit-order-item-controls">
+        <button type="button" class="edit-qty-btn" data-action="minus" data-idx="${idx}">−</button>
+        <span class="edit-qty-num">${item.qty}</span>
+        <button type="button" class="edit-qty-btn" data-action="plus"  data-idx="${idx}">+</button>
+        <button type="button" class="edit-remove-btn" data-idx="${idx}" title="ลบรายการ">🗑</button>
+      </div>
+    </div>
+  `).join('');
+
+  // event listeners
+  editOrderItemsList.querySelectorAll('.edit-qty-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx    = parseInt(btn.dataset.idx);
+      const action = btn.dataset.action;
+      if (action === 'plus') {
+        editOrderData.items[idx].qty += 1;
+      } else {
+        editOrderData.items[idx].qty -= 1;
+        if (editOrderData.items[idx].qty <= 0) {
+          editOrderData.items.splice(idx, 1);
+        }
+      }
+      renderEditOrderItems();
+      renderEditAddMenu();   // อัพ badge
+    });
+  });
+
+  editOrderItemsList.querySelectorAll('.edit-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      editOrderData.items.splice(idx, 1);
+      renderEditOrderItems();
+      renderEditAddMenu();
+    });
+  });
+
+  recalcEditTotal();
+}
+
+function renderEditAddMenu() {
+  const menuContainer = document.getElementById('editAddMenuContainer');
+  if (!menuContainer) return;
+
+  const tabsHtml = `<div class="add-item-cat-tabs">${
+    EDIT_CATEGORIES.map(c =>
+      `<button type="button" class="add-item-cat-btn${editCatActive === c.id ? ' active' : ''}" data-cat="${c.id}">${escapeHtml(c.label)}</button>`
+    ).join('')
+  }</div>`;
+
+  const filtered = editCatActive === 'all' ? ALL_PRODUCTS : ALL_PRODUCTS.filter(p => p.category === editCatActive);
+
+  const gridHtml = `<div class="add-item-product-grid">${
+    filtered.map(p => {
+      const existing = (editOrderData.items || []).find(i => i.name === p.name && !i.option);
+      const qty      = existing ? existing.qty : 0;
+      return `<button type="button" class="add-item-product-btn" data-name="${escapeHtml(p.name)}" data-price="${p.price}">
+        <span class="add-item-product-name">${escapeHtml(p.name)}</span>
+        <span class="add-item-product-price">${formatMoney(p.price)}</span>
+        ${qty > 0 ? `<span class="add-item-qty-badge">${qty}</span>` : ''}
+      </button>`;
+    }).join('')
+  }</div>`;
+
+  menuContainer.innerHTML = tabsHtml + gridHtml;
+
+  menuContainer.querySelectorAll('.add-item-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editCatActive = btn.dataset.cat;
+      renderEditAddMenu();
+    });
+  });
+
+  menuContainer.querySelectorAll('.add-item-product-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name  = btn.dataset.name;
+      const price = parseFloat(btn.dataset.price);
+      const existing = (editOrderData.items || []).find(i => i.name === name && !i.option);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        if (!editOrderData.items) editOrderData.items = [];
+        editOrderData.items.push({ name, price, qty: 1 });
+      }
+      renderEditOrderItems();
+      renderEditAddMenu();
+    });
+  });
+}
+
+if (editOrderCancel) editOrderCancel.addEventListener('click', closeEditOrderModal);
+if (editOrderModal)  editOrderModal.addEventListener('click', (e) => { if (e.target === editOrderModal) closeEditOrderModal(); });
+
+if (editOrderSave) {
+  editOrderSave.addEventListener('click', async () => {
+    if (!editOrderTargetKey || !editOrderData) return;
+    editOrderSave.disabled    = true;
+    editOrderSave.textContent = 'กำลังบันทึก...';
+    try {
+      await update(ref(db, `orders/${editOrderTargetKey}`), {
+        items: editOrderData.items || [],
+        total: editOrderData.total  || 0,
+      });
+      closeEditOrderModal();
+    } catch (err) {
+      console.error('editOrderSave error:', err);
+      alert('เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่');
+    } finally {
+      editOrderSave.disabled    = false;
+      editOrderSave.textContent = '💾 บันทึก';
+    }
+  });
+}
+
 // ==================== Render ====================
 function renderDailySummary() {
   const paidToday = allOrders.filter((o) => o.status === 'paid' && isToday(o.date));
@@ -489,7 +659,7 @@ function renderOrders() {
             <span class="order-card-date">${formatDate(order.date)}</span>
             <div class="order-actions">
               ${isPending ? `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">จ่ายแล้ว</button>` : ''}
-              <button type="button" class="btn-add-item" data-key="${order.firebaseKey}">+ เพิ่มเมนู</button>
+              <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
               <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
             </div>
           </div>
@@ -513,10 +683,10 @@ function renderOrders() {
   ordersList.querySelectorAll('.btn-paid').forEach((btn) => {
     btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
   });
-  ordersList.querySelectorAll('.btn-add-item').forEach((btn) => {
+  ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     btn.addEventListener('click', () => {
       const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
-      if (order) openAddItemModal(btn.dataset.key, order);
+      if (order) openEditOrderModal(btn.dataset.key, order);
     });
   });
   ordersList.querySelectorAll('.btn-delete').forEach((btn) => {
