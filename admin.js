@@ -567,7 +567,7 @@ function renderEditAddMenu() {
     filtered.map(p => {
       const existing = (editOrderData.items || []).find(i => i.name === p.name && !i.option);
       const qty      = existing ? existing.qty : 0;
-      return `<button type="button" class="add-item-product-btn" data-name="${escapeHtml(p.name)}" data-price="${p.price}">
+      return `<button type="button" class="add-item-product-btn" data-name="${escapeAttr(p.name)}" data-price="${p.price}">
         <span class="add-item-product-name">${escapeHtml(p.name)}</span>
         <span class="add-item-product-price">${formatMoney(p.price)}</span>
         ${qty > 0 ? `<span class="add-item-qty-badge">${qty}</span>` : ''}
