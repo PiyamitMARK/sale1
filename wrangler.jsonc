@@ -30,12 +30,7 @@
 		]
 	},
 	"migrations": [
-		{
-			"tag": "v1",
-			"new_classes": [
-				"TableRoom"
-			]
-		}
+	{ "tag": "v1", "new_sqlite_classes": ["TableRoom"] }
 	],
 	"assets": {
 		"directory": "./",
