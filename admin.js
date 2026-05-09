@@ -478,18 +478,38 @@ let editCatActive = 'all';
 
 function openEditOrderModal(firebaseKey, order) {
   editOrderTargetKey = firebaseKey;
-  editOrderData      = JSON.parse(JSON.stringify(order));  // deep copy
+  editOrderData      = JSON.parse(JSON.stringify(order));
   editCatActive      = 'all';
   editOrderTitle.textContent = `แก้ไขออเดอร์ #${order.orderNumber} · โต๊ะ ${order.table || '-'}`;
 
-  // รีเซ็ต toggle — ซ่อนกริดเมนูก่อนเสมอ
-  const menuContainer  = document.getElementById('editAddMenuContainer');
-  const toggleBtn      = document.getElementById('toggleAddMenuBtn');
-  if (menuContainer) menuContainer.classList.add('hidden');
+  // รีเซ็ต toggle
+  const menuContainer = document.getElementById('editAddMenuContainer');
+  const toggleBtn     = document.getElementById('toggleAddMenuBtn');
+  if (menuContainer) { menuContainer.classList.add('hidden'); menuContainer.innerHTML = ''; }
   if (toggleBtn)     { toggleBtn.textContent = '➕ เพิ่มเมนู'; toggleBtn.classList.remove('active'); }
 
   renderEditOrderItems();
   editOrderModal.setAttribute('aria-hidden', 'false');
+
+  // ผูก event ที่นี่ทุกครั้งที่เปิด (clone เพื่อล้าง listener เก่า)
+  if (toggleBtn) {
+    const fresh = toggleBtn.cloneNode(true);
+    toggleBtn.parentNode.replaceChild(fresh, toggleBtn);
+    fresh.addEventListener('click', () => {
+      const mc = document.getElementById('editAddMenuContainer');
+      if (!mc) return;
+      const isHidden = mc.classList.toggle('hidden');
+      if (!isHidden) {
+        renderEditAddMenu();
+        fresh.textContent = '✕ ปิดเมนู';
+        fresh.classList.add('active');
+        setTimeout(() => mc.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+      } else {
+        fresh.textContent = '➕ เพิ่มเมนู';
+        fresh.classList.remove('active');
+      }
+    });
+  }
 }
 
 function closeEditOrderModal() {
@@ -609,26 +629,6 @@ function renderEditAddMenu() {
 
 if (editOrderCancel) editOrderCancel.addEventListener('click', closeEditOrderModal);
 if (editOrderModal)  editOrderModal.addEventListener('click', (e) => { if (e.target === editOrderModal) closeEditOrderModal(); });
-
-// Toggle เพิ่มเมนู
-const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
-if (toggleAddMenuBtn) {
-  toggleAddMenuBtn.addEventListener('click', () => {
-    const menuContainer = document.getElementById('editAddMenuContainer');
-    if (!menuContainer) return;
-    const isHidden = menuContainer.classList.toggle('hidden');
-    if (!isHidden) {
-      // เพิ่งเปิด — render และเลื่อน scroll ลงมา
-      renderEditAddMenu();
-      toggleAddMenuBtn.textContent = '✕ ปิดเมนู';
-      toggleAddMenuBtn.classList.add('active');
-      setTimeout(() => menuContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-    } else {
-      toggleAddMenuBtn.textContent = '➕ เพิ่มเมนู';
-      toggleAddMenuBtn.classList.remove('active');
-    }
-  });
-}
 
 if (editOrderSave) {
   editOrderSave.addEventListener('click', async () => {
@@ -871,11 +871,11 @@ function closeClearDataModal() {
   clearDataError.textContent = '';
 }
 
-clearDataBtn.addEventListener('click', openClearDataModal);
-clearDataCancel.addEventListener('click', closeClearDataModal);
-clearDataModal.addEventListener('click', (e) => { if (e.target === clearDataModal) closeClearDataModal(); });
+if (clearDataBtn)     clearDataBtn.addEventListener('click', openClearDataModal);
+if (clearDataCancel)  clearDataCancel.addEventListener('click', closeClearDataModal);
+if (clearDataModal)   clearDataModal.addEventListener('click', (e) => { if (e.target === clearDataModal) closeClearDataModal(); });
 
-clearDataConfirm.addEventListener('click', async () => {
+if (clearDataConfirm) clearDataConfirm.addEventListener('click', async () => {
   clearDataError.textContent = '';
   const code = clearDataCode.value;
   if (!code) { clearDataError.textContent = 'กรุณาใส่รหัส'; clearDataCode.focus(); return; }
@@ -957,11 +957,11 @@ function buildSummary(orders) {
   return Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-exportSheetBtn.addEventListener('click', openExportModal);
-exportCancel.addEventListener('click', closeExportModal);
-exportModal.addEventListener('click', (e) => { if (e.target === exportModal) closeExportModal(); });
+exportSheetBtn?.addEventListener('click', openExportModal);
+exportCancel?.addEventListener('click', closeExportModal);
+exportModal?.addEventListener('click', (e) => { if (e.target === exportModal) closeExportModal(); });
 
-exportConfirm.addEventListener('click', async () => {
+exportConfirm?.addEventListener('click', async () => {
   const range = document.querySelector('input[name="exportRange"]:checked').value;
 
   if (range === 'custom') {
