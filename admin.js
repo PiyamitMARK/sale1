@@ -1,35 +1,16 @@
 /**
  * ครัวคุณแม่ — Admin
- * Firebase Realtime Database
+ * Cloudflare D1 (ผ่าน Worker API) — แทนที่ Firebase Realtime Database
  *
- * ⚠️  ความปลอดภัย:
- *   - รหัสผ่านถูก hash ด้วย SHA-256 ก่อนเปรียบเทียบ
- *   - ไม่เก็บ plaintext password ใน source code
- *   - ใส่ ADMIN_PASS_HASH จากการ hash รหัสผ่านของคุณ
- *     วิธี generate: เปิด console แล้วรัน hashPassword('รหัสผ่านของคุณ')
+ * Real-time: ใช้ polling GET /api/poll?since=<ISO> ทุก 3 วินาที
+ *            แทน Firebase onValue()
  */
 
-import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, update, remove, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-
-// ==================== Firebase Config ====================
-// ⚠️ เปลี่ยนค่าเหล่านี้เป็น Firebase project ของคุณเอง
-const firebaseConfig = {
-  apiKey:            "AIzaSyDa7d8jAUXYGC0XSJ449tM974JFq7JvAm8",
-  authDomain:        "sale1-e0cdc.firebaseapp.com",
-  databaseURL:       "https://sale1-e0cdc-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "sale1-e0cdc",
-  storageBucket:     "sale1-e0cdc.firebasestorage.app",
-  messagingSenderId: "731609021582",
-  appId:             "1:731609021582:web:42184726ee92575ea8dddf",
-};
-
-const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const db   = getDatabase(firebaseApp);
-const auth = getAuth(firebaseApp);
-
-signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
+// ============================================================
+// ⚙️  CONFIG — เปลี่ยนให้ตรงกับ Worker และ token ของคุณ
+// ============================================================
+const API_BASE    = 'https://krua-khun-mae-api.YOUR_SUBDOMAIN.workers.dev';
+const ADMIN_TOKEN = 'YOUR_ADMIN_TOKEN_HERE'; // ต้องตรงกับที่ตั้งใน wrangler secret
 
 // ==================== Config ====================
 const ADMIN_USER = 'Admin';
@@ -37,34 +18,24 @@ const ADMIN_USER = 'Admin';
 /**
  * SHA-256 hash ของรหัสผ่าน
  * ค่าด้านล่างนี้คือ hash ของ "123456789"
- * เปลี่ยนเป็น hash ของรหัสผ่านใหม่ของคุณ:
- *   1. เปิด browser console
- *   2. รัน: hashPassword('รหัสผ่านใหม่ของคุณ').then(h => console.log(h))
- *   3. นำค่า hash ที่ได้มาแทนที่ด้านล่าง
+ * เปลี่ยน: hashPassword('รหัสใหม่').then(h => console.log(h))
  */
-const ADMIN_PASS_HASH = '15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225'; // hash ของ "123456789"
+const ADMIN_PASS_HASH = '15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225';
 
-const AUTH_KEY         = 'krua-khun-mae-auth';
-const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL'; // ใส่ URL จาก Google Apps Script
+const AUTH_KEY    = 'krua-khun-mae-auth';
 
-// ==================== Rate Limiting (brute force protection) ====================
+// ==================== Rate Limiting ====================
 const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_MS   = 5 * 60 * 1000; // 5 นาที
+const LOGIN_LOCKOUT_MS   = 5 * 60 * 1000;
 const ATTEMPT_KEY        = 'krua-login-attempts';
 const LOCKOUT_KEY        = 'krua-login-lockout';
 
-function getAttempts() {
-  return parseInt(sessionStorage.getItem(ATTEMPT_KEY) || '0', 10);
-}
-function getLockoutUntil() {
-  return parseInt(sessionStorage.getItem(LOCKOUT_KEY) || '0', 10);
-}
+function getAttempts()    { return parseInt(sessionStorage.getItem(ATTEMPT_KEY) || '0', 10); }
+function getLockoutUntil(){ return parseInt(sessionStorage.getItem(LOCKOUT_KEY) || '0', 10); }
 function incrementAttempts() {
   const n = getAttempts() + 1;
   sessionStorage.setItem(ATTEMPT_KEY, n);
-  if (n >= LOGIN_MAX_ATTEMPTS) {
-    sessionStorage.setItem(LOCKOUT_KEY, Date.now() + LOGIN_LOCKOUT_MS);
-  }
+  if (n >= LOGIN_MAX_ATTEMPTS) sessionStorage.setItem(LOCKOUT_KEY, Date.now() + LOGIN_LOCKOUT_MS);
   return n;
 }
 function resetAttempts() {
@@ -75,8 +46,7 @@ function isLockedOut() {
   const until = getLockoutUntil();
   if (!until) return false;
   if (Date.now() < until) return true;
-  resetAttempts();
-  return false;
+  resetAttempts(); return false;
 }
 
 // ==================== Password Hashing ====================
@@ -84,9 +54,21 @@ async function hashPassword(password) {
   const encoder = new TextEncoder();
   const data    = encoder.encode(password);
   const hashBuf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ==================== API Helper ====================
+async function apiFetch(path, options = {}) {
+  const res = await fetch(API_BASE + path, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Token': ADMIN_TOKEN,
+      ...options.headers,
+    },
+    ...options,
+  });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json();
 }
 
 // ==================== DOM ====================
@@ -105,50 +87,30 @@ const tabRecent       = document.getElementById('tabRecent');
 const tabHistory      = document.getElementById('tabHistory');
 const historyContent  = document.getElementById('historyContent');
 const historyEmpty    = document.getElementById('historyEmpty');
-const clearDataBtn    = document.getElementById('clearDataBtn');
 const clearDataModal  = document.getElementById('clearDataModal');
 const clearDataCode   = document.getElementById('clearDataCode');
 const clearDataError  = document.getElementById('clearDataError');
 const clearDataCancel = document.getElementById('clearDataCancel');
 const clearDataConfirm = document.getElementById('clearDataConfirm');
-const exportSheetBtn  = document.getElementById('exportSheetBtn');
-const exportModal     = document.getElementById('exportModal');
-const exportCancel    = document.getElementById('exportCancel');
-const exportConfirm   = document.getElementById('exportConfirm');
-const exportStatus    = document.getElementById('exportStatus');
-const customDateRange = document.getElementById('customDateRange');
-const dateFrom        = document.getElementById('dateFrom');
-const dateTo          = document.getElementById('dateTo');
 
 // ==================== State ====================
-let allOrders = [];
-let unsubscribeListener = null;
+let allOrders    = [];
+let pollInterval = null;
+let lastPollTime = new Date(0).toISOString(); // เริ่มต้น: ดึงทุก order
 
 // ==================== Auth ====================
 function isLoggedIn() {
-  // ใช้ localStorage เป็นหลัก (คงอยู่แม้ปิด tab/browser)
-  // fallback sessionStorage กรณี localStorage ถูก block (private mode)
-  try {
-    return localStorage.getItem(AUTH_KEY) === 'true';
-  } catch (_) {
-    return sessionStorage.getItem(AUTH_KEY) === 'true';
-  }
+  try { return localStorage.getItem(AUTH_KEY) === 'true'; }
+  catch (_) { return sessionStorage.getItem(AUTH_KEY) === 'true'; }
 }
 
 function setLoggedIn(value) {
   try {
-    if (value) {
-      localStorage.setItem(AUTH_KEY, 'true');
-    } else {
-      localStorage.removeItem(AUTH_KEY);
-    }
+    if (value) localStorage.setItem(AUTH_KEY, 'true');
+    else localStorage.removeItem(AUTH_KEY);
   } catch (_) {
-    // fallback: private mode หรือ browser block localStorage
-    if (value) {
-      sessionStorage.setItem(AUTH_KEY, 'true');
-    } else {
-      sessionStorage.removeItem(AUTH_KEY);
-    }
+    if (value) sessionStorage.setItem(AUTH_KEY, 'true');
+    else sessionStorage.removeItem(AUTH_KEY);
   }
 }
 
@@ -165,17 +127,12 @@ function formatMoney(n) {
 
 function escapeHtml(str) {
   return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function escapeAttr(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function formatDate(isoString) {
@@ -205,7 +162,7 @@ function isWithinLast30Days(isoString) {
 // ==================== Sound Alert ====================
 let audioCtx = null;
 let soundEnabled = true;
-let knownOrderKeys = new Set(); // tracks keys we've already seen
+let knownOrderIds = new Set();
 let isFirstLoad = true;
 
 function getAudioContext() {
@@ -217,7 +174,6 @@ function playOrderAlert() {
   if (!soundEnabled) return;
   try {
     const ctx = getAudioContext();
-    // Bell-like sound: 3 beeps
     [0, 0.18, 0.36].forEach((delay) => {
       const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -231,48 +187,63 @@ function playOrderAlert() {
       osc.start(ctx.currentTime + delay);
       osc.stop(ctx.currentTime + delay + 0.36);
     });
-  } catch (e) {
-    console.warn('Sound alert error:', e);
-  }
+  } catch (e) { console.warn('Sound error:', e); }
 }
 
-// ==================== Firebase: Real-time Listener ====================
-function startRealtimeListener() {
-  if (unsubscribeListener) unsubscribeListener();
-  knownOrderKeys = new Set();
-  isFirstLoad = true;
-  unsubscribeListener = onValue(ref(db, 'orders'), (snapshot) => {
-    const newOrders = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((child) => {
-        newOrders.push({ firebaseKey: child.key, ...child.val() });
-      });
-      newOrders.sort((a, b) => new Date(b.date) - new Date(a.date));
-    }
+// ==================== Polling (แทน Firebase onValue) ====================
+async function loadAllOrders() {
+  const data = await apiFetch('/api/orders');
+  // data คือ array จาก Worker
+  allOrders = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+  knownOrderIds = new Set(allOrders.map(o => o.id));
+  isFirstLoad = false;
+  lastPollTime = new Date().toISOString();
+  renderDailySummary();
+  renderOrders();
+  renderHistory();
+}
 
-    // Detect new pending orders (after first load)
-    if (!isFirstLoad) {
-      newOrders.forEach((o) => {
-        if (!knownOrderKeys.has(o.firebaseKey) && o.status === 'pending') {
+async function pollNewOrders() {
+  try {
+    const data = await apiFetch(`/api/poll?since=${encodeURIComponent(lastPollTime)}`);
+    if (!data.orders || data.orders.length === 0) return;
+
+    let hasNew = false;
+    for (const o of data.orders) {
+      if (!knownOrderIds.has(o.id)) {
+        // order ใหม่
+        if (o.status === 'pending') {
           playOrderAlert();
           showOrderToast(o);
         }
-      });
+        knownOrderIds.add(o.id);
+        hasNew = true;
+      }
     }
 
-    // Update known keys
-    knownOrderKeys = new Set(newOrders.map(o => o.firebaseKey));
-    isFirstLoad = false;
+    if (hasNew) {
+      // โหลดใหม่ทั้งหมดเพื่อ sync
+      await loadAllOrders();
+    }
 
-    allOrders = newOrders;
-    renderDailySummary();
-    renderOrders();
-    renderHistory();
-  });
+    lastPollTime = data.serverTime || new Date().toISOString();
+  } catch (e) {
+    console.warn('poll error:', e);
+  }
+}
+
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  loadAllOrders(); // โหลดครั้งแรก
+  // poll ทุก 3 วินาที
+  pollInterval = setInterval(pollNewOrders, 3000);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
 }
 
 function showOrderToast(order) {
-  // Remove existing toast if any
   document.querySelectorAll('.new-order-toast').forEach(t => t.remove());
   const toast = document.createElement('div');
   toast.className = 'new-order-toast';
@@ -283,26 +254,28 @@ function showOrderToast(order) {
   setTimeout(() => { if (toast.parentNode) toast.remove(); }, 6000);
 }
 
-// ==================== Firebase: Actions ====================
-async function markOrderAsPaid(firebaseKey) {
-  await update(ref(db, `orders/${firebaseKey}`), { status: 'paid' });
+// ==================== API: Actions ====================
+async function markOrderAsPaid(id) {
+  await apiFetch(`/api/orders/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'paid' }),
+  });
+  await loadAllOrders();
 }
 
-async function deleteOrder(firebaseKey, orderNumber) {
-  if (!confirm(`ลบออเดอร์ #${orderNumber} ?`)) return;
-  await remove(ref(db, `orders/${firebaseKey}`));
+async function deleteOrder(id, orderNum) {
+  if (!confirm(`ลบออเดอร์ #${orderNum} ?`)) return;
+  await apiFetch(`/api/orders/${id}`, { method: 'DELETE' });
+  await loadAllOrders();
 }
 
 async function clearAllOrders() {
-  await remove(ref(db, 'orders'));
-  await update(ref(db, 'meta'), {
-    orderNumber: 1001,
-    lastOrderDate: new Date().toISOString().slice(0, 10),
-  });
+  await apiFetch('/api/orders', { method: 'DELETE' });
+  await loadAllOrders();
   closeClearDataModal();
 }
 
-// ==================== Products (admin add-item) ====================
+// ==================== Products (admin add-item — ใช้ ALL_PRODUCTS คงเดิม) ====================
 const ALL_PRODUCTS = [
   // ผัด
   { id: 'pad1',  name: 'ผัดไวไวหมู',             price: 50,  category: 'pad' },
@@ -325,30 +298,30 @@ const ALL_PRODUCTS = [
   { id: 'pad18', name: 'เป็ดต้มพะโล้ (จาน)',       price: 150, category: 'pad' },
   { id: 'pad19', name: 'ขาหมูล้วน (จาน)',          price: 150, category: 'pad' },
   // ข้าว
-  { id: 'khao1',  name: 'ข้าวขาหมู',               price: 50, category: 'khao' },
-  { id: 'khao2',  name: 'ข้าวมันไก่ต้ม',            price: 50, category: 'khao' },
-  { id: 'khao3',  name: 'ข้าวกระเพราหมูสับ',        price: 50, category: 'khao' },
-  { id: 'khao4',  name: 'ข้าวผัดกุ้ง',              price: 50, category: 'khao' },
-  { id: 'khao5',  name: 'ข้าวผัดหมู',               price: 50, category: 'khao' },
-  { id: 'khao6',  name: 'ข้าวหมูแดง',               price: 50, category: 'khao' },
-  { id: 'khao7',  name: 'ข้าวหน้าเป็ด',             price: 50, category: 'khao' },
-  { id: 'khao8',  name: 'ข้าวกระเพราหมูกรอบ',      price: 50, category: 'khao' },
-  { id: 'khao9',  name: 'ข้าวกระเพราเป็ด',          price: 50, category: 'khao' },
-  { id: 'khao10', name: 'ข้าวไข่เจียวหมูสับ',       price: 50, category: 'khao' },
-  { id: 'khao11', name: 'ข้าวหน้าไก่',              price: 50, category: 'khao' },
-  { id: 'khao12', name: 'ข้าวมันขาหมู',             price: 50, category: 'khao' },
-  { id: 'khao13', name: 'ข้าวมันหน้าเป็ด',          price: 50, category: 'khao' },
-  { id: 'khao14', name: 'ข้าวกระเพรากุ้ง',          price: 50, category: 'khao' },
-  { id: 'khao15', name: 'ข้าวเปล่า',                price: 15, category: 'khao' },
+  { id: 'khao1',  name: 'ข้าวขาหมู',               price: 50,  category: 'khao' },
+  { id: 'khao2',  name: 'ข้าวมันไก่ต้ม',            price: 50,  category: 'khao' },
+  { id: 'khao3',  name: 'ข้าวกระเพราหมูสับ',        price: 50,  category: 'khao' },
+  { id: 'khao4',  name: 'ข้าวผัดกุ้ง',              price: 50,  category: 'khao' },
+  { id: 'khao5',  name: 'ข้าวผัดหมู',               price: 50,  category: 'khao' },
+  { id: 'khao6',  name: 'ข้าวหมูแดง',               price: 50,  category: 'khao' },
+  { id: 'khao7',  name: 'ข้าวหน้าเป็ด',             price: 50,  category: 'khao' },
+  { id: 'khao8',  name: 'ข้าวกระเพราหมูกรอบ',      price: 50,  category: 'khao' },
+  { id: 'khao9',  name: 'ข้าวกระเพราเป็ด',          price: 50,  category: 'khao' },
+  { id: 'khao10', name: 'ข้าวไข่เจียวหมูสับ',       price: 50,  category: 'khao' },
+  { id: 'khao11', name: 'ข้าวหน้าไก่',              price: 50,  category: 'khao' },
+  { id: 'khao12', name: 'ข้าวมันขาหมู',             price: 50,  category: 'khao' },
+  { id: 'khao13', name: 'ข้าวมันหน้าเป็ด',          price: 50,  category: 'khao' },
+  { id: 'khao14', name: 'ข้าวกระเพรากุ้ง',          price: 50,  category: 'khao' },
+  { id: 'khao15', name: 'ข้าวเปล่า',                price: 15,  category: 'khao' },
   // ต้ม / แกง
   { id: 'tom1', name: 'ต้มยำกุ้ง',                       price: 102, category: 'tom' },
   { id: 'tom2', name: 'ต้มข่าไก่ใส่กะทิ',                price: 68,  category: 'tom' },
   { id: 'tom3', name: 'ต้มจืดสาหร่ายเต้าหู้หมูสับ',      price: 50,  category: 'tom' },
   // เครื่องดื่ม
-  { id: 'water',  name: 'น้ำเปล่า',   price: 5,  category: 'drink' },
-  { id: 'pepsi',  name: 'เป็ปซี่',    price: 10, category: 'drink' },
-  { id: 'fanta',  name: 'แฟนต้า',     price: 10, category: 'drink' },
-  { id: 'sprite', name: 'สไปร์ท',    price: 10, category: 'drink' },
+  { id: 'water',  name: 'น้ำเปล่า',  price: 5,  category: 'drink' },
+  { id: 'pepsi',  name: 'เป็ปซี่',   price: 10, category: 'drink' },
+  { id: 'fanta',  name: 'แฟนต้า',    price: 10, category: 'drink' },
+  { id: 'sprite', name: 'สไปร์ท',   price: 10, category: 'drink' },
 ];
 
 const ADD_ITEM_CATEGORIES = [
@@ -358,10 +331,9 @@ const ADD_ITEM_CATEGORIES = [
   { id: 'tom',   label: '🍲 ต้ม/แกง' },
   { id: 'drink', label: '🥤 เครื่องดื่ม' },
 ];
-let addItemActiveCategory = 'all';
 
-// ==================== Add Item Modal ====================
-let addItemTargetKey   = null;
+let addItemActiveCategory = 'all';
+let addItemTargetId    = null;
 let addItemTargetOrder = null;
 let addItemToastTimer  = null;
 
@@ -369,8 +341,8 @@ const addItemModal       = document.getElementById('addItemModal');
 const addItemProductList = document.getElementById('addItemProductList');
 const addItemCancel      = document.getElementById('addItemCancel');
 
-function openAddItemModal(firebaseKey, order) {
-  addItemTargetKey   = firebaseKey;
+function openAddItemModal(id, order) {
+  addItemTargetId    = id;
   addItemTargetOrder = JSON.parse(JSON.stringify(order));
   renderAddItemList();
   addItemModal.setAttribute('aria-hidden', 'false');
@@ -392,7 +364,7 @@ function renderAddItemList() {
     filtered.map(p => {
       const existing = currentItems.find(i => i.name === p.name);
       const qty      = existing ? existing.qty : 0;
-      return `<button type="button" class="add-item-product-btn" data-id="${p.id}" data-name="${p.name.replace(/"/g, '&quot;')}" data-price="${p.price}">
+      return `<button type="button" class="add-item-product-btn" data-id="${p.id}" data-name="${escapeAttr(p.name)}" data-price="${p.price}">
         <span class="add-item-product-name">${escapeHtml(p.name)}</span>
         <span class="add-item-product-price">${formatMoney(p.price)}</span>
         ${qty > 0 ? `<span class="add-item-qty-badge">${qty}</span>` : ''}
@@ -403,12 +375,8 @@ function renderAddItemList() {
   addItemProductList.innerHTML = tabsHtml + productsHtml;
 
   addItemProductList.querySelectorAll('.add-item-cat-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      addItemActiveCategory = btn.dataset.cat;
-      renderAddItemList();
-    });
+    btn.addEventListener('click', () => { addItemActiveCategory = btn.dataset.cat; renderAddItemList(); });
   });
-
   addItemProductList.querySelectorAll('.add-item-product-btn').forEach(btn => {
     btn.addEventListener('click', () => addItemToOrder(btn.dataset));
   });
@@ -416,32 +384,25 @@ function renderAddItemList() {
 
 function closeAddItemModal() {
   addItemModal.setAttribute('aria-hidden', 'true');
-  addItemTargetKey        = null;
-  addItemTargetOrder      = null;
-  addItemActiveCategory   = 'all';
+  addItemTargetId = null; addItemTargetOrder = null; addItemActiveCategory = 'all';
   if (addItemToastTimer) { clearTimeout(addItemToastTimer); addItemToastTimer = null; }
   const toast = document.getElementById('addItemToastMsg');
-  if (toast) toast.textContent = '';
-  toast?.classList.remove('show');
+  if (toast) { toast.textContent = ''; toast.classList.remove('show'); }
 }
 
 async function addItemToOrder({ name, price }) {
-  if (!addItemTargetKey || !addItemTargetOrder) return;
-
+  if (!addItemTargetId || !addItemTargetOrder) return;
   const items    = addItemTargetOrder.items || [];
   const existing = items.find(i => i.name === name);
-  if (existing) {
-    existing.qty += 1;
-  } else {
-    items.push({ name, price: parseFloat(price), qty: 1 });
-  }
+  if (existing) { existing.qty += 1; }
+  else { items.push({ name, price: parseFloat(price), qty: 1 }); }
   addItemTargetOrder.items = items;
   addItemTargetOrder.total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
 
   try {
-    await update(ref(db, `orders/${addItemTargetKey}`), {
-      items: addItemTargetOrder.items,
-      total: addItemTargetOrder.total,
+    await apiFetch(`/api/orders/${addItemTargetId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ items: addItemTargetOrder.items, total: addItemTargetOrder.total }),
     });
   } catch (err) {
     console.error('addItemToOrder error:', err);
@@ -455,16 +416,24 @@ async function addItemToOrder({ name, price }) {
     if (addItemToastTimer) clearTimeout(addItemToastTimer);
     addItemToastTimer = setTimeout(() => { toast.className = 'add-item-toast'; }, 2000);
   }
-
   renderAddItemList();
+  // อัพเดท allOrders ใน memory
+  const idx = allOrders.findIndex(o => o.id === addItemTargetId);
+  if (idx !== -1) {
+    allOrders[idx].items = addItemTargetOrder.items;
+    allOrders[idx].total = addItemTargetOrder.total;
+  }
 }
 
 if (addItemCancel) addItemCancel.addEventListener('click', closeAddItemModal);
 if (addItemModal)  addItemModal.addEventListener('click', (e) => { if (e.target === addItemModal) closeAddItemModal(); });
 
 // ==================== Edit Order Modal ====================
-let editOrderTargetKey   = null;
-let editOrderData        = null;   // deep copy ของ order ที่กำลังแก้
+let editOrderTargetId = null;
+let editOrderData     = null;
+let editCatActive     = 'all';
+
+const EDIT_CATEGORIES = ADD_ITEM_CATEGORIES;
 
 const editOrderModal     = document.getElementById('editOrderModal');
 const editOrderTitle     = document.getElementById('editOrderTitle');
@@ -473,23 +442,12 @@ const editOrderTotal     = document.getElementById('editOrderTotal');
 const editOrderCancel    = document.getElementById('editOrderCancel');
 const editOrderSave      = document.getElementById('editOrderSave');
 
-// แบ่งหมวด สำหรับ tab เพิ่มเมนูใน edit modal
-const EDIT_CATEGORIES = [
-  { id: 'all',   label: '🍽 ทั้งหมด' },
-  { id: 'pad',   label: '🥘 ผัด' },
-  { id: 'khao',  label: '🍚 ข้าว' },
-  { id: 'tom',   label: '🍲 ต้ม/แกง' },
-  { id: 'drink', label: '🥤 เครื่องดื่ม' },
-];
-let editCatActive = 'all';
-
-function openEditOrderModal(firebaseKey, order) {
-  editOrderTargetKey = firebaseKey;
-  editOrderData      = JSON.parse(JSON.stringify(order));
-  editCatActive      = 'all';
+function openEditOrderModal(id, order) {
+  editOrderTargetId = id;
+  editOrderData     = JSON.parse(JSON.stringify(order));
+  editCatActive     = 'all';
   editOrderTitle.textContent = `แก้ไขออเดอร์ #${order.orderNumber} · โต๊ะ ${order.table || '-'}`;
 
-  // รีเซ็ต toggle
   const menuContainer = document.getElementById('editAddMenuContainer');
   const toggleBtn     = document.getElementById('toggleAddMenuBtn');
   if (menuContainer) { menuContainer.classList.add('hidden'); menuContainer.innerHTML = ''; }
@@ -498,7 +456,6 @@ function openEditOrderModal(firebaseKey, order) {
   renderEditOrderItems();
   editOrderModal.setAttribute('aria-hidden', 'false');
 
-  // ผูก event ที่นี่ทุกครั้งที่เปิด (clone เพื่อล้าง listener เก่า)
   if (toggleBtn) {
     const fresh = toggleBtn.cloneNode(true);
     toggleBtn.parentNode.replaceChild(fresh, toggleBtn);
@@ -508,12 +465,10 @@ function openEditOrderModal(firebaseKey, order) {
       const isHidden = mc.classList.toggle('hidden');
       if (!isHidden) {
         renderEditAddMenu();
-        fresh.textContent = '✕ ปิดเมนู';
-        fresh.classList.add('active');
+        fresh.textContent = '✕ ปิดเมนู'; fresh.classList.add('active');
         setTimeout(() => mc.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
       } else {
-        fresh.textContent = '➕ เพิ่มเมนู';
-        fresh.classList.remove('active');
+        fresh.textContent = '➕ เพิ่มเมนู'; fresh.classList.remove('active');
       }
     });
   }
@@ -521,8 +476,7 @@ function openEditOrderModal(firebaseKey, order) {
 
 function closeEditOrderModal() {
   editOrderModal.setAttribute('aria-hidden', 'true');
-  editOrderTargetKey = null;
-  editOrderData      = null;
+  editOrderTargetId = null; editOrderData = null;
 }
 
 function recalcEditTotal() {
@@ -535,8 +489,7 @@ function renderEditOrderItems() {
   const items = editOrderData.items || [];
   if (items.length === 0) {
     editOrderItemsList.innerHTML = '<p class="edit-order-empty">ยังไม่มีรายการ</p>';
-    recalcEditTotal();
-    return;
+    recalcEditTotal(); return;
   }
   editOrderItemsList.innerHTML = items.map((item, idx) => `
     <div class="edit-order-item" data-idx="${idx}">
@@ -554,39 +507,29 @@ function renderEditOrderItems() {
     </div>
   `).join('');
 
-  // event listeners
   editOrderItemsList.querySelectorAll('.edit-qty-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const idx    = parseInt(btn.dataset.idx);
-      const action = btn.dataset.action;
-      if (action === 'plus') {
-        editOrderData.items[idx].qty += 1;
-      } else {
+      const idx = parseInt(btn.dataset.idx);
+      if (btn.dataset.action === 'plus') { editOrderData.items[idx].qty += 1; }
+      else {
         editOrderData.items[idx].qty -= 1;
-        if (editOrderData.items[idx].qty <= 0) {
-          editOrderData.items.splice(idx, 1);
-        }
+        if (editOrderData.items[idx].qty <= 0) editOrderData.items.splice(idx, 1);
       }
-      renderEditOrderItems();
-      renderEditAddMenu();   // อัพ badge
+      renderEditOrderItems(); renderEditAddMenu();
     });
   });
-
   editOrderItemsList.querySelectorAll('.edit-remove-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.idx);
-      editOrderData.items.splice(idx, 1);
-      renderEditOrderItems();
-      renderEditAddMenu();
+      editOrderData.items.splice(parseInt(btn.dataset.idx), 1);
+      renderEditOrderItems(); renderEditAddMenu();
     });
   });
-
   recalcEditTotal();
 }
 
 function renderEditAddMenu() {
   const menuContainer = document.getElementById('editAddMenuContainer');
-  if (!menuContainer) return;
+  if (!menuContainer || menuContainer.classList.contains('hidden')) return;
 
   const tabsHtml = `<div class="add-item-cat-tabs">${
     EDIT_CATEGORIES.map(c =>
@@ -595,7 +538,6 @@ function renderEditAddMenu() {
   }</div>`;
 
   const filtered = editCatActive === 'all' ? ALL_PRODUCTS : ALL_PRODUCTS.filter(p => p.category === editCatActive);
-
   const gridHtml = `<div class="add-item-product-grid">${
     filtered.map(p => {
       const existing = (editOrderData.items || []).find(i => i.name === p.name && !i.option);
@@ -611,25 +553,16 @@ function renderEditAddMenu() {
   menuContainer.innerHTML = tabsHtml + gridHtml;
 
   menuContainer.querySelectorAll('.add-item-cat-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      editCatActive = btn.dataset.cat;
-      renderEditAddMenu();
-    });
+    btn.addEventListener('click', () => { editCatActive = btn.dataset.cat; renderEditAddMenu(); });
   });
-
   menuContainer.querySelectorAll('.add-item-product-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const name  = btn.dataset.name;
       const price = parseFloat(btn.dataset.price);
       const existing = (editOrderData.items || []).find(i => i.name === name && !i.option);
-      if (existing) {
-        existing.qty += 1;
-      } else {
-        if (!editOrderData.items) editOrderData.items = [];
-        editOrderData.items.push({ name, price, qty: 1 });
-      }
-      renderEditOrderItems();
-      renderEditAddMenu();   // อัพ badge โดยไม่ซ่อน container
+      if (existing) { existing.qty += 1; }
+      else { if (!editOrderData.items) editOrderData.items = []; editOrderData.items.push({ name, price, qty: 1 }); }
+      renderEditOrderItems(); renderEditAddMenu();
     });
   });
 }
@@ -639,15 +572,16 @@ if (editOrderModal)  editOrderModal.addEventListener('click', (e) => { if (e.tar
 
 if (editOrderSave) {
   editOrderSave.addEventListener('click', async () => {
-    if (!editOrderTargetKey || !editOrderData) return;
+    if (!editOrderTargetId || !editOrderData) return;
     editOrderSave.disabled    = true;
     editOrderSave.textContent = 'กำลังบันทึก...';
     try {
-      await update(ref(db, `orders/${editOrderTargetKey}`), {
-        items: editOrderData.items || [],
-        total: editOrderData.total  || 0,
+      await apiFetch(`/api/orders/${editOrderTargetId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ items: editOrderData.items || [], total: editOrderData.total || 0 }),
       });
       closeEditOrderModal();
+      await loadAllOrders();
     } catch (err) {
       console.error('editOrderSave error:', err);
       alert('เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่');
@@ -679,7 +613,7 @@ function renderOrders() {
   ordersList.innerHTML = allOrders.map((order) => {
     const isPending = order.status === 'pending';
     return `
-      <article class="order-card" data-key="${order.firebaseKey}">
+      <article class="order-card" data-id="${order.id}">
         <div class="order-card-header">
           <div class="order-card-header-row">
             <h3 class="order-card-title">
@@ -691,9 +625,9 @@ function renderOrders() {
           <div class="order-card-header-row">
             <span class="order-card-date">${formatDate(order.date)}</span>
             <div class="order-actions">
-              ${isPending ? `<button type="button" class="btn-paid" data-key="${order.firebaseKey}">จ่ายแล้ว</button>` : ''}
-              <button type="button" class="btn-edit-order" data-key="${order.firebaseKey}">✏️ แก้ไข</button>
-              <button type="button" class="btn-delete" data-key="${order.firebaseKey}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
+              ${isPending ? `<button type="button" class="btn-paid" data-id="${order.id}">จ่ายแล้ว</button>` : ''}
+              <button type="button" class="btn-edit-order" data-id="${order.id}">✏️ แก้ไข</button>
+              <button type="button" class="btn-delete" data-id="${order.id}" data-num="${escapeHtml(String(order.orderNumber))}">ลบ</button>
             </div>
           </div>
         </div>
@@ -714,22 +648,21 @@ function renderOrders() {
   }).join('');
 
   ordersList.querySelectorAll('.btn-paid').forEach((btn) => {
-    btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.key));
+    btn.addEventListener('click', () => markOrderAsPaid(btn.dataset.id));
   });
   ordersList.querySelectorAll('.btn-edit-order').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const order = allOrders.find(o => o.firebaseKey === btn.dataset.key);
-      if (order) openEditOrderModal(btn.dataset.key, order);
+      const order = allOrders.find(o => o.id === btn.dataset.id);
+      if (order) openEditOrderModal(btn.dataset.id, order);
     });
   });
   ordersList.querySelectorAll('.btn-delete').forEach((btn) => {
-    btn.addEventListener('click', () => deleteOrder(btn.dataset.key, btn.dataset.num));
+    btn.addEventListener('click', () => deleteOrder(btn.dataset.id, btn.dataset.num));
   });
 }
 
 function renderHistory() {
   const paidLast30 = allOrders.filter((o) => o.status === 'paid' && isWithinLast30Days(o.date));
-
   if (paidLast30.length === 0) {
     historyContent.innerHTML = '';
     historyContent.classList.add('hidden');
@@ -778,15 +711,15 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach((t) =>
     t.classList.toggle('active', t.dataset.tab === tabId)
   );
-  tabRecent.classList.toggle('hidden',   tabId !== 'recent');
-  tabHistory.classList.toggle('hidden',  tabId !== 'history');
+  tabRecent.classList.toggle('hidden',  tabId !== 'recent');
+  tabHistory.classList.toggle('hidden', tabId !== 'history');
 }
 
 // ==================== Auth Events ====================
 function checkAuth() {
   if (isLoggedIn()) {
     showScreen(dashboardScreen);
-    startRealtimeListener();
+    startPolling();
     switchTab('recent');
   } else {
     showScreen(loginScreen);
@@ -796,7 +729,6 @@ function checkAuth() {
 loginBtn.addEventListener('click', async () => {
   loginError.textContent = '';
 
-  // Rate limit check
   if (isLockedOut()) {
     const remaining = Math.ceil((getLockoutUntil() - Date.now()) / 60000);
     loginError.textContent = `พยายามเข้าระบบมากเกินไป กรุณารอ ${remaining} นาที`;
@@ -820,16 +752,14 @@ loginBtn.addEventListener('click', async () => {
       resetAttempts();
       setLoggedIn(true);
       showScreen(dashboardScreen);
-      startRealtimeListener();
+      startPolling();
       switchTab('recent');
     } else {
       const attempts = incrementAttempts();
       const left     = LOGIN_MAX_ATTEMPTS - attempts;
-      if (left > 0) {
-        loginError.textContent = `ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (เหลือ ${left} ครั้ง)`;
-      } else {
-        loginError.textContent = 'ล็อคบัญชีชั่วคราว กรุณารอ 5 นาที';
-      }
+      loginError.textContent = left > 0
+        ? `ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (เหลือ ${left} ครั้ง)`
+        : 'ล็อคบัญชีชั่วคราว กรุณารอ 5 นาที';
       passwordInput.value = '';
       passwordInput.focus();
     }
@@ -841,18 +771,14 @@ loginBtn.addEventListener('click', async () => {
   }
 });
 
-// Enter key on inputs triggers login
 [usernameInput, passwordInput].forEach(el => {
-  el.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') loginBtn.click();
-  });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginBtn.click(); });
 });
 
 logoutBtn.addEventListener('click', () => {
-  // ล้างทั้ง localStorage และ sessionStorage เพื่อความแน่ใจ
   try { localStorage.removeItem(AUTH_KEY); } catch (_) {}
   try { sessionStorage.removeItem(AUTH_KEY); } catch (_) {}
-  if (unsubscribeListener) { unsubscribeListener(); unsubscribeListener = null; }
+  stopPolling();
   allOrders = [];
   showScreen(loginScreen);
   usernameInput.value    = '';
@@ -878,6 +804,7 @@ function closeClearDataModal() {
   clearDataError.textContent = '';
 }
 
+const clearDataBtn = document.getElementById('clearDataBtn');
 if (clearDataBtn)     clearDataBtn.addEventListener('click', openClearDataModal);
 if (clearDataCancel)  clearDataCancel.addEventListener('click', closeClearDataModal);
 if (clearDataModal)   clearDataModal.addEventListener('click', (e) => { if (e.target === clearDataModal) closeClearDataModal(); });
@@ -894,7 +821,7 @@ if (clearDataConfirm) clearDataConfirm.addEventListener('click', async () => {
     const hash = await hashPassword(code);
     if (hash !== ADMIN_PASS_HASH) {
       clearDataError.textContent = 'รหัสไม่ถูกต้อง';
-      clearDataCode.value        = '';
+      clearDataCode.value = '';
       clearDataCode.focus();
       return;
     }
@@ -907,122 +834,10 @@ if (clearDataConfirm) clearDataConfirm.addEventListener('click', async () => {
   }
 });
 
-// ==================== Export to Google Sheet ====================
-function initDatePicker() {
-  const today   = new Date().toISOString().slice(0, 10);
-  dateFrom.value = today;
-  dateTo.value   = today;
-}
-
-document.querySelectorAll('input[name="exportRange"]').forEach(radio => {
-  radio.addEventListener('change', () => {
-    customDateRange.classList.toggle('hidden', radio.value !== 'custom');
-  });
-});
-
-function openExportModal() {
-  exportStatus.textContent = '';
-  exportStatus.className   = 'export-status';
-  exportConfirm.disabled   = false;
-  exportConfirm.textContent = '📤 ส่งข้อมูล';
-  document.querySelector('input[name="exportRange"][value="today"]').checked = true;
-  customDateRange.classList.add('hidden');
-  initDatePicker();
-  exportModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeExportModal() {
-  exportModal.setAttribute('aria-hidden', 'true');
-  exportStatus.textContent = '';
-}
-
-function isInDateRange(isoString, from, to) {
-  const key = getDateKey(isoString);
-  return key >= from && key <= to;
-}
-
-function getFilteredOrders(range) {
-  if (range === 'today')  return allOrders.filter(o => isToday(o.date));
-  if (range === 'month')  return allOrders.filter(o => isWithinLast30Days(o.date));
-  if (range === 'custom') {
-    const from = dateFrom.value;
-    const to   = dateTo.value;
-    if (!from || !to) return [];
-    return allOrders.filter(o => isInDateRange(o.date, from, to));
-  }
-  return allOrders;
-}
-
-function buildSummary(orders) {
-  const byDay = {};
-  orders.filter(o => o.status === 'paid').forEach(o => {
-    const key = getDateKey(o.date);
-    if (!byDay[key]) byDay[key] = { date: key, orderCount: 0, total: 0 };
-    byDay[key].orderCount++;
-    byDay[key].total += o.total;
-  });
-  return Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date));
-}
-
-exportSheetBtn?.addEventListener('click', openExportModal);
-exportCancel?.addEventListener('click', closeExportModal);
-exportModal?.addEventListener('click', (e) => { if (e.target === exportModal) closeExportModal(); });
-
-exportConfirm?.addEventListener('click', async () => {
-  const range = document.querySelector('input[name="exportRange"]:checked').value;
-
-  if (range === 'custom') {
-    if (!dateFrom.value || !dateTo.value) {
-      exportStatus.textContent = '⚠️ กรุณาเลือกวันที่ให้ครบ';
-      exportStatus.className   = 'export-status error';
-      return;
-    }
-    if (dateFrom.value > dateTo.value) {
-      exportStatus.textContent = '⚠️ วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด';
-      exportStatus.className   = 'export-status error';
-      return;
-    }
-  }
-
-  const orders = getFilteredOrders(range);
-  if (orders.length === 0) {
-    exportStatus.textContent = '⚠️ ไม่มีข้อมูลในช่วงที่เลือก';
-    exportStatus.className   = 'export-status error';
-    return;
-  }
-
-  exportConfirm.disabled    = true;
-  exportConfirm.textContent = 'กำลังส่ง...';
-  exportStatus.textContent  = '';
-  exportStatus.className    = 'export-status';
-
-  try {
-    const res    = await fetch(GOOGLE_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ orders, summary: buildSummary(orders) }),
-    });
-    const result = await res.json();
-    if (result.success) {
-      exportStatus.textContent = `✅ ส่งสำเร็จ! ${result.inserted} ออเดอร์ (ข้ามซ้ำ ${result.skipped} รายการ)`;
-      exportStatus.className   = 'export-status success';
-      exportConfirm.textContent = '✅ สำเร็จ';
-    } else {
-      throw new Error(result.error || 'Unknown error');
-    }
-  } catch (err) {
-    exportStatus.textContent = '❌ เกิดข้อผิดพลาด: ' + err.message;
-    exportStatus.className   = 'export-status error';
-    exportConfirm.disabled   = false;
-    exportConfirm.textContent = '📤 ส่งข้อมูล';
-  }
-});
-
 // ==================== Sound Toggle ====================
 const soundToggleBtn = document.getElementById('soundToggleBtn');
 if (soundToggleBtn) {
   soundToggleBtn.addEventListener('click', () => {
-    // Unlock AudioContext on first user gesture
     if (!audioCtx) getAudioContext();
     soundEnabled = !soundEnabled;
     soundToggleBtn.textContent = soundEnabled ? '🔔 เสียงเปิด' : '🔕 เสียงปิด';
