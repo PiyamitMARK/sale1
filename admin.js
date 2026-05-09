@@ -126,18 +126,29 @@ let unsubscribeListener = null;
 
 // ==================== Auth ====================
 function isLoggedIn() {
-  // ตรวจสอบทั้ง sessionStorage และ localStorage
-  return sessionStorage.getItem(AUTH_KEY) === 'true'
-      || localStorage.getItem(AUTH_KEY) === 'true';
+  // ใช้ localStorage เป็นหลัก (คงอยู่แม้ปิด tab/browser)
+  // fallback sessionStorage กรณี localStorage ถูก block (private mode)
+  try {
+    return localStorage.getItem(AUTH_KEY) === 'true';
+  } catch (_) {
+    return sessionStorage.getItem(AUTH_KEY) === 'true';
+  }
 }
 
 function setLoggedIn(value) {
-  if (value) {
-    sessionStorage.setItem(AUTH_KEY, 'true');
-    try { localStorage.setItem(AUTH_KEY, 'true'); } catch (_) {}
-  } else {
-    sessionStorage.removeItem(AUTH_KEY);
-    try { localStorage.removeItem(AUTH_KEY); } catch (_) {}
+  try {
+    if (value) {
+      localStorage.setItem(AUTH_KEY, 'true');
+    } else {
+      localStorage.removeItem(AUTH_KEY);
+    }
+  } catch (_) {
+    // fallback: private mode หรือ browser block localStorage
+    if (value) {
+      sessionStorage.setItem(AUTH_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(AUTH_KEY);
+    }
   }
 }
 
@@ -635,7 +646,9 @@ loginBtn.addEventListener('click', async () => {
 });
 
 logoutBtn.addEventListener('click', () => {
-  setLoggedIn(false);
+  // ล้างทั้ง localStorage และ sessionStorage เพื่อความแน่ใจ
+  try { localStorage.removeItem(AUTH_KEY); } catch (_) {}
+  try { sessionStorage.removeItem(AUTH_KEY); } catch (_) {}
   if (unsubscribeListener) { unsubscribeListener(); unsubscribeListener = null; }
   allOrders = [];
   showScreen(loginScreen);
