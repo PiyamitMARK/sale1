@@ -1,0 +1,26 @@
+name = "krua-khun-mae-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ============================================================
+# แก้ค่า account_id เป็นของคุณ (รันคำสั่ง: wrangler whoami)
+# ============================================================
+# account_id = "YOUR_ACCOUNT_ID"
+
+[[d1_databases]]
+binding     = "DB"
+database_name = "krua-khun-mae"
+database_id   = "YOUR_D1_DATABASE_ID"   # ← เปลี่ยนหลังรัน: wrangler d1 create krua-khun-mae
+
+[vars]
+# ADMIN_TOKEN ตั้งผ่าน wrangler secret แทน (ห้ามใส่ที่นี่)
+# รันคำสั่ง: wrangler secret put ADMIN_TOKEN
+
+# ============================================================
+# Route (ถ้า deploy บน Workers.dev ไม่ต้องใส่ routes)
+# ถ้าใช้ Custom Domain ให้ uncomment ด้านล่าง
+# ============================================================
+# [[routes]]
+# pattern = "api.krua-khun-mae.com/*"
+# zone_name = "krua-khun-mae.com"
