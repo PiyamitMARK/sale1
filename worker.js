@@ -133,7 +133,10 @@ export default {
         return handleClearTable(path, env);
       }
 
-      if (path === '/api/meta' && method === 'GET')   return handleGetMeta(env);
+      if (path === '/api/meta' && method === 'GET') {
+        if (!await isAdmin(request, env)) return err('Unauthorized', 401);
+        return handleGetMeta(env);
+      }
       if (path === '/api/meta' && method === 'PATCH') {
         if (!await isAdmin(request, env)) return err('Unauthorized', 401);
         return handleUpdateMeta(request, env);
