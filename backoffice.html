@@ -5973,6 +5973,30 @@ document.getElementById('topbarTitle').textContent = PANEL_TITLES['dashboard'];
 
 // เริ่มโหลดข้อมูล
 initData();
+
+// ==================== Table Count Control ====================
+(function initTableCountControl() {
+  const KEY = 'ks90-table-count';
+  const MIN = 1, MAX = 30;
+
+  function getCount() {
+    return parseInt(localStorage.getItem(KEY) || '9', 10);
+  }
+  function setCount(n) {
+    n = Math.max(MIN, Math.min(MAX, n));
+    localStorage.setItem(KEY, String(n));
+    document.getElementById('tableCountDisplay').textContent = n + ' โต๊ะ';
+    document.getElementById('dashTotalTables') && (document.getElementById('dashTotalTables').textContent = n);
+    // re-render dashboard ทั้งหมด
+    if (typeof loadDashboard === 'function') loadDashboard();
+  }
+
+  // init display
+  document.getElementById('tableCountDisplay').textContent = getCount() + ' โต๊ะ';
+
+  document.getElementById('tableCountMinus').addEventListener('click', () => setCount(getCount() - 1));
+  document.getElementById('tableCountPlus').addEventListener('click',  () => setCount(getCount() + 1));
+})();
 </script>
 </body>
 </html>
