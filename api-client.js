@@ -201,6 +201,10 @@ export async function adminLogin(username, password) {
     sessionStorage.setItem('kaosoi-auth', 'true');
     return true;
   }
+  // ล้าง flag เก่าออกทันทีที่ login ไม่ผ่าน
+  localStorage.removeItem('ks90-admin-key');
+  localStorage.removeItem('kaosoi-auth');
+  sessionStorage.removeItem('kaosoi-auth');
   return false;
 }
 
@@ -252,9 +256,9 @@ export async function verifyAdminKey() {
     }
   }
 
-  // network error หรือ 5xx → ถ้ามี flag เก่าและ key ยังอยู่ → อนุญาตก่อน (offline-friendly)
-  // key จะถูก verify อีกครั้งเมื่อ WS reconnect หรือ API call ครั้งต่อไป
-  return !!localStorage.getItem('kaosoi-auth');
+  // network error หรือ 5xx → ไม่อนุญาต ให้ไป login ใหม่
+  adminLogout();
+  return false;
 }
 
 // ─── Session Transfer (ใช้ข้ามเครื่องโดยไม่ต้อง login ซ้ำ) ───────────────────
@@ -278,8 +282,7 @@ export function consumeSessionKey() {
   const sk = params.get('sk');
   if (!sk) return false;
   localStorage.setItem('ks90-admin-key', sk);
-  localStorage.setItem('kaosoi-auth', 'true');
-  sessionStorage.setItem('kaosoi-auth', 'true');
+  // ไม่ set kaosoi-auth ที่นี่ — ให้ verifyAdminKey() ตรวจกับ server ก่อน
   // ลบ ?sk= ออกจาก URL ทันที ป้องกัน key หลุดใน referer/history
   params.delete('sk');
   const newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
