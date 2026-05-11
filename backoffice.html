@@ -2205,14 +2205,8 @@ canvas.ai-chart { width: 100% !important; }
       <button class="bo-nav-item active" data-panel="dashboard">
         <span class="bo-nav-icon">📊</span>Dashboard
       </button>
-      <button class="bo-nav-item" data-panel="kitchen">
-        <span class="bo-nav-icon">👨‍🍳</span>Kitchen Display
-      </button>
       <button class="bo-nav-item" data-panel="floorplan">
         <span class="bo-nav-icon">🗺</span>แผนผังร้าน
-      </button>
-      <button class="bo-nav-item" data-panel="topsellers">
-        <span class="bo-nav-icon">🏆</span>เมนูขายดี
       </button>
       <button class="bo-nav-item" data-panel="history">
         <span class="bo-nav-icon">📅</span>ย้อนหลัง 1 เดือน
@@ -2221,16 +2215,9 @@ canvas.ai-chart { width: 100% !important; }
         <span class="bo-nav-icon">🍽</span>จัดการเมนู
       </button>
 
-      <button class="bo-nav-item" data-panel="ai">
-        <span class="bo-nav-icon">🤖</span>AI Analyst
-      </button>
-
       <hr class="bo-nav-divider">
       <button class="bo-nav-item" data-panel="export">
         <span class="bo-nav-icon">📤</span>Export Sheet
-      </button>
-      <button class="bo-nav-item" data-panel="qr">
-        <span class="bo-nav-icon">📱</span>QR โต๊ะ
       </button>
     </nav>
 
@@ -2464,68 +2451,7 @@ canvas.ai-chart { width: 100% !important; }
       <!-- =========================================================
            PANEL: TOP SELLERS
            ========================================================= -->
-      <div class="bo-panel" id="panelTopsellers">
-        <div class="bo-panel-heading">
-          <div>
-            <div class="bo-panel-title">🏆 เมนูขายดี</div>
-            <div class="bo-panel-sub">จัดอันดับตามจำนวนครั้งที่สั่งและรายได้</div>
-          </div>
-          <div style="display:flex;gap:.5rem">
-            <button class="btn btn-ghost btn-sm" id="tsRefreshBtn">🔄 รีเฟรช</button>
-          </div>
-        </div>
-
-        <!-- Summary chips -->
-        <div class="topseller-summary-strip" id="tsSummaryStrip">
-          <div class="ts-summary-chip">
-            <div class="ts-chip-label">ออเดอร์ทั้งหมด</div>
-            <div class="ts-chip-val" id="tsTotalOrders">—</div>
-          </div>
-          <div class="ts-summary-chip">
-            <div class="ts-chip-label">ชิ้นที่ขายได้</div>
-            <div class="ts-chip-val" id="tsTotalItems">—</div>
-          </div>
-          <div class="ts-summary-chip">
-            <div class="ts-chip-label">รายได้รวม</div>
-            <div class="ts-chip-val" id="tsTotalRevenue">—</div>
-          </div>
-          <div class="ts-summary-chip">
-            <div class="ts-chip-label">ช่วงเวลา</div>
-            <div class="ts-chip-val" id="tsDateRange">—</div>
-          </div>
-        </div>
-
-        <!-- Filter tabs -->
-        <div class="topseller-filters">
-          <button class="topseller-filter-btn active" data-filter="30">30 วัน</button>
-          <button class="topseller-filter-btn" data-filter="7">7 วัน</button>
-          <button class="topseller-filter-btn" data-filter="1">วันนี้</button>
-          <button class="topseller-filter-btn" data-filter="0">ทั้งหมด</button>
-        </div>
-
-        <div class="card">
-          <div class="card-body">
-            <div class="topseller-table-wrap">
-              <table class="topseller-table">
-                <thead>
-                  <tr>
-                    <th style="width:40px">#</th>
-                    <th>ชื่อเมนู</th>
-                    <th>หมวด</th>
-                    <th style="width:80px;text-align:right">จำนวน</th>
-                    <th class="bar-cell">สัดส่วน</th>
-                    <th style="text-align:right">รายได้</th>
-                  </tr>
-                </thead>
-                <tbody id="tsTableBody">
-                  <tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div></td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      
       <!-- =========================================================
            PANEL: HISTORY
            ========================================================= -->
@@ -2714,52 +2640,7 @@ canvas.ai-chart { width: 100% !important; }
       <!-- =========================================================
            PANEL: KITCHEN DISPLAY
            ========================================================= -->
-      <div class="bo-panel" id="panelKitchen">
-        <div class="bo-panel-heading">
-          <div>
-            <div class="bo-panel-title">👨‍🍳 Kitchen Display</div>
-            <div class="bo-panel-sub">ออเดอร์ที่รอทำและกำลังทำอยู่ — อัปเดต real-time</div>
-          </div>
-          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            <span class="kitchen-live-dot" id="kitchenLiveDot"></span>
-            <span style="font-size:.8rem;color:var(--brown-light)" id="kitchenLastUpdate">—</span>
-            <button class="btn btn-ghost btn-sm" id="kitchenRefreshBtn">🔄 รีเฟรช</button>
-          </div>
-        </div>
-
-        <!-- Filter bar -->
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-          <input type="hidden" id="kFilterAll" data-kfilter="all">
-          <input type="number" id="kitchenAlertMin" value="15" min="1" max="60" style="display:none">
-        </div>
-
-        <!-- Summary bar -->
-        <div class="kitchen-summary-bar" id="kitchenSummaryBar">
-          <div class="kitchen-sum-chip">
-            <span class="kitchen-sum-icon">⏳</span>
-            <div><div class="kitchen-sum-label">รอรับ</div><div class="kitchen-sum-val" id="kSumPending">0</div></div>
-          </div>
-          <div class="kitchen-sum-chip">
-            <span class="kitchen-sum-icon">🍳</span>
-            <div><div class="kitchen-sum-label">กำลังทำ</div><div class="kitchen-sum-val" id="kSumCooking">0</div></div>
-          </div>
-          <div class="kitchen-sum-chip kitchen-sum-alert" id="kSumAlertChip" style="display:none">
-            <span class="kitchen-sum-icon">🚨</span>
-            <div><div class="kitchen-sum-label">เกินเวลา</div><div class="kitchen-sum-val" id="kSumAlert">0</div></div>
-          </div>
-        </div>
-
-        <!-- Cards grid -->
-        <div class="kitchen-grid" id="kitchenGrid">
-          <div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div>
-        </div>
-
-        <div class="empty-state hidden" id="kitchenEmpty">
-          <p style="font-size:2.5rem;margin-bottom:.5rem">✅</p>
-          <p style="color:var(--brown-light)">ไม่มีออเดอร์ค้างอยู่</p>
-        </div>
-      </div>
-
+      
       <!-- =========================================================
            PANEL: FLOOR PLAN
            ========================================================= -->
@@ -2812,154 +2693,11 @@ canvas.ai-chart { width: 100% !important; }
       <!-- =========================================================
            PANEL: AI Analyst
            ========================================================= -->
-      <div class="bo-panel" id="panelAi">
-        <div class="bo-panel-heading">
-          <div>
-            <div class="bo-panel-title">🤖 AI Business Analyst</div>
-            <div class="bo-panel-sub">วิเคราะห์ยอดขาย เมนูดัง แนวโน้ม — ขับเคลื่อนด้วย AI</div>
-          </div>
-          <button class="btn btn-primary btn-sm" id="aiRefreshBtn">🔄 โหลดข้อมูล</button>
-        </div>
-
-        <!-- Range selector -->
-        <div class="ai-range-bar">
-          <div class="hist-quick-btns" id="aiQuickBtns"></div>
-          <div class="ai-range-custom" id="aiRangeCustom" style="display:none">
-            <input type="date" class="field-input field-input-sm" id="aiDateFrom">
-            <span style="color:var(--brown-light);font-size:.85rem">–</span>
-            <input type="date" class="field-input field-input-sm" id="aiDateTo">
-            <button class="btn btn-primary btn-sm" id="aiApplyRange">ดูข้อมูล</button>
-          </div>
-        </div>
-
-        <div class="ai-panel-wrap">
-
-          <!-- KPI Big Numbers -->
-          <div class="ai-kpi-grid" id="aiKpiGrid">
-            <div class="ai-kpi-card"><div class="ai-kpi-icon">💰</div><div class="ai-kpi-label" id="aiKpiRevLabel">รายได้</div><div class="ai-kpi-value accent" id="aiKpiRevToday">—</div></div>
-            <div class="ai-kpi-card"><div class="ai-kpi-icon">🧾</div><div class="ai-kpi-label" id="aiKpiOrdersLabel">ออเดอร์</div><div class="ai-kpi-value" id="aiKpiOrdersToday">—</div></div>
-            <div class="ai-kpi-card"><div class="ai-kpi-icon">🍽</div><div class="ai-kpi-label">ค่าเฉลี่ย/บิล</div><div class="ai-kpi-value" id="aiKpiAvgBill">—</div></div>
-            <div class="ai-kpi-card"><div class="ai-kpi-icon">📦</div><div class="ai-kpi-label">กลับบ้าน</div><div class="ai-kpi-value" id="aiKpiTakeaway">—</div></div>
-          </div>
-
-          <!-- Charts row -->
-          <div class="ai-charts-row">
-
-            <!-- Revenue Bar Chart (7 วัน) -->
-            <div class="ai-chart-card">
-              <div class="ai-chart-title">📈 รายได้ 7 วันล่าสุด</div>
-              <div class="ai-chart-wrap" style="height:200px">
-                <canvas id="aiRevenueChart" class="ai-chart"></canvas>
-              </div>
-            </div>
-
-            <!-- Top 5 เมนู mini bar -->
-            <div class="ai-chart-card">
-              <div class="ai-chart-title">🏆 Top 5 เมนูขายดี (7 วัน)</div>
-              <div class="ai-top-menu-list" id="aiTopMenuList">
-                <div style="color:var(--brown-light);font-size:.82rem">กำลังโหลด...</div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- AI Chat (ย้ายขึ้นมาก่อน Heatmap) -->
-          <div class="ai-chat-section">
-            <div class="ai-chat-header">
-              <div class="ai-chat-header-icon">🤖</div>
-              <div class="ai-chat-header-title">ถาม AI เกี่ยวกับธุรกิจของคุณ</div>
-              <div class="ai-chat-header-badge">Powered by AI</div>
-            </div>
-            <div class="ai-quick-prompts">
-              <button class="ai-quick-btn" data-prompt="วิเคราะห์ยอดขายวันนี้และให้คำแนะนำ">📊 วิเคราะห์วันนี้</button>
-              <button class="ai-quick-btn" data-prompt="เมนูไหนขายดีที่สุด 7 วัน และทำไม">🏆 เมนูดัง</button>
-              <button class="ai-quick-btn" data-prompt="ช่วงเวลาไหนลูกค้าเยอะสุด และควรเตรียมตัวอย่างไร">⏰ ช่วงพีค</button>
-              <button class="ai-quick-btn" data-prompt="แนะนำโปรโมชั่นที่น่าจะเพิ่มยอดขายได้">💡 แนะนำโปรโมชั่น</button>
-              <button class="ai-quick-btn" data-prompt="เปรียบเทียบ takeaway vs dine-in และวิเคราะห์แนวโน้ม">📦 Takeaway vs Dine-in</button>
-            </div>
-            <div class="ai-messages" id="aiMessages">
-              <div class="ai-msg">
-                <div class="ai-msg-avatar">🤖</div>
-                <div class="ai-msg-bubble">สวัสดีครับ! ผมคือ AI Analyst ของร้านข้าวซอย 90 🍜
-
-กด <strong>"โหลดข้อมูล"</strong> ด้านบนก่อนนะครับ แล้วผมจะวิเคราะห์ยอดขาย เมนูดัง และแนวโน้มธุรกิจให้ได้เลย หรือถามตรงๆ ก็ได้ครับ 😊</div>
-              </div>
-            </div>
-            <div class="ai-chat-input-row">
-              <input class="ai-chat-input" id="aiChatInput" placeholder="ถามเกี่ยวกับธุรกิจ เช่น ควรลดเมนูไหน?" />
-              <button class="ai-chat-send" id="aiChatSend" title="ส่ง">➤</button>
-            </div>
-          </div>
-
-          <!-- AI Forecast -->
-          <div class="ai-forecast-section">
-            <div class="ai-forecast-header">
-              <div class="ai-forecast-header-left">
-                <div class="ai-forecast-icon">🔮</div>
-                <div>
-                  <div class="ai-forecast-title">AI Forecast — ทำนายพรุ่งนี้</div>
-                  <div class="ai-forecast-sub">AI วิเคราะห์ pattern 7 วัน → คาดการณ์ยอดขาย ชั่วโมงพีค และเมนูแนะนำ</div>
-                </div>
-              </div>
-              <button class="btn btn-primary btn-sm" id="aiForecastBtn">✨ ทำนาย</button>
-            </div>
-            <div id="aiForecastResult" class="ai-forecast-result hidden">
-              <div class="ai-forecast-kpi-row" id="aiForecastKpis"></div>
-              <div class="ai-forecast-body" id="aiForecastBody"></div>
-            </div>
-            <div id="aiForecastLoading" class="ai-forecast-loading hidden">
-              <div class="ai-typing" style="justify-content:center;padding:1.5rem 0">
-                <div class="ai-typing-dot"></div><div class="ai-typing-dot"></div><div class="ai-typing-dot"></div>
-              </div>
-              <div style="text-align:center;font-size:.82rem;color:var(--brown-light)">AI กำลังวิเคราะห์...</div>
-            </div>
-            <div id="aiForecastEmpty" class="ai-forecast-empty">
-              <span style="font-size:2rem">🔮</span>
-              <span>กด <strong>ทำนาย</strong> เพื่อดูการคาดการณ์พรุ่งนี้</span>
-            </div>
-          </div>
-
-          <!-- Heatmap ชั่วโมงขายดี (ย้ายลงมาท้าย) -->
-          <div class="ai-chart-card">
-            <div class="ai-chart-title" id="aiHeatmapTitle">🕐 Heatmap ชั่วโมงขายดี (7 วัน) <span style="font-size:.72rem;color:var(--brown-light);font-weight:400">— สีเข้ม = ขายดี</span></div>
-            <div style="overflow-x:auto">
-              <div class="ai-heatmap-grid" id="aiHeatmap" style="min-width:340px"></div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
+      
       <!-- =========================================================
            PANEL: QR โต๊ะ
            ========================================================= -->
-      <div class="bo-panel" id="panelQr">
-        <div class="bo-panel-heading">
-          <div>
-            <div class="bo-panel-title">📱 QR Code โต๊ะ</div>
-            <div class="bo-panel-sub">สร้าง QR สำหรับสั่งอาหารแต่ละโต๊ะ</div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="window.print()">🖨 พิมพ์ทั้งหมด</button>
-        </div>
-
-        <!-- Settings bar -->
-        <div class="qr-settings-bar">
-          <div class="field">
-            <label class="field-label">URL ของเว็บไซต์</label>
-            <input class="field-input" type="text" id="qrBaseUrl" placeholder="https://yoursite.com" style="min-width:260px">
-          </div>
-          <div class="field">
-            <label class="field-label">จำนวนโต๊ะ</label>
-            <input class="field-input" type="number" id="qrTableCount" min="1" max="99" style="width:80px">
-          </div>
-          <button class="btn btn-primary btn-sm" id="qrGenerateBtn">🔄 สร้าง QR</button>
-          <div class="qr-url-preview" id="qrUrlPreview">ตัวอย่าง URL: <strong>—</strong></div>
-        </div>
-
-        <!-- QR Grid -->
-        <div class="qr-grid" id="qrGrid"></div>
-      </div>
-
+      
     </div><!-- /bo-content -->
   </div><!-- /bo-main -->
 </div><!-- /bo-shell -->
@@ -3119,10 +2857,8 @@ overlay.addEventListener('click', () => {
 // ---- panel nav ----
 const PANEL_TITLES = {
   dashboard: 'Dashboard วันนี้',
-  kitchen: 'Kitchen Display',
   floorplan: 'แผนผังร้าน (Live)',
   export: 'Export Sheet',
-  topsellers: 'เมนูขายดี',
   history: 'ย้อนหลัง 1 เดือน',
   menu: 'จัดการเมนู',
   qr: 'QR Code โต๊ะ',
@@ -3144,13 +2880,9 @@ function switchPanel(id) {
   sidebar.classList.remove('open');
   overlay.classList.remove('open');
   if (id === 'dashboard') loadDashboard();
-  if (id === 'kitchen')   initKitchenDisplay();
   if (id === 'floorplan') initFloorPlan();
-  if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
-  if (id === 'qr')    initQrPanel();
-  if (id === 'ai')    initAiPanel();
 }
 
 document.querySelectorAll('.bo-nav-item[data-panel]').forEach(btn => {
@@ -3506,7 +3238,6 @@ function _startWs() {
             LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
             MOCK_ORDERS = LIVE_ORDERS;
             if (activePanelId === 'dashboard') loadDashboard();
-            if (activePanelId === 'topsellers' && tsLoaded) renderTopSellers();
             if (activePanelId === 'history' && histLoaded) {
               fetchHistoryAndRender();
             }
