@@ -386,9 +386,8 @@ function startRealtimeListener() {
       _handleCallStaffMsg(msg);
     }
   }, () => {
-    // WS reconnect สำเร็จ → sync orders + call log ที่อาจหายไปตอนขาดการเชื่อมต่อ
+    // WS reconnect สำเร็จ → sync orders ที่อาจหายไปตอนขาดการเชื่อมต่อ
     _debouncedLoadOrders({ silent: true });
-    _loadCallLog();
   });
 }
 
@@ -427,7 +426,6 @@ async function _loadOrders(opts = {}) {
     updatePopularItems(allOrders);
     renderDailySummary();
     renderOrders();
-    renderTakeawayOrders();
   } catch (err) {
     console.error('_loadOrders error:', err);
   }
@@ -593,7 +591,6 @@ function _optimisticStatus(orderId, patch) {
   allOrders[idx] = { ...allOrders[idx], ...patch };
   renderDailySummary();
   renderOrders();
-  renderTakeawayOrders();
   return prev;
 }
 
@@ -648,7 +645,6 @@ async function deleteOrder(orderId, orderNumber) {
   allOrders = allOrders.filter(o => o.id !== orderId);
   renderDailySummary();
   renderOrders();
-  renderTakeawayOrders();
 
   try {
     await api.deleteOrder(orderId);
@@ -1089,18 +1085,11 @@ function renderOrders() {
 }
 
 // ==================== Tabs ====================
-const tabTakeaway = document.getElementById('tabTakeaway');
-const tabCallLog  = document.getElementById('tabCallLog');
-
 function switchTab(tabId) {
   document.querySelectorAll('.tab-btn').forEach((t) =>
     t.classList.toggle('active', t.dataset.tab === tabId)
   );
-  tabRecent.classList.toggle('hidden',   tabId !== 'recent');
-  tabTakeaway.classList.toggle('hidden', tabId !== 'takeaway');
-  tabCallLog.classList.toggle('hidden',  tabId !== 'calllog');
-  if (tabId === 'takeaway') renderTakeawayQrPanel();
-  if (tabId === 'calllog')  renderCallLog();
+  tabRecent.classList.toggle('hidden', tabId !== 'recent');
 }
 
 // ==================== Takeaway QR Panel ====================
@@ -1468,7 +1457,6 @@ async function checkAuth() {
     if (redirectAfterLogin()) return;
     showScreen(dashboardScreen);
     startRealtimeListener();
-    startCallStaffListener();
     startMenuListener();
     switchTab('recent');
   } else {
@@ -1506,7 +1494,6 @@ loginBtn.addEventListener('click', async () => {
       if (redirectAfterLogin()) return;
       showScreen(dashboardScreen);
       startRealtimeListener();
-      startCallStaffListener();
       startMenuListener();
       switchTab('recent');
     } else {
