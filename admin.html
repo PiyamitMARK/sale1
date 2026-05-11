@@ -86,9 +86,6 @@
       <!-- Tabs -->
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="recent">รายการล่าสุด</button>
-        <button class="tab-btn" data-tab="takeaway">📦 กลับบ้าน</button>
-        <button class="tab-btn" data-tab="calllog" id="callLogTab">🔔 เรียกพนักงาน <span class="call-log-badge hidden" id="callLogBadge">0</span></button>
-
       </nav>
 
       <!-- Tab: Recent -->
@@ -101,41 +98,7 @@
         </div>
       </div>
 
-      <!-- Tab: Takeaway -->
-      <div id="tabTakeaway" class="tab-panel hidden">
-        <!-- QR Links Panel -->
-        <div class="takeaway-qr-panel">
-          <div class="takeaway-qr-header">
-            <h3 class="takeaway-qr-title">📱 QR สำหรับส่งทางไลน์</h3>
-            <p class="takeaway-qr-desc">แก้ไข URL แล้วกด สร้าง QR เพื่ออัปเดต — ส่งลิงก์ให้ลูกค้ากลับบ้านได้เลย</p>
-          </div>
-          <div class="takeaway-qr-slots" id="takeawayQrSlots">
-            <!-- rendered by admin.js -->
-          </div>
-        </div>
-
-        <!-- Takeaway orders list -->
-        <div id="takeawayOrdersList" class="orders-list"></div>
-        <div id="takeawayOrdersEmpty" class="empty-state hidden">
-          <p class="empty-icon">📦</p>
-          <p>ยังไม่มีออเดอร์กลับบ้าน</p>
-        </div>
-      </div>
-
-      <!-- Tab: Call Log -->
-      <div id="tabCallLog" class="tab-panel hidden">
-        <div class="call-log-toolbar">
-          <span class="call-log-toolbar-title">📋 ประวัติการเรียกพนักงานวันนี้</span>
-          <button type="button" class="btn btn-outline btn-sm" id="clearCallLogBtn">🗑 ล้างประวัติ</button>
-        </div>
-        <div id="callLogList" class="call-log-list"></div>
-        <div id="callLogEmpty" class="empty-state hidden">
-          <p class="empty-icon">🔔</p>
-          <p>ยังไม่มีการเรียกพนักงาน</p>
-        </div>
-      </div>
-
-    </main>
+      
   </div>
 
 
