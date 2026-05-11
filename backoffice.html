@@ -2205,8 +2205,8 @@ canvas.ai-chart { width: 100% !important; }
       <button class="bo-nav-item active" data-panel="dashboard">
         <span class="bo-nav-icon">📊</span>Dashboard
       </button>
-      <button class="bo-nav-item" data-panel="floorplan">
-        <span class="bo-nav-icon">🗺</span>แผนผังร้าน
+      <button class="bo-nav-item" data-panel="topsellers">
+        <span class="bo-nav-icon">🏆</span>เมนูขายดี
       </button>
       <button class="bo-nav-item" data-panel="history">
         <span class="bo-nav-icon">📅</span>ย้อนหลัง 1 เดือน
@@ -2644,49 +2644,65 @@ canvas.ai-chart { width: 100% !important; }
       <!-- =========================================================
            PANEL: FLOOR PLAN
            ========================================================= -->
-      <div class="bo-panel" id="panelFloorplan">
+      <div class="bo-panel" id="panelTopsellers">
         <div class="bo-panel-heading">
           <div>
-            <div class="bo-panel-title">🗺 แผนผังร้าน</div>
-            <div class="bo-panel-sub">วางตำแหน่งโต๊ะแบบ drag-and-drop — สีแสดงสถานะ real-time</div>
+            <div class="bo-panel-title">🏆 เมนูขายดี</div>
+            <div class="bo-panel-sub">จัดอันดับตามจำนวนครั้งที่สั่งและรายได้</div>
           </div>
-          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-            <span class="kitchen-live-dot" id="fpLiveDot"></span>
-            <span style="font-size:.8rem;color:var(--brown-light)" id="fpLastUpdate">—</span>
-            <button class="btn btn-ghost btn-sm" id="fpEditModeBtn">✏️ แก้ไขตำแหน่ง</button>
-            <button class="btn btn-primary btn-sm hidden" id="fpSaveBtn">💾 บันทึก</button>
-            <button class="btn btn-ghost btn-sm hidden" id="fpCancelBtn">✕ ยกเลิก</button>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn btn-ghost btn-sm" id="tsRefreshBtn">🔄 รีเฟรช</button>
           </div>
         </div>
 
-        <div class="fp-legend">
-          <div class="fp-legend-item"><span class="fp-dot fp-dot-empty"></span>ว่าง</div>
-          <div class="fp-legend-item"><span class="fp-dot fp-dot-pending"></span>รออาหาร</div>
-          <div class="fp-legend-item"><span class="fp-dot fp-dot-cooking"></span>กำลังทำ</div>
-          <div class="fp-legend-item"><span class="fp-dot fp-dot-served"></span>เสิร์ฟแล้ว</div>
-          <div class="fp-legend-item"><span class="fp-dot fp-dot-paid"></span>จ่ายแล้ว</div>
+        <!-- Summary chips -->
+        <div class="topseller-summary-strip" id="tsSummaryStrip">
+          <div class="ts-summary-chip">
+            <div class="ts-chip-label">ออเดอร์ทั้งหมด</div>
+            <div class="ts-chip-val" id="tsTotalOrders">—</div>
+          </div>
+          <div class="ts-summary-chip">
+            <div class="ts-chip-label">ชิ้นที่ขายได้</div>
+            <div class="ts-chip-val" id="tsTotalItems">—</div>
+          </div>
+          <div class="ts-summary-chip">
+            <div class="ts-chip-label">รายได้รวม</div>
+            <div class="ts-chip-val" id="tsTotalRevenue">—</div>
+          </div>
+          <div class="ts-summary-chip">
+            <div class="ts-chip-label">ช่วงเวลา</div>
+            <div class="ts-chip-val" id="tsDateRange">—</div>
+          </div>
         </div>
 
-        <div class="card" style="padding:0;overflow:hidden">
-          <div class="fp-toolbar" id="fpToolbar" style="display:none">
-            <span style="font-size:.82rem;color:var(--brown-light)">🖱 ลากโต๊ะเพื่อวางตำแหน่ง</span>
-            <div style="display:flex;gap:.5rem;align-items:center">
-              <label style="font-size:.8rem;color:var(--brown-mid);font-weight:600">จำนวนโต๊ะ</label>
-              <input type="number" id="fpTableCount" min="1" max="30" value="9"
-                     style="width:60px;border:1.5px solid var(--cream-dark);border-radius:6px;padding:.3rem .5rem;font-size:.85rem;color:var(--brown);background:var(--cream)">
-              <button class="btn btn-ghost btn-sm" id="fpResetLayoutBtn">🔄 รีเซ็ต</button>
+        <!-- Filter tabs -->
+        <div class="topseller-filters">
+          <button class="topseller-filter-btn active" data-filter="30">30 วัน</button>
+          <button class="topseller-filter-btn" data-filter="7">7 วัน</button>
+          <button class="topseller-filter-btn" data-filter="1">วันนี้</button>
+          <button class="topseller-filter-btn" data-filter="0">ทั้งหมด</button>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <div class="topseller-table-wrap">
+              <table class="topseller-table">
+                <thead>
+                  <tr>
+                    <th style="width:40px">#</th>
+                    <th>ชื่อเมนู</th>
+                    <th>หมวด</th>
+                    <th style="width:80px;text-align:right">จำนวน</th>
+                    <th class="bar-cell">สัดส่วน</th>
+                    <th style="text-align:right">รายได้</th>
+                  </tr>
+                </thead>
+                <tbody id="tsTableBody">
+                  <tr><td colspan="6"><div class="loading-row"><div class="spinner"></div> กำลังโหลด…</div></td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
-          <div class="fp-canvas-wrap" id="fpCanvasWrap">
-            <div class="fp-canvas" id="fpCanvas"></div>
-          </div>
-        </div>
-
-        <div class="fp-popup hidden" id="fpPopup">
-          <div class="fp-popup-table" id="fpPopupTable">โต๊ะ —</div>
-          <div class="fp-popup-status" id="fpPopupStatus"></div>
-          <div class="fp-popup-items" id="fpPopupItems"></div>
-          <div class="fp-popup-total" id="fpPopupTotal"></div>
         </div>
       </div>
 
@@ -2857,8 +2873,8 @@ overlay.addEventListener('click', () => {
 // ---- panel nav ----
 const PANEL_TITLES = {
   dashboard: 'Dashboard วันนี้',
-  floorplan: 'แผนผังร้าน (Live)',
   export: 'Export Sheet',
+  topsellers: 'เมนูขายดี',
   history: 'ย้อนหลัง 1 เดือน',
   menu: 'จัดการเมนู',
   qr: 'QR Code โต๊ะ',
@@ -2880,7 +2896,7 @@ function switchPanel(id) {
   sidebar.classList.remove('open');
   overlay.classList.remove('open');
   if (id === 'dashboard') loadDashboard();
-  if (id === 'floorplan') initFloorPlan();
+  if (id === 'topsellers' && !tsLoaded) loadTopSellers();
   if (id === 'history'    && !histLoaded) loadHistory();
   if (id === 'menu')  loadMenuItems();
 }
@@ -3238,6 +3254,7 @@ function _startWs() {
             LIVE_ORDERS = raw.map(o => normaliseOrder(o, o.id)).sort((a, b) => b.createdAt - a.createdAt);
             MOCK_ORDERS = LIVE_ORDERS;
             if (activePanelId === 'dashboard') loadDashboard();
+            if (activePanelId === 'topsellers' && tsLoaded) renderTopSellers();
             if (activePanelId === 'history' && histLoaded) {
               fetchHistoryAndRender();
             }
