@@ -6304,19 +6304,23 @@ function initSettingsPanel() {
       // ส่ง hash ใหม่ไปบันทึกที่ server ผ่าน PATCH /api/meta
       await api.updateMeta({ adminKeyHash: newKey });
 
-      // อัปเดต key ใน localStorage ก่อน logout
+      // อัปเดต key ใน localStorage ด้วย key ใหม่ (อย่าลบ — ใช้ login ต่อ)
       localStorage.setItem('ks90-admin-key', newKey);
+      localStorage.setItem('kaosoi-auth', 'true');
+      sessionStorage.setItem('kaosoi-auth', 'true');
 
       msgEl.style.color = 'var(--green)';
       msgEl.textContent = '✅ บันทึกสำเร็จ! กำลังออกจากระบบ…';
 
-      // ล้าง session แล้ว redirect ไป login
+      // รอ D1 commit แล้วค่อย redirect
       setTimeout(() => {
         localStorage.removeItem('kaosoi-auth');
         sessionStorage.removeItem('kaosoi-auth');
+        // ไม่ลบ ks90-admin-key เพราะ adminLogin จะ hash ใหม่เองอยู่แล้ว
+        // แต่ต้องเคลียร์เพื่อบังคับ login ใหม่
         localStorage.removeItem('ks90-admin-key');
         location.href = 'admin.html';
-      }, 1500);
+      }, 2000);
     } catch (err) {
       msgEl.style.color = 'var(--red)';
       msgEl.textContent = '❌ เกิดข้อผิดพลาด: ' + err.message;

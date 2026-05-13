@@ -183,25 +183,33 @@ export const ws = {
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 export async function adminLogin(username, password) {
-  // trim + lowercase username ก่อน hash
-  // ป้องกัน Samsung/Android autofill เติม space หรือ autocorrect capitalize ตัวแรก
-  // → hash ที่ได้จะตรงกับ ADMIN_KEY_HASH บน server เสมอ
   const u    = username.trim().toLowerCase();
   const raw  = `${u}:${password}`;
   const buf  = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
   const hash = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 
-  const res = await fetch('/api/meta', {
-    headers: { 'X-Admin-Key': hash },
-  });
+  // retry สูงสุด 3 ครั้ง เพื่อรองรับ D1 replication lag หลังเปลี่ยนรหัสผ่าน
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
 
-  if (res.ok) {
-    localStorage.setItem('ks90-admin-key', hash);
-    localStorage.setItem('kaosoi-auth', 'true');
-    sessionStorage.setItem('kaosoi-auth', 'true');
-    return true;
+    const res = await fetch('/api/meta', {
+      headers: { 'X-Admin-Key': hash },
+    });
+
+    if (res.ok) {
+      localStorage.setItem('ks90-admin-key', hash);
+      localStorage.setItem('kaosoi-auth', 'true');
+      sessionStorage.setItem('kaosoi-auth', 'true');
+      return true;
+    }
+
+    // 401/403 จริงๆ → ลองอีกรอบ (อาจเป็น D1 lag)
+    if (res.status === 401 || res.status === 403) continue;
+
+    // 5xx หรืออื่น → หยุดทันที
+    break;
   }
-  // ล้าง flag เก่าออกทันทีที่ login ไม่ผ่าน
+
   localStorage.removeItem('ks90-admin-key');
   localStorage.removeItem('kaosoi-auth');
   sessionStorage.removeItem('kaosoi-auth');
