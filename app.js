@@ -980,6 +980,57 @@ setDate();
 renderProducts();
 renderCart();
 _startMenuSubscribe();
+
+// ── ดึงชื่อร้านจาก server meta แล้ว apply ทุก element ──
+(async function applyShopName() {
+  let name = '';
+  try {
+    // 1) ลอง server meta ก่อน (source of truth)
+    const meta = await api.getMeta();
+    name = (meta && meta.shopName) ? String(meta.shopName).trim() : '';
+    // sync ลง localStorage เพื่อใช้ offline
+    if (name) {
+      try {
+        const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
+        s.shopName = name;
+        if (meta.receiptFooter) s.receiptFooter = String(meta.receiptFooter).trim();
+        localStorage.setItem('ks90-settings', JSON.stringify(s));
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 2) fallback localStorage
+  if (!name) {
+    try {
+      const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
+      name = (s.shopName || '').trim();
+    } catch (_) {}
+  }
+
+  if (!name) return; // ถ้าไม่มีข้อมูลเลยก็ใช้ hardcode เดิม
+
+  // apply ทุก element
+  const header   = document.getElementById('shopNameHeader');
+  const receipt  = document.getElementById('receiptShopName');
+  const title    = document.querySelector('title');
+
+  if (header)  header.textContent  = name;
+  if (receipt) receipt.textContent = name;
+  if (title)   title.textContent   = `${name} — ระบบ POS`;
+
+  // ── apply ข้อความท้ายใบเสร็จ ──
+  const footerEl = document.getElementById('receiptFooterText');
+  if (footerEl && meta && meta.receiptFooter) {
+    footerEl.textContent = String(meta.receiptFooter).trim() || footerEl.textContent;
+  } else if (footerEl) {
+    // fallback localStorage
+    try {
+      const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
+      if (s.receiptFooter) footerEl.textContent = s.receiptFooter;
+    } catch (_) {}
+  }
+})();
+
 // ==================== Dark Mode ====================
 applyTheme(getTheme());
 document.getElementById('darkToggleBtn')?.addEventListener('click', toggleTheme);

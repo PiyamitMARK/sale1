@@ -2309,7 +2309,7 @@ canvas.ai-chart { width: 100% !important; }
   <aside class="bo-sidebar" id="boSidebar">
     <div class="bo-brand">
       <div class="bo-brand-icon">🍛</div>
-      <div class="bo-brand-name">ข้าวซอย 90</div>
+      <div class="bo-brand-name" id="boBrandName">ข้าวซอย 90</div>
       <div class="bo-brand-sub">Back Office</div>
     </div>
 
@@ -3400,6 +3400,20 @@ async function initData() {
       }));
     }
     if (meta.productTypeToppings) LIVE_PT_TOPPINGS   = meta.productTypeToppings;
+
+    // ── apply ชื่อร้าน ──
+    if (meta.shopName) {
+      const n = String(meta.shopName).trim();
+      const brandEl = document.getElementById('boBrandName');
+      if (brandEl) brandEl.textContent = n;
+      document.title = `Back Office — ${n}`;
+      // sync ลง localStorage เผื่อ Settings form โหลดทีหลัง
+      try {
+        const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
+        s.shopName = n;
+        localStorage.setItem('ks90-settings', JSON.stringify(s));
+      } catch (_) {}
+    }
   } else if (metaResult.status === 'rejected') {
     console.warn('getMeta failed:', metaResult.reason?.message);
     try {

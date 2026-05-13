@@ -16,7 +16,7 @@
     <!-- Header -->
     <header class="header">
       <div class="header-left">
-        <h1 class="logo">🍛 ข้าวซอย 90</h1>
+        <h1 class="logo">🍛 <span id="shopNameHeader">ข้าวซอย 90</span></h1>
       </div>
       <div class="header-right">
         <div class="header-info">
@@ -112,7 +112,7 @@
       <div class="modal-content receipt-modal-content">
         <div class="receipt" id="receiptContent">
           <div class="receipt-header">
-            <p class="receipt-shop">ข้าวซอย 90</p>
+            <p class="receipt-shop" id="receiptShopName">ข้าวซอย 90</p>
             <p class="receipt-order">ออเดอร์ #<span id="receiptOrderNum"></span></p>
             <p class="receipt-table" id="receiptTable"></p>
             <p class="receipt-date" id="receiptDate"></p>
@@ -124,7 +124,7 @@
             <span>รวมทั้งหมด</span>
             <span id="receiptTotal"></span>
           </div>
-          <p class="receipt-footer">ขอบคุณที่ใช้บริการ 🙏</p>
+          <p class="receipt-footer" id="receiptFooterText">ขอบคุณที่ใช้บริการ 🙏</p>
         </div>
         <div class="modal-actions no-print">
           <button type="button" class="btn btn-ghost" id="printReceipt">🖨 พิมพ์</button>
