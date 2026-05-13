@@ -1834,15 +1834,16 @@ function printOrderReceipt(order) {
   }).join('');
 
   const totalStr = Number(order.total).toFixed(2);
-  const qrSrc    = new URL('qr-bank.png', location.href).href;
 
-  // ── ชื่อร้าน + ข้อความท้ายใบเสร็จ (ดึงจาก localStorage ที่ sync โดย backoffice/app) ──
+  // ── ชื่อร้าน + ข้อความท้ายใบเสร็จ + QR (ดึงจาก localStorage ที่ sync โดย backoffice/app) ──
   let shopName     = 'ข้าวซอย 90';
   let receiptFooter = 'ขอบคุณที่ใช้บริการ 🙏';
+  let qrSrc        = '';
   try {
     const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
     if (s.shopName)      shopName      = s.shopName;
     if (s.receiptFooter) receiptFooter = s.receiptFooter;
+    if (s.receiptQr)     qrSrc         = s.receiptQr;
   } catch (_) {}
   const shopNameHtml     = escapeHtml(shopName);
   const footerHtml       = escapeHtml(receiptFooter);
@@ -1906,14 +1907,11 @@ function printOrderReceipt(order) {
   <span>รวมทั้งหมด</span>
   <span>&#3647;${totalStr}</span>
 </div>
-<div class="r-qr-section">
-  <div class="r-qr-label">&#128179; สแกนจ่าย K Bank</div>
-  <img class="r-qr-img" src="${qrSrc}" alt="QR ธนาคาร"
-    onerror="this.outerHTML='<div style=\\'font-size:8pt;color:#c00;margin:4pt 0;text-align:center\\'>&#9888; ไม่พบไฟล์ qr-bank.png</div>'">
-  <div class="r-qr-hint">${footerHtml}</div>
-</div>
+${qrSrc ? `<div class="r-qr-section">
+  <img class="r-qr-img" src="${qrSrc}" alt="QR Payment">
+</div>` : ''}
 <hr class="r-div">
-<div class="r-footer">${shopNameHtml}</div>
+<div class="r-footer">${footerHtml}</div>
 <div class="no-print">
   <button class="btn-doit" onclick="window.print()">&#128424; พิมพ์</button>
   <button onclick="window.close()">&#10005; ปิด</button>
