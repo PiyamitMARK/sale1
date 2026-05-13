@@ -2437,11 +2437,7 @@ canvas.ai-chart { width: 100% !important; }
                   <span class="dash-table-pill t-active"  style="font-size:.7rem;padding:.2rem .55rem">⏳ รออาหาร</span>
                   <span class="dash-table-pill t-served"  style="font-size:.7rem;padding:.2rem .55rem">🍽 เสิร์ฟแล้ว</span>
                   <span class="dash-table-pill t-empty"   style="font-size:.7rem;padding:.2rem .55rem">ว่าง</span>
-                  <div style="display:flex;align-items:center;gap:.35rem;margin-left:.25rem;background:var(--cream-mid);border-radius:999px;padding:.15rem .5rem">
-                    <button id="tableCountMinus" style="border:none;background:none;cursor:pointer;font-size:1rem;line-height:1;color:var(--brown-mid);padding:0 .1rem" title="ลดจำนวนโต๊ะ">−</button>
-                    <span id="tableCountDisplay" style="font-family:'Mitr',sans-serif;font-size:.82rem;font-weight:700;min-width:3rem;text-align:center;color:var(--brown)">9 โต๊ะ</span>
-                    <button id="tableCountPlus"  style="border:none;background:none;cursor:pointer;font-size:1rem;line-height:1;color:var(--brown-mid);padding:0 .1rem" title="เพิ่มจำนวนโต๊ะ">＋</button>
-                  </div>
+
                 </div>
               </div>
               <div class="dash-tables-grid" id="dashTablesGrid">
@@ -6218,8 +6214,6 @@ function initSettingsPanel() {
 
     // sync table count with ks90-table-count (used by POS)
     localStorage.setItem('ks90-table-count', String(newS.tableCount));
-    const tcDisplay = document.getElementById('tableCountDisplay');
-    if (tcDisplay) tcDisplay.textContent = newS.tableCount + ' โต๊ะ';
 
     saveSettings(newS);
 
@@ -6272,29 +6266,7 @@ document.getElementById('topbarTitle').textContent = PANEL_TITLES['dashboard'];
 // เริ่มโหลดข้อมูล
 initData();
 
-// ==================== Table Count Control ====================
-(function initTableCountControl() {
-  const KEY = 'ks90-table-count';
-  const MIN = 1, MAX = 30;
 
-  function getCount() {
-    return parseInt(localStorage.getItem(KEY) || '9', 10);
-  }
-  function setCount(n) {
-    n = Math.max(MIN, Math.min(MAX, n));
-    localStorage.setItem(KEY, String(n));
-    document.getElementById('tableCountDisplay').textContent = n + ' โต๊ะ';
-    document.getElementById('dashTotalTables') && (document.getElementById('dashTotalTables').textContent = n);
-    // re-render dashboard ทั้งหมด
-    if (typeof loadDashboard === 'function') loadDashboard();
-  }
-
-  // init display
-  document.getElementById('tableCountDisplay').textContent = getCount() + ' โต๊ะ';
-
-  document.getElementById('tableCountMinus').addEventListener('click', () => setCount(getCount() - 1));
-  document.getElementById('tableCountPlus').addEventListener('click',  () => setCount(getCount() + 1));
-})();
 </script>
 </body>
-</html>ห
+</html>
