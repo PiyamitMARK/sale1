@@ -2610,18 +2610,8 @@ canvas.ai-chart { width: 100% !important; }
                   <button type="button" class="btn btn-ghost btn-sm" id="settingTablePlus">＋</button>
                 </div>
               </div>
-              <div class="field">
-                <label class="field-label">เลขออเดอร์ปัจจุบัน</label>
-                <input type="number" class="field-input" id="settingOrderStart" min="1" placeholder="1001">
-              </div>
             </div>
           </div>
-        </div>
-
-        <!-- bottom save -->
-        <div style="display:flex;justify-content:flex-end;gap:.5rem;padding-bottom:.5rem">
-          <button class="btn btn-ghost" id="settingsResetBtn">↩ รีเซ็ตค่าเริ่มต้น</button>
-          <button class="btn btn-primary" id="settingsSaveAllBtn2">💾 บันทึกทั้งหมด</button>
         </div>
       </div>
 
@@ -6139,7 +6129,6 @@ const SETTINGS_DEFAULTS = {
   shopName:       'ข้าวซอย 90',
   receiptFooter:  'ขอบคุณที่ใช้บริการ 🙏',
   tableCount:     9,
-  orderStart:     1001,
 };
 
 function loadSettings() {
@@ -6158,7 +6147,6 @@ function settingsToForm(s) {
   v('settingShopName').value       = s.shopName       || '';
   v('settingReceiptFooter').value  = s.receiptFooter   || '';
   v('settingTableCount').value     = s.tableCount      ?? 9;
-  v('settingOrderStart').value     = s.orderStart      ?? 1001;
 }
 
 function formToSettings() {
@@ -6167,7 +6155,6 @@ function formToSettings() {
     shopName:       v('settingShopName').value.trim()      || 'ข้าวซอย 90',
     receiptFooter:  v('settingReceiptFooter').value.trim() || 'ขอบคุณที่ใช้บริการ 🙏',
     tableCount:     Math.max(1, Math.min(50, parseInt(v('settingTableCount').value) || 9)),
-    orderStart:     Math.max(1, parseInt(v('settingOrderStart').value) || 1001),
   };
 }
 
@@ -6179,14 +6166,6 @@ function showSettingsToast(msg, type = 'ok') {
   el.classList.remove('hidden');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.add('hidden'), 3000);
-}
-
-async function fetchCurrentOrderNum() {
-  try {
-    const meta = await api.getMeta();
-    const inp = document.getElementById('settingOrderStart');
-    if (inp && !inp.value) inp.value = meta?.orderNumber || 1001;
-  } catch(_) {}
 }
 
 function initSettingsPanel() {
@@ -6238,8 +6217,6 @@ function initSettingsPanel() {
     settingsToForm({ ...SETTINGS_DEFAULTS });
     showSettingsToast('↩ รีเซ็ตค่าเริ่มต้นแล้ว (ยังไม่บันทึก)', 'ok');
   });
-
-  fetchCurrentOrderNum();
 }
 
 // hook into switchPanel
