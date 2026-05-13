@@ -2163,6 +2163,118 @@ canvas.ai-chart { width: 100% !important; }
 [data-theme="dark"] .kbadge-pending { background: #3a2a00; color: #ffd570; }
 [data-theme="dark"] .kbadge-cooking  { background: #0a2a18; color: #5fe0a0; }
 
+/* ============================================================
+   SETTINGS PANEL
+   ============================================================ */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .85rem;
+}
+@media (max-width: 640px) { .settings-grid { grid-template-columns: 1fr; } }
+.settings-grid .span2 { grid-column: span 2; }
+@media (max-width: 640px) { .settings-grid .span2 { grid-column: span 1; } }
+
+.settings-toggle-row {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--cream);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: .75rem 1rem;
+}
+.settings-toggle-label { font-weight: 600; font-size: .9rem; }
+.settings-toggle-sub { font-size: .77rem; color: var(--brown-light); margin-top: .15rem; }
+
+/* Toggle switch */
+.settings-switch { position: relative; flex-shrink: 0; cursor: pointer; }
+.settings-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.settings-switch-track {
+  display: block;
+  width: 44px; height: 24px;
+  background: var(--cream-dark);
+  border-radius: var(--pill);
+  transition: background var(--ease);
+  position: relative;
+}
+.settings-switch-track::after {
+  content: '';
+  position: absolute;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  top: 3px; left: 3px;
+  transition: transform var(--ease);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.settings-switch input:checked + .settings-switch-track { background: var(--accent); }
+.settings-switch input:checked + .settings-switch-track::after { transform: translateX(20px); }
+
+/* Checkbox group */
+.settings-check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: .25rem;
+}
+.settings-check-item {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  background: var(--cream);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: .45rem .9rem;
+  cursor: pointer;
+  font-size: .88rem;
+  font-weight: 500;
+  transition: border-color var(--ease), background var(--ease);
+}
+.settings-check-item:hover { border-color: var(--accent-light); }
+.settings-check-item input[type="checkbox"] { accent-color: var(--accent); }
+.settings-check-item:has(input:checked) { border-color: var(--accent); background: rgba(200,133,58,.07); }
+
+/* Info grid */
+.settings-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: .5rem;
+}
+.settings-info-item {
+  background: var(--cream-mid);
+  border-radius: var(--radius-sm);
+  padding: .6rem .85rem;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+.settings-info-label { font-size: .72rem; color: var(--brown-light); text-transform: uppercase; letter-spacing: .04em; }
+.settings-info-val { font-family: 'Mitr', sans-serif; font-size: .9rem; font-weight: 700; color: var(--brown); word-break: break-all; }
+
+/* Toast */
+.settings-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  background: var(--brown);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: .75rem 1.25rem;
+  font-size: .9rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  animation: toastIn .25s ease;
+}
+.settings-toast.ok  { background: var(--green); }
+.settings-toast.err { background: var(--red); }
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
   </style>
 </head>
 <body>
@@ -2218,6 +2330,9 @@ canvas.ai-chart { width: 100% !important; }
       <hr class="bo-nav-divider">
       <button class="bo-nav-item" data-panel="export">
         <span class="bo-nav-icon">📤</span>Export Sheet
+      </button>
+      <button class="bo-nav-item" data-panel="settings">
+        <span class="bo-nav-icon">⚙️</span>ตั้งค่าทั่วไป
       </button>
     </nav>
 
@@ -2457,6 +2572,279 @@ canvas.ai-chart { width: 100% !important; }
            PANEL: TOP SELLERS
            ========================================================= -->
       
+      <!-- =========================================================
+           PANEL: SETTINGS
+           ========================================================= -->
+      <div class="bo-panel" id="panelSettings">
+        <div class="bo-panel-heading">
+          <div>
+            <div class="bo-panel-title">⚙️ ตั้งค่าทั่วไป</div>
+            <div class="bo-panel-sub">ปรับแต่งร้านค้า, การแสดงผล และระบบ</div>
+          </div>
+          <button class="btn btn-primary" id="settingsSaveAllBtn">💾 บันทึกทั้งหมด</button>
+        </div>
+
+        <!-- Save notification -->
+        <div id="settingsToast" class="settings-toast hidden"></div>
+
+        <!-- 1. ข้อมูลร้าน -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🏪 ข้อมูลร้านค้า</div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">ชื่อร้าน</label>
+                <input type="text" class="field-input" id="settingShopName" placeholder="ข้าวซอย 90">
+              </div>
+              <div class="field">
+                <label class="field-label">เบอร์โทรศัพท์</label>
+                <input type="tel" class="field-input" id="settingShopPhone" placeholder="0xx-xxx-xxxx">
+              </div>
+              <div class="field span2">
+                <label class="field-label">ที่อยู่ร้าน</label>
+                <input type="text" class="field-input" id="settingShopAddress" placeholder="ที่อยู่ร้าน">
+              </div>
+              <div class="field">
+                <label class="field-label">ข้อความต้อนรับ (ใบเสร็จ)</label>
+                <input type="text" class="field-input" id="settingReceiptFooter" placeholder="ขอบคุณที่ใช้บริการ 🙏">
+              </div>
+              <div class="field">
+                <label class="field-label">ชื่อย่อสกุลเงิน</label>
+                <input type="text" class="field-input" id="settingCurrency" placeholder="฿" maxlength="5">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. โต๊ะและระบบสั่ง -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🪑 โต๊ะและระบบสั่งอาหาร</div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">จำนวนโต๊ะ</label>
+                <div style="display:flex;align-items:center;gap:.5rem">
+                  <button type="button" class="btn btn-ghost btn-sm" id="settingTableMinus">−</button>
+                  <input type="number" class="field-input" id="settingTableCount" min="1" max="50" style="width:80px;text-align:center">
+                  <button type="button" class="btn btn-ghost btn-sm" id="settingTablePlus">＋</button>
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label">เลขออเดอร์เริ่มต้น (ปัจจุบัน)</label>
+                <input type="number" class="field-input" id="settingOrderStart" min="1" placeholder="1001">
+              </div>
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">อนุญาต Takeaway (ไม่ระบุโต๊ะ)</div>
+                  <div class="settings-toggle-sub">เปิดตัวเลือก Takeaway ในหน้า POS</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingTakeaway">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">แสดงหมายเหตุในออเดอร์</div>
+                  <div class="settings-toggle-sub">ให้ลูกค้าเพิ่มข้อความพิเศษเมื่อสั่ง</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingShowNote">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. การชำระเงิน -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">💳 การชำระเงิน</div>
+            <div class="settings-grid">
+              <div class="field span2">
+                <label class="field-label">วิธีชำระเงินที่เปิดใช้</label>
+                <div class="settings-check-group">
+                  <label class="settings-check-item">
+                    <input type="checkbox" id="payMethodCash" value="cash">
+                    <span>💵 เงินสด</span>
+                  </label>
+                  <label class="settings-check-item">
+                    <input type="checkbox" id="payMethodQr" value="qr">
+                    <span>📲 QR / พร้อมเพย์</span>
+                  </label>
+                  <label class="settings-check-item">
+                    <input type="checkbox" id="payMethodCard" value="card">
+                    <span>💳 บัตรเครดิต</span>
+                  </label>
+                  <label class="settings-check-item">
+                    <input type="checkbox" id="payMethodTransfer" value="transfer">
+                    <span>🏦 โอนเงิน</span>
+                  </label>
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label">ชื่อบัญชี PromptPay / พร้อมเพย์</label>
+                <input type="text" class="field-input" id="settingPromptpayName" placeholder="ชื่อบัญชี">
+              </div>
+              <div class="field">
+                <label class="field-label">เบอร์ / เลขบัญชี พร้อมเพย์</label>
+                <input type="text" class="field-input" id="settingPromptpayId" placeholder="0xx-xxx-xxxx">
+              </div>
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">แสดง QR PromptPay อัตโนมัติเมื่อเลือก QR</div>
+                  <div class="settings-toggle-sub">แสดง QR Code ใต้ยอดรวมเมื่อชำระด้วย QR</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingShowQrAuto">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. การแสดงผล -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🎨 การแสดงผลและ UI</div>
+            <div class="settings-grid">
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">Dark Mode เริ่มต้น</div>
+                  <div class="settings-toggle-sub">เปิด Dark Mode โดยอัตโนมัติเมื่อเข้าระบบ</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingDarkDefault">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">แสดงราคาในเมนู POS</div>
+                  <div class="settings-toggle-sub">แสดงราคาบนปุ่มเมนูในหน้า POS</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingShowPrice">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">แสดงรูปภาพเมนู</div>
+                  <div class="settings-toggle-sub">แสดงรูปภาพในหน้า POS (ถ้าเมนูมีรูป)</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingShowMenuImg">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+              <div class="field">
+                <label class="field-label">ภาษาระบบ</label>
+                <select class="field-input" id="settingLang">
+                  <option value="th">🇹🇭 ภาษาไทย</option>
+                  <option value="en">🇬🇧 English</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label">จำนวนคอลัมน์เมนู (POS)</label>
+                <select class="field-input" id="settingMenuCols">
+                  <option value="2">2 คอลัมน์</option>
+                  <option value="3">3 คอลัมน์ (ค่าเริ่มต้น)</option>
+                  <option value="4">4 คอลัมน์</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. การแจ้งเตือนและเสียง -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🔔 การแจ้งเตือนและเสียง</div>
+            <div class="settings-grid">
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">เสียงแจ้งเตือนออเดอร์ใหม่</div>
+                  <div class="settings-toggle-sub">เล่นเสียงทุกครั้งที่มีออเดอร์เข้าในหน้าแอดมิน</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingOrderSound">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+              <div class="field">
+                <label class="field-label">โหมดเสียง</label>
+                <select class="field-input" id="settingSoundMode">
+                  <option value="tts">🗣 เสียงคนพูด (TTS)</option>
+                  <option value="beep">🎵 Effect เสียงสั้น</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label">เตือนออเดอร์ที่รอนานเกิน (นาที)</label>
+                <input type="number" class="field-input" id="settingAlertMins" min="0" max="60" placeholder="15">
+              </div>
+              <div class="field span2 settings-toggle-row">
+                <div>
+                  <div class="settings-toggle-label">แจ้งเตือนเรียกพนักงาน</div>
+                  <div class="settings-toggle-sub">แสดง popup และเสียงเมื่อโต๊ะกด "เรียกพนักงาน"</div>
+                </div>
+                <label class="settings-switch">
+                  <input type="checkbox" id="settingCallAlert">
+                  <span class="settings-switch-track"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. ข้อมูลระบบ -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🛠 ข้อมูลระบบ</div>
+            <div class="settings-info-grid" id="settingsInfoGrid">
+              <div class="settings-info-item">
+                <span class="settings-info-label">เวอร์ชันระบบ</span>
+                <span class="settings-info-val">v1.0.0</span>
+              </div>
+              <div class="settings-info-item">
+                <span class="settings-info-label">Platform</span>
+                <span class="settings-info-val">Cloudflare Workers + D1</span>
+              </div>
+              <div class="settings-info-item">
+                <span class="settings-info-label">Session Admin Key</span>
+                <span class="settings-info-val" id="settingsKeyPreview">—</span>
+              </div>
+              <div class="settings-info-item">
+                <span class="settings-info-label">จำนวนเมนูทั้งหมด</span>
+                <span class="settings-info-val" id="settingsMenuCount">—</span>
+              </div>
+              <div class="settings-info-item">
+                <span class="settings-info-label">จำนวนหมวดหมู่</span>
+                <span class="settings-info-val" id="settingsCatCount">—</span>
+              </div>
+              <div class="settings-info-item">
+                <span class="settings-info-label">เลขออเดอร์ปัจจุบัน</span>
+                <span class="settings-info-val" id="settingsOrderNum">—</span>
+              </div>
+            </div>
+            <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" id="settingsClearCacheBtn">🧹 ล้าง Cache ภายใน</button>
+              <button class="btn btn-ghost btn-sm" id="settingsExportSettingsBtn">💾 Export ตั้งค่า</button>
+              <button class="btn btn-ghost btn-sm" id="settingsImportSettingsBtn">📂 Import ตั้งค่า</button>
+              <input type="file" id="settingsImportFile" accept=".json" style="display:none">
+            </div>
+          </div>
+        </div>
+
+        <!-- bottom save -->
+        <div style="display:flex;justify-content:flex-end;gap:.5rem;padding-bottom:.5rem">
+          <button class="btn btn-ghost" id="settingsResetBtn">↩ รีเซ็ตค่าเริ่มต้น</button>
+          <button class="btn btn-primary" id="settingsSaveAllBtn2">💾 บันทึกทั้งหมด</button>
+        </div>
+      </div>
+
       <!-- =========================================================
            PANEL: HISTORY
            ========================================================= -->
@@ -2884,6 +3272,7 @@ const PANEL_TITLES = {
   menu: 'จัดการเมนู',
   qr: 'QR Code โต๊ะ',
   ai: 'AI Business Analyst',
+  settings: 'ตั้งค่าทั่วไป',
 };
 
 let activePanelId = 'dashboard';
@@ -5961,6 +6350,266 @@ async function _aiLoadAndRender() {
   _renderAiTopMenu(snap);
   _renderAiHeatmap(snap);
 }
+
+// ============================================================
+//  SETTINGS PANEL
+// ============================================================
+const SETTINGS_KEY = 'ks90-settings';
+const SETTINGS_DEFAULTS = {
+  shopName:       'ข้าวซอย 90',
+  shopPhone:      '',
+  shopAddress:    '',
+  receiptFooter:  'ขอบคุณที่ใช้บริการ 🙏',
+  currency:       '฿',
+  tableCount:     9,
+  orderStart:     1001,
+  takeaway:       false,
+  showNote:       true,
+  payMethods:     ['cash', 'qr'],
+  promptpayName:  '',
+  promptpayId:    '',
+  showQrAuto:     false,
+  darkDefault:    false,
+  showPrice:      true,
+  showMenuImg:    true,
+  lang:           'th',
+  menuCols:       '3',
+  orderSound:     true,
+  soundMode:      'tts',
+  alertMins:      15,
+  callAlert:      true,
+};
+
+function loadSettings() {
+  try {
+    const saved = localStorage.getItem(SETTINGS_KEY);
+    return saved ? { ...SETTINGS_DEFAULTS, ...JSON.parse(saved) } : { ...SETTINGS_DEFAULTS };
+  } catch (_) { return { ...SETTINGS_DEFAULTS }; }
+}
+
+function saveSettings(s) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function settingsToForm(s) {
+  const v = k => document.getElementById(k);
+  v('settingShopName').value       = s.shopName       || '';
+  v('settingShopPhone').value      = s.shopPhone       || '';
+  v('settingShopAddress').value    = s.shopAddress     || '';
+  v('settingReceiptFooter').value  = s.receiptFooter   || '';
+  v('settingCurrency').value       = s.currency        || '฿';
+  v('settingTableCount').value     = s.tableCount      ?? 9;
+  v('settingOrderStart').value     = s.orderStart      ?? 1001;
+  v('settingTakeaway').checked     = !!s.takeaway;
+  v('settingShowNote').checked     = s.showNote !== false;
+  v('settingPromptpayName').value  = s.promptpayName   || '';
+  v('settingPromptpayId').value    = s.promptpayId     || '';
+  v('settingShowQrAuto').checked   = !!s.showQrAuto;
+  v('settingDarkDefault').checked  = !!s.darkDefault;
+  v('settingShowPrice').checked    = s.showPrice !== false;
+  v('settingShowMenuImg').checked  = s.showMenuImg !== false;
+  v('settingLang').value           = s.lang            || 'th';
+  v('settingMenuCols').value       = s.menuCols         || '3';
+  v('settingOrderSound').checked   = s.orderSound !== false;
+  v('settingSoundMode').value      = s.soundMode        || 'tts';
+  v('settingAlertMins').value      = s.alertMins        ?? 15;
+  v('settingCallAlert').checked    = s.callAlert !== false;
+  // pay methods
+  const methods = Array.isArray(s.payMethods) ? s.payMethods : ['cash','qr'];
+  ['cash','qr','card','transfer'].forEach(m => {
+    const el = document.getElementById('payMethod' + m.charAt(0).toUpperCase() + m.slice(1));
+    if (el) el.checked = methods.includes(m);
+  });
+}
+
+function formToSettings() {
+  const v = k => document.getElementById(k);
+  const methods = ['cash','qr','card','transfer'].filter(m => {
+    const el = document.getElementById('payMethod' + m.charAt(0).toUpperCase() + m.slice(1));
+    return el?.checked;
+  });
+  return {
+    shopName:       v('settingShopName').value.trim()      || 'ข้าวซอย 90',
+    shopPhone:      v('settingShopPhone').value.trim(),
+    shopAddress:    v('settingShopAddress').value.trim(),
+    receiptFooter:  v('settingReceiptFooter').value.trim() || 'ขอบคุณที่ใช้บริการ 🙏',
+    currency:       v('settingCurrency').value.trim()      || '฿',
+    tableCount:     Math.max(1, Math.min(50, parseInt(v('settingTableCount').value) || 9)),
+    orderStart:     Math.max(1, parseInt(v('settingOrderStart').value) || 1001),
+    takeaway:       v('settingTakeaway').checked,
+    showNote:       v('settingShowNote').checked,
+    payMethods:     methods.length ? methods : ['cash'],
+    promptpayName:  v('settingPromptpayName').value.trim(),
+    promptpayId:    v('settingPromptpayId').value.trim(),
+    showQrAuto:     v('settingShowQrAuto').checked,
+    darkDefault:    v('settingDarkDefault').checked,
+    showPrice:      v('settingShowPrice').checked,
+    showMenuImg:    v('settingShowMenuImg').checked,
+    lang:           v('settingLang').value,
+    menuCols:       v('settingMenuCols').value,
+    orderSound:     v('settingOrderSound').checked,
+    soundMode:      v('settingSoundMode').value,
+    alertMins:      Math.max(0, parseInt(v('settingAlertMins').value) || 15),
+    callAlert:      v('settingCallAlert').checked,
+  };
+}
+
+function showSettingsToast(msg, type = 'ok') {
+  let el = document.getElementById('settingsToast');
+  if (!el) { el = document.createElement('div'); el.id = 'settingsToast'; document.body.appendChild(el); }
+  el.textContent  = msg;
+  el.className    = 'settings-toast ' + type;
+  el.classList.remove('hidden');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+function updateSystemInfo() {
+  const key = localStorage.getItem('ks90-admin-key') || '';
+  const el  = document.getElementById('settingsKeyPreview');
+  if (el) el.textContent = key ? key.slice(0, 8) + '…' : '—';
+  const mc = document.getElementById('settingsMenuCount');
+  if (mc) mc.textContent = Object.keys(LIVE_MENU).length + ' รายการ';
+  const cc = document.getElementById('settingsCatCount');
+  if (cc) cc.textContent = Object.keys(LIVE_CATEGORIES).length + ' หมวด';
+}
+
+async function fetchCurrentOrderNum() {
+  try {
+    const meta = await api.getMeta();
+    const el = document.getElementById('settingsOrderNum');
+    if (el) el.textContent = '#' + (meta?.orderNumber || '—');
+    const s = loadSettings();
+    const inp = document.getElementById('settingOrderStart');
+    if (inp && !inp.value) inp.value = meta?.orderNumber || s.orderStart || 1001;
+  } catch(_) {}
+}
+
+function initSettingsPanel() {
+  // load from localStorage
+  const s = loadSettings();
+  settingsToForm(s);
+
+  // table count synced with existing ks90-table-count
+  const storedTables = parseInt(localStorage.getItem('ks90-table-count') || s.tableCount, 10);
+  document.getElementById('settingTableCount').value = storedTables;
+
+  // dark mode default synced with current theme
+  const currentTheme = localStorage.getItem('theme') || 'light';
+  document.getElementById('settingDarkDefault').checked = currentTheme === 'dark';
+
+  // table +/- buttons
+  document.getElementById('settingTableMinus').addEventListener('click', () => {
+    const inp = document.getElementById('settingTableCount');
+    inp.value = Math.max(1, parseInt(inp.value || 1) - 1);
+  });
+  document.getElementById('settingTablePlus').addEventListener('click', () => {
+    const inp = document.getElementById('settingTableCount');
+    inp.value = Math.min(50, parseInt(inp.value || 1) + 1);
+  });
+
+  // save handlers
+  async function doSave() {
+    const newS = formToSettings();
+
+    // sync table count with ks90-table-count (used by POS)
+    localStorage.setItem('ks90-table-count', String(newS.tableCount));
+    const tcDisplay = document.getElementById('tableCountDisplay');
+    if (tcDisplay) tcDisplay.textContent = newS.tableCount + ' โต๊ะ';
+
+    // sync theme
+    const theme = newS.darkDefault ? 'dark' : 'light';
+    localStorage.setItem('theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    const lbl = document.getElementById('darkToggleLabel');
+    const lblS = document.getElementById('darkToggleLabelShort');
+    if (lbl)  lbl.textContent  = theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+    if (lblS) lblS.textContent = theme === 'dark' ? '☀️' : '🌙';
+
+    saveSettings(newS);
+
+    // push shop name + receipt footer to server meta
+    try {
+      await api.updateMeta({
+        shopName:      newS.shopName,
+        shopPhone:     newS.shopPhone,
+        shopAddress:   newS.shopAddress,
+        receiptFooter: newS.receiptFooter,
+        currency:      newS.currency,
+      });
+      showSettingsToast('✅ บันทึกการตั้งค่าเรียบร้อย!', 'ok');
+    } catch(err) {
+      showSettingsToast('⚠️ บันทึกในเครื่องแล้ว แต่ server error: ' + err.message, 'err');
+    }
+  }
+
+  document.getElementById('settingsSaveAllBtn').addEventListener('click', doSave);
+  document.getElementById('settingsSaveAllBtn2').addEventListener('click', doSave);
+
+  // reset
+  document.getElementById('settingsResetBtn').addEventListener('click', () => {
+    if (!confirm('รีเซ็ตการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?')) return;
+    settingsToForm({ ...SETTINGS_DEFAULTS });
+    showSettingsToast('↩ รีเซ็ตค่าเริ่มต้นแล้ว (ยังไม่บันทึก)', 'ok');
+  });
+
+  // clear cache
+  document.getElementById('settingsClearCacheBtn').addEventListener('click', () => {
+    ['ks90-menu','ks90-categories','ks90-categories-sort','ks90-productTypes'].forEach(k => localStorage.removeItem(k));
+    showSettingsToast('🧹 ล้าง Cache เรียบร้อย — กำลังโหลดใหม่…', 'ok');
+    setTimeout(() => location.reload(), 1200);
+  });
+
+  // export settings
+  document.getElementById('settingsExportSettingsBtn').addEventListener('click', () => {
+    const s = loadSettings();
+    const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ks90-settings.json'; a.click();
+    URL.revokeObjectURL(url);
+    showSettingsToast('💾 Export สำเร็จ!', 'ok');
+  });
+
+  // import settings
+  document.getElementById('settingsImportSettingsBtn').addEventListener('click', () => {
+    document.getElementById('settingsImportFile').click();
+  });
+  document.getElementById('settingsImportFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        const merged = { ...SETTINGS_DEFAULTS, ...imported };
+        settingsToForm(merged);
+        showSettingsToast('📂 Import สำเร็จ — กด "บันทึกทั้งหมด" เพื่อยืนยัน', 'ok');
+      } catch(_) {
+        showSettingsToast('❌ ไฟล์ไม่ถูกต้อง', 'err');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  // system info
+  updateSystemInfo();
+  fetchCurrentOrderNum();
+}
+
+// hook into switchPanel
+const _origSwitchPanel = switchPanel;
+// override to init settings panel on first load
+let _settingsInited = false;
+document.querySelectorAll('.bo-nav-item[data-panel]').forEach(btn => {
+  if (btn.dataset.panel === 'settings') {
+    btn.addEventListener('click', () => {
+      if (!_settingsInited) { _settingsInited = true; initSettingsPanel(); }
+      updateSystemInfo();
+    });
+  }
+});
 
 // ============================================================
 //  INIT defaults
