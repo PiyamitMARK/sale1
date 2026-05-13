@@ -700,6 +700,22 @@ function showReceipt({ allBatches, grandTotal, orderNum }) {
   ).join('');
 
   receiptTotal.textContent = formatMoney(grandTotal);
+
+  // ── QR Code ──
+  try {
+    const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
+    const qrWrap = document.getElementById('receiptQrWrap');
+    const qrImg  = document.getElementById('receiptQrImg');
+    if (qrWrap && qrImg) {
+      if (s.receiptQr) {
+        qrImg.src = s.receiptQr;
+        qrWrap.style.display = 'block';
+      } else {
+        qrWrap.style.display = 'none';
+      }
+    }
+  } catch (_) {}
+
   receiptModal.setAttribute('aria-hidden', 'false');
 }
 
