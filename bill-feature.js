@@ -554,6 +554,18 @@ function _printSplitReceipt(order, personName, items, total) {
 
   const win = window.open('', '_blank', 'width=340,height=600');
   if (!win) { alert('กรุณาอนุญาต Pop-up ใน Browser ก่อน'); return; }
+
+  // ── ชื่อร้าน + ข้อความท้ายใบเสร็จ ──
+  let _shopName = 'ข้าวซอย 90';
+  let _receiptFooter = 'ขอบคุณที่ใช้บริการ 🙏';
+  try {
+    const s = JSON.parse(localStorage.getItem('ks90-settings') || '{}');
+    if (s.shopName)      _shopName      = s.shopName;
+    if (s.receiptFooter) _receiptFooter = s.receiptFooter;
+  } catch (_) {}
+  const { escapeHtml: _esc } = _cfg;
+  const _shopHtml   = _esc(_shopName);
+  const _footerHtml = _esc(_receiptFooter);
   win.document.write(`<!DOCTYPE html>
 <html lang="th"><head>
 <meta charset="UTF-8">
@@ -574,7 +586,7 @@ function _printSplitReceipt(order, personName, items, total) {
   .footer{ text-align:center; font-size:11px; color:#888; margin-top:6px; }
 </style>
 </head><body>
-<p class="shop">ข้าวซอย 90</p>
+<p class="shop">${_shopHtml}</p>
 <p class="sub">ออเดอร์ #${escapeHtml(String(order.orderNumber))} — โต๊ะ ${escapeHtml(String(order.table || '-'))}</p>
 <p class="sub">${dateStr}</p>
 <p class="sub"><span class="badge">👤 ${escapeHtml(personName)}</span></p>
@@ -582,7 +594,7 @@ function _printSplitReceipt(order, personName, items, total) {
 <table><tbody>${itemsHtml}</tbody></table>
 <hr class="divider">
 <div class="total-row"><span>รวม (${escapeHtml(personName)})</span><span>&#3647;${Number(total).toFixed(2)}</span></div>
-<p class="footer">ขอบคุณที่ใช้บริการ 🙏</p>
+<p class="footer">${_footerHtml}</p>
 <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
 </body></html>`);
   win.document.close();
