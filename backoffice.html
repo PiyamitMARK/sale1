@@ -2646,10 +2646,6 @@ canvas.ai-chart { width: 100% !important; }
           </div>
         </div>
 
-        <div style="display:flex;justify-content:flex-end;gap:.75rem;flex-wrap:wrap">
-          <button class="btn btn-outline" id="settingsResetBtn">↩ รีเซ็ตค่าเริ่มต้น</button>
-          <button class="btn btn-primary" id="settingsSaveAllBtn2">💾 บันทึกทั้งหมด</button>
-        </div>
       </div>
 
       <!-- =========================================================
@@ -6260,15 +6256,6 @@ function initSettingsPanel() {
   }
 
   document.getElementById('settingsSaveAllBtn').addEventListener('click', doSave);
-  document.getElementById('settingsSaveAllBtn2').addEventListener('click', doSave);
-
-  // reset
-  document.getElementById('settingsResetBtn').addEventListener('click', () => {
-    if (!confirm('รีเซ็ตการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?')) return;
-    settingsToForm({ ...SETTINGS_DEFAULTS });
-    showSettingsToast('↩ รีเซ็ตค่าเริ่มต้นแล้ว (ยังไม่บันทึก)', 'ok');
-  });
-
   // ── Change Credentials ──────────────────────────────────────
   // toggle show/hide password
   document.getElementById('credTogglePwd').addEventListener('click', () => {
