@@ -2613,6 +2613,43 @@ canvas.ai-chart { width: 100% !important; }
             </div>
           </div>
         </div>
+
+        <!-- 3. เปลี่ยน Credentials -->
+        <div class="card">
+          <div class="card-body">
+            <div class="card-title">🔐 เปลี่ยน USERNAME / PASSWORD</div>
+            <p style="font-size:.85rem;color:var(--brown-light);margin-bottom:1rem">
+              เปลี่ยน username และ password ได้ทันที — มีผลทันทีที่กดบันทึก ไม่ต้อง deploy ใหม่
+            </p>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">USERNAME ใหม่</label>
+                <input type="text" class="field-input" id="credNewUsername" placeholder="เช่น admin" autocomplete="off">
+              </div>
+              <div class="field" style="position:relative">
+                <label class="field-label">PASSWORD ใหม่</label>
+                <input type="password" class="field-input" id="credNewPassword" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password" style="padding-right:2.5rem">
+                <button type="button" id="credTogglePwd" style="position:absolute;right:.6rem;top:2.15rem;background:none;border:none;cursor:pointer;font-size:1rem;color:var(--brown-light);padding:0" title="แสดง/ซ่อนรหัสผ่าน">👁</button>
+              </div>
+              <div class="field span2">
+                <label class="field-label">ยืนยัน PASSWORD ใหม่</label>
+                <input type="password" class="field-input" id="credConfirmPassword" placeholder="พิมพ์ซ้าอีกครั้ง" autocomplete="new-password">
+              </div>
+            </div>
+            <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+              <button type="button" class="btn btn-primary" id="credSaveBtn" style="align-self:flex-start">
+                💾 บันทึก Credentials ใหม่
+              </button>
+              <p id="credMsg" style="font-size:.83rem;min-height:1.2em"></p>
+              <p style="font-size:.8rem;color:var(--accent)">⚠ หลังบันทึกสำเร็จ ระบบจะออกจากระบบอัตโนมัติ — ให้ login ด้วย username/password ใหม่</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:.75rem;flex-wrap:wrap">
+          <button class="btn btn-outline" id="settingsResetBtn">↩ รีเซ็ตค่าเริ่มต้น</button>
+          <button class="btn btn-primary" id="settingsSaveAllBtn2">💾 บันทึกทั้งหมด</button>
+        </div>
       </div>
 
       <!-- =========================================================
@@ -6216,6 +6253,61 @@ function initSettingsPanel() {
     if (!confirm('รีเซ็ตการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น?')) return;
     settingsToForm({ ...SETTINGS_DEFAULTS });
     showSettingsToast('↩ รีเซ็ตค่าเริ่มต้นแล้ว (ยังไม่บันทึก)', 'ok');
+  });
+
+  // ── Change Credentials ──────────────────────────────────────
+  // toggle show/hide password
+  document.getElementById('credTogglePwd').addEventListener('click', () => {
+    const inp = document.getElementById('credNewPassword');
+    const btn = document.getElementById('credTogglePwd');
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+    else                         { inp.type = 'password'; btn.textContent = '👁'; }
+  });
+
+  document.getElementById('credSaveBtn').addEventListener('click', async () => {
+    const msgEl   = document.getElementById('credMsg');
+    const uInput  = document.getElementById('credNewUsername').value.trim().toLowerCase();
+    const p1      = document.getElementById('credNewPassword').value;
+    const p2      = document.getElementById('credConfirmPassword').value;
+    const saveBtn = document.getElementById('credSaveBtn');
+
+    msgEl.style.color = 'var(--red)';
+
+    if (!uInput)        { msgEl.textContent = '❌ กรุณากรอก username'; return; }
+    if (p1.length < 6)  { msgEl.textContent = '❌ password ต้องมีอย่างน้อย 6 ตัวอักษร'; return; }
+    if (p1 !== p2)      { msgEl.textContent = '❌ password ยืนยันไม่ตรงกัน'; return; }
+
+    // hash ใหม่ (รูปแบบเดียวกับ adminLogin ใน api-client.js)
+    const raw    = `${uInput}:${p1}`;
+    const buf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    const newKey = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+
+    saveBtn.disabled = true;
+    msgEl.textContent = '⏳ กำลังบันทึก…';
+    msgEl.style.color = 'var(--brown-light)';
+
+    try {
+      // ส่ง hash ใหม่ไปบันทึกที่ server ผ่าน PATCH /api/meta
+      await api.updateMeta({ adminKeyHash: newKey });
+
+      // อัปเดต key ใน localStorage ก่อน logout
+      localStorage.setItem('ks90-admin-key', newKey);
+
+      msgEl.style.color = 'var(--green)';
+      msgEl.textContent = '✅ บันทึกสำเร็จ! กำลังออกจากระบบ…';
+
+      // ล้าง session แล้ว redirect ไป login
+      setTimeout(() => {
+        localStorage.removeItem('kaosoi-auth');
+        sessionStorage.removeItem('kaosoi-auth');
+        localStorage.removeItem('ks90-admin-key');
+        location.href = 'admin.html';
+      }, 1500);
+    } catch (err) {
+      msgEl.style.color = 'var(--red)';
+      msgEl.textContent = '❌ เกิดข้อผิดพลาด: ' + err.message;
+      saveBtn.disabled = false;
+    }
   });
 }
 

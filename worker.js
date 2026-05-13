@@ -61,7 +61,14 @@ async function isAdmin(request, env) {
   // client ส่งมาเป็น sha256(username:password) อยู่แล้ว (ดู api-client.js::adminLogin)
   // เทียบตรงๆ กับ ADMIN_KEY_HASH ที่ตั้งไว้ใน wrangler secret
   // ADMIN_KEY_HASH = sha256("username:password")  ← ต้อง set ให้ตรง
-  return key === (env.ADMIN_KEY_HASH || '');
+  // 1) เทียบกับ Wrangler Secret ก่อน
+  if (env.ADMIN_KEY_HASH && key === env.ADMIN_KEY_HASH) return true;
+  // 2) fallback: ดู adminKeyHash ที่เปลี่ยนผ่าน Backoffice (เก็บใน D1 meta)
+  try {
+    const row = await env.DB.prepare("SELECT value FROM meta WHERE key='adminKeyHash'").first();
+    if (row && row.value && key === row.value) return true;
+  } catch (_) {}
+  return false;
 }
 
 // ==================== Helpers ====================
