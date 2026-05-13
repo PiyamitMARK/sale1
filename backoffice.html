@@ -2270,6 +2270,26 @@ canvas.ai-chart { width: 100% !important; }
 }
 .settings-toast.ok  { background: var(--green); }
 .settings-toast.err { background: var(--red); }
+
+/* ── QR Upload Area ── */
+.qr-upload-area {
+  border: 2px dashed var(--cream-dark);
+  border-radius: var(--radius-sm);
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  cursor: pointer;
+  transition: border-color var(--ease), background var(--ease);
+  background: var(--cream);
+}
+.qr-upload-area:hover,
+.qr-upload-area.drag-over {
+  border-color: var(--accent);
+  background: rgba(200,133,58,.06);
+}
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -2592,6 +2612,25 @@ canvas.ai-chart { width: 100% !important; }
               <div class="field span2">
                 <label class="field-label">ข้อความท้ายใบเสร็จ</label>
                 <input type="text" class="field-input" id="settingReceiptFooter" placeholder="ขอบคุณที่ใช้บริการ 🙏">
+              </div>
+              <div class="field span2">
+                <label class="field-label">QR Code พร้อมเพย์ / ชำระเงิน (แสดงในใบเสร็จ)</label>
+                <div class="qr-upload-area" id="qrUploadArea">
+                  <!-- Preview -->
+                  <div id="qrPreviewWrap" style="display:none;flex-direction:column;align-items:center;gap:.6rem">
+                    <img id="qrPreviewImg" src="" alt="QR Code" style="max-width:160px;max-height:160px;border-radius:8px;border:1.5px solid var(--cream-dark);object-fit:contain">
+                    <button type="button" class="btn btn-outline btn-sm" id="qrRemoveBtn">🗑 ลบรูป QR</button>
+                  </div>
+                  <!-- Upload prompt -->
+                  <div id="qrUploadPrompt" style="display:flex;flex-direction:column;align-items:center;gap:.5rem;color:var(--brown-light);font-size:.88rem">
+                    <span style="font-size:2rem">📷</span>
+                    <span>คลิกหรือลากไฟล์รูปมาวางที่นี่</span>
+                    <span style="font-size:.78rem">PNG / JPG / WEBP — แนะนำขนาดไม่เกิน 400×400px</span>
+                    <button type="button" class="btn btn-outline btn-sm" id="qrChooseBtn">เลือกไฟล์…</button>
+                  </div>
+                  <input type="file" id="qrFileInput" accept="image/*" style="display:none">
+                </div>
+                <p style="font-size:.78rem;color:var(--brown-light);margin-top:.35rem">รูปจะถูกบันทึกเป็น Base64 ใน localStorage และแสดงในใบเสร็จ</p>
               </div>
             </div>
           </div>
@@ -6176,6 +6215,7 @@ const SETTINGS_DEFAULTS = {
   shopName:       'ข้าวซอย 90',
   receiptFooter:  'ขอบคุณที่ใช้บริการ 🙏',
   tableCount:     9,
+  receiptQr:      '',   // Base64 data URL ของ QR code
 };
 
 function loadSettings() {
@@ -6194,6 +6234,8 @@ function settingsToForm(s) {
   v('settingShopName').value       = s.shopName       || '';
   v('settingReceiptFooter').value  = s.receiptFooter   || '';
   v('settingTableCount').value     = s.tableCount      ?? 9;
+  // QR preview
+  _setQrPreview(s.receiptQr || '');
 }
 
 function formToSettings() {
@@ -6202,6 +6244,7 @@ function formToSettings() {
     shopName:       v('settingShopName').value.trim()      || 'ข้าวซอย 90',
     receiptFooter:  v('settingReceiptFooter').value.trim() || 'ขอบคุณที่ใช้บริการ 🙏',
     tableCount:     Math.max(1, Math.min(50, parseInt(v('settingTableCount').value) || 9)),
+    receiptQr:      _currentQrDataUrl,
   };
 }
 
@@ -6215,10 +6258,61 @@ function showSettingsToast(msg, type = 'ok') {
   el._t = setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
+// ─── QR upload helpers ───────────────────────────────────────────────────────
+let _currentQrDataUrl = '';
+
+function _setQrPreview(dataUrl) {
+  _currentQrDataUrl = dataUrl || '';
+  const preview  = document.getElementById('qrPreviewWrap');
+  const prompt   = document.getElementById('qrUploadPrompt');
+  const img      = document.getElementById('qrPreviewImg');
+  if (!preview || !prompt || !img) return;
+  if (_currentQrDataUrl) {
+    img.src = _currentQrDataUrl;
+    preview.style.display = 'flex';
+    prompt.style.display  = 'none';
+  } else {
+    img.src = '';
+    preview.style.display = 'none';
+    prompt.style.display  = 'flex';
+  }
+}
+
+function _initQrUpload() {
+  const area      = document.getElementById('qrUploadArea');
+  const fileInput = document.getElementById('qrFileInput');
+  const chooseBtn = document.getElementById('qrChooseBtn');
+  const removeBtn = document.getElementById('qrRemoveBtn');
+  if (!area || !fileInput) return;
+
+  function readFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => _setQrPreview(e.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  chooseBtn.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
+  area.addEventListener('click', () => { if (!_currentQrDataUrl) fileInput.click(); });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) readFile(fileInput.files[0]); fileInput.value = ''; });
+  removeBtn.addEventListener('click', e => { e.stopPropagation(); _setQrPreview(''); });
+
+  // drag & drop
+  area.addEventListener('dragover',  e => { e.preventDefault(); area.classList.add('drag-over'); });
+  area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    area.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) readFile(file);
+  });
+}
+
 function initSettingsPanel() {
   // load from localStorage
   const s = loadSettings();
   settingsToForm(s);
+  _initQrUpload();
 
   // table count synced with existing ks90-table-count
   const storedTables = parseInt(localStorage.getItem('ks90-table-count') || s.tableCount, 10);
